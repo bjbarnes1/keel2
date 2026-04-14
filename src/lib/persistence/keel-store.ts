@@ -80,6 +80,10 @@ function hasConfiguredDatabase() {
   return Boolean(url) && !url.includes("johndoe:randompassword");
 }
 
+function isHostedProduction() {
+  return process.env.NODE_ENV === "production" && process.env.VERCEL === "1";
+}
+
 function formatShortDate(isoDate: string) {
   return new Intl.DateTimeFormat("en-AU", {
     month: "short",
@@ -228,6 +232,12 @@ async function writeState(state: StoredKeelState) {
   if (hasConfiguredDatabase()) {
     await writePrismaState(state);
     return;
+  }
+
+  if (isHostedProduction()) {
+    throw new Error(
+      "Persistence requires DATABASE_URL in production deployments. Configure Postgres before using write actions on Vercel.",
+    );
   }
 
   await writeDemoStore(state);
