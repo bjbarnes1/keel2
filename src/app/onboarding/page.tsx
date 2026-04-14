@@ -1,0 +1,10 @@
+import { OnboardingFlow } from "@/components/keel/onboarding-flow";
+import { AppShell } from "@/components/keel/primitives";
+
+export default function OnboardingPage() {
+  return (
+    <AppShell title="Onboarding" currentPath="/" backHref="/">
+      <OnboardingFlow />
+    </AppShell>
+  );
+}

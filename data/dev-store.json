@@ -1,0 +1,98 @@
+{
+  "user": {
+    "id": "demo-user",
+    "email": "demo@keel.local",
+    "name": "Brian",
+    "bankBalance": 8696,
+    "balanceAsOf": "2026-04-07"
+  },
+  "income": {
+    "id": "income-salary",
+    "name": "Salary",
+    "amount": 4200,
+    "frequency": "fortnightly",
+    "nextPayDate": "2026-04-24"
+  },
+  "commitments": [
+    {
+      "id": "mortgage",
+      "name": "Mortgage",
+      "amount": 2400,
+      "frequency": "monthly",
+      "nextDueDate": "2026-05-01",
+      "category": "Housing"
+    },
+    {
+      "id": "car-insurance",
+      "name": "Car Insurance",
+      "amount": 480,
+      "frequency": "quarterly",
+      "nextDueDate": "2026-06-15",
+      "category": "Insurance"
+    },
+    {
+      "id": "electricity",
+      "name": "Electricity",
+      "amount": 320,
+      "frequency": "quarterly",
+      "nextDueDate": "2026-05-20",
+      "category": "Utilities"
+    },
+    {
+      "id": "internet",
+      "name": "Internet",
+      "amount": 89,
+      "frequency": "monthly",
+      "nextDueDate": "2026-04-28",
+      "category": "Utilities"
+    },
+    {
+      "id": "netflix",
+      "name": "Netflix",
+      "amount": 22.99,
+      "frequency": "monthly",
+      "nextDueDate": "2026-04-19",
+      "category": "Subscriptions"
+    },
+    {
+      "id": "school-fees",
+      "name": "School Fees",
+      "amount": 4500,
+      "frequency": "quarterly",
+      "nextDueDate": "2026-07-01",
+      "category": "Education"
+    },
+    {
+      "id": "4b44aad3-8af6-43c4-a3d2-643e79c0d66e",
+      "name": "Gym Membership",
+      "amount": 45,
+      "frequency": "monthly",
+      "nextDueDate": "2026-05-14",
+      "category": "Housing"
+    }
+  ],
+  "goals": [
+    {
+      "id": "emergency-fund",
+      "name": "Emergency Fund",
+      "contributionPerPay": 200,
+      "currentBalance": 6400,
+      "targetAmount": 10000
+    },
+    {
+      "id": "holiday",
+      "name": "Holiday",
+      "contributionPerPay": 150,
+      "currentBalance": 1200,
+      "targetAmount": 3000,
+      "targetDate": "2026-12-01"
+    },
+    {
+      "id": "car-service",
+      "name": "Car Service",
+      "contributionPerPay": 50,
+      "currentBalance": 350,
+      "targetAmount": 800
+    }
+  ]
+}
