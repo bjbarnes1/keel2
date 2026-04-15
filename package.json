@@ -2,10 +2,13 @@
   "name": "keel2",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:vercel": "prisma migrate deploy && next build",
+    "build:vercel": "node scripts/vercel-build.mjs",
     "db:migrate:deploy": "prisma migrate deploy",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",

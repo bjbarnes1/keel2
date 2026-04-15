@@ -170,13 +170,23 @@ On Vercel, the build now runs:
 npm run build:vercel
 ```
 
-That command executes:
+That command now runs a dedicated script which:
+
+- validates that `DATABASE_URL` is present
+- runs `prisma generate`
+- runs `prisma migrate deploy` on production deployments
+- runs `next build`
+
+By default:
+
+- Production deploys run migrations automatically
+- Preview deploys skip migrations unless you explicitly opt in
+
+If you want preview deployments to run migrations too, set:
 
 ```bash
-prisma migrate deploy && next build
+VERCEL_RUN_MIGRATIONS=1
 ```
-
-So every deployment will apply committed Prisma migrations before building the app.
 
 If you ever need to run the migration command directly, the repo also includes:
 
