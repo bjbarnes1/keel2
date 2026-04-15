@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vercel": "prisma migrate deploy && next build",
+    "db:migrate:deploy": "prisma migrate deploy",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "postinstall": "prisma generate",

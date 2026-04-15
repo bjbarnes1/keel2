@@ -145,7 +145,7 @@ Recommended defaults:
 
 - Framework Preset: `Next.js`
 - Install Command: `npm install`
-- Build Command: `npm run build`
+- Build Command: managed by `vercel.json` as `npm run build:vercel`
 - Output Directory: leave blank
 
 ### 3. Configure environment variables
@@ -163,6 +163,26 @@ Optional:
 ### 4. Deploy
 
 Once `DATABASE_URL` is present, the app is ready for a normal Vercel deployment.
+
+On Vercel, the build now runs:
+
+```bash
+npm run build:vercel
+```
+
+That command executes:
+
+```bash
+prisma migrate deploy && next build
+```
+
+So every deployment will apply committed Prisma migrations before building the app.
+
+If you ever need to run the migration command directly, the repo also includes:
+
+```bash
+npm run db:migrate:deploy
+```
 
 ## Branching
 
