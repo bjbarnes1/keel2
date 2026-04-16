@@ -6,13 +6,17 @@
     "bankBalance": 8696,
     "balanceAsOf": "2026-04-07"
   },
-  "income": {
-    "id": "income-salary",
-    "name": "Salary",
-    "amount": 4200,
-    "frequency": "fortnightly",
-    "nextPayDate": "2026-04-24"
-  },
+  "incomes": [
+    {
+      "id": "income-salary",
+      "name": "Salary",
+      "amount": 4200,
+      "frequency": "fortnightly",
+      "nextPayDate": "2026-04-24",
+      "isPrimary": true
+    }
+  ],
+  "primaryIncomeId": "income-salary",
   "commitments": [
     {
       "id": "mortgage",
@@ -20,7 +24,8 @@
       "amount": 2400,
       "frequency": "monthly",
       "nextDueDate": "2026-05-01",
-      "category": "Housing"
+      "category": "Housing",
+      "fundedByIncomeId": "income-salary"
     },
     {
       "id": "car-insurance",
@@ -28,7 +33,8 @@
       "amount": 480,
       "frequency": "quarterly",
       "nextDueDate": "2026-06-15",
-      "category": "Insurance"
+      "category": "Insurance",
+      "fundedByIncomeId": "income-salary"
     },
     {
       "id": "electricity",
@@ -36,7 +42,8 @@
       "amount": 320,
       "frequency": "quarterly",
       "nextDueDate": "2026-05-20",
-      "category": "Utilities"
+      "category": "Utilities",
+      "fundedByIncomeId": "income-salary"
     },
     {
       "id": "internet",
@@ -44,7 +51,8 @@
       "amount": 89,
       "frequency": "monthly",
       "nextDueDate": "2026-04-28",
-      "category": "Utilities"
+      "category": "Utilities",
+      "fundedByIncomeId": "income-salary"
     },
     {
       "id": "netflix",
@@ -52,7 +60,8 @@
       "amount": 22.99,
       "frequency": "monthly",
       "nextDueDate": "2026-04-19",
-      "category": "Subscriptions"
+      "category": "Subscriptions",
+      "fundedByIncomeId": "income-salary"
     },
     {
       "id": "school-fees",
@@ -60,7 +69,8 @@
       "amount": 4500,
       "frequency": "quarterly",
       "nextDueDate": "2026-07-01",
-      "category": "Education"
+      "category": "Education",
+      "fundedByIncomeId": "income-salary"
     },
     {
       "id": "4b44aad3-8af6-43c4-a3d2-643e79c0d66e",
@@ -68,7 +78,8 @@
       "amount": 45,
       "frequency": "monthly",
       "nextDueDate": "2026-05-14",
-      "category": "Housing"
+      "category": "Housing",
+      "fundedByIncomeId": "income-salary"
     }
   ],
   "goals": [
@@ -77,7 +88,8 @@
       "name": "Emergency Fund",
       "contributionPerPay": 200,
       "currentBalance": 6400,
-      "targetAmount": 10000
+      "targetAmount": 10000,
+      "fundedByIncomeId": "income-salary"
     },
     {
       "id": "holiday",
@@ -85,14 +97,16 @@
       "contributionPerPay": 150,
       "currentBalance": 1200,
       "targetAmount": 3000,
-      "targetDate": "2026-12-01"
+      "targetDate": "2026-12-01",
+      "fundedByIncomeId": "income-salary"
     },
     {
       "id": "car-service",
       "name": "Car Service",
       "contributionPerPay": 50,
       "currentBalance": 350,
-      "targetAmount": 800
+      "targetAmount": 800,
+      "fundedByIncomeId": "income-salary"
     }
   ]
 }

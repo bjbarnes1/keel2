@@ -1,6 +1,7 @@
 import type { CommitmentFrequency, PayFrequency } from "@/lib/types";
 
 export interface EngineIncome {
+  id: string;
   name: string;
   amount: number;
   frequency: PayFrequency;
@@ -13,6 +14,7 @@ export interface EngineCommitment {
   amount: number;
   frequency: CommitmentFrequency;
   nextDueDate: string;
+  fundedByIncomeId?: string;
   category?: string;
 }
 
@@ -20,6 +22,7 @@ export interface EngineGoal {
   id: string;
   name: string;
   contributionPerPay: number;
+  fundedByIncomeId?: string;
   currentBalance?: number;
   targetAmount?: number;
   targetDate?: string;
@@ -34,6 +37,7 @@ export interface CommitmentReserve {
   reserved: number;
   perPay: number;
   percentFunded: number;
+  fundedByIncomeId?: string;
   category?: string;
 }
 
@@ -159,11 +163,34 @@ export function calculatePerPayAmount(
   return roundCurrency(annualizeAmount(amount, billFrequency) / payPeriodsPerYear(payFrequency));
 }
 
+function resolveIncome(
+  incomes: EngineIncome[],
+  fundedByIncomeId: string | undefined,
+  primaryIncomeId: string | undefined,
+) {
+  const primary =
+    (primaryIncomeId
+      ? incomes.find((income) => income.id === primaryIncomeId)
+      : undefined) ?? incomes[0];
+
+  if (!primary) {
+    throw new Error("At least one income is required.");
+  }
+
+  if (!fundedByIncomeId) {
+    return primary;
+  }
+
+  return incomes.find((income) => income.id === fundedByIncomeId) ?? primary;
+}
+
 export function calculateCommitmentReserve(
   commitment: EngineCommitment,
-  income: EngineIncome,
+  incomes: EngineIncome[],
+  primaryIncomeId: string | undefined,
   asOf: Date,
 ): CommitmentReserve {
+  const income = resolveIncome(incomes, commitment.fundedByIncomeId, primaryIncomeId);
   const dueDate = parseDate(commitment.nextDueDate);
   const lastDueDate = subtractCycle(dueDate, commitment.frequency);
   const cycleLength = Math.max(1, daysBetween(lastDueDate, dueDate));
@@ -187,26 +214,45 @@ export function calculateCommitmentReserve(
       100,
       Math.round((reserved / commitment.amount) * 100),
     ),
+    fundedByIncomeId: commitment.fundedByIncomeId ?? income.id,
     category: commitment.category,
   };
 }
 
 export function calculateAvailableMoney(input: {
   bankBalance: number;
-  income: EngineIncome;
+  incomes: EngineIncome[];
+  primaryIncomeId?: string;
   commitments: EngineCommitment[];
   goals: EngineGoal[];
   asOf: Date;
 }): AvailableMoneyResult {
   const commitmentReserves = input.commitments.map((commitment) =>
-    calculateCommitmentReserve(commitment, input.income, input.asOf),
+    calculateCommitmentReserve(
+      commitment,
+      input.incomes,
+      input.primaryIncomeId,
+      input.asOf,
+    ),
   );
 
   const totalReserved = roundCurrency(
     commitmentReserves.reduce((sum, commitment) => sum + commitment.reserved, 0),
   );
   const totalGoalContributions = roundCurrency(
-    input.goals.reduce((sum, goal) => sum + goal.contributionPerPay, 0),
+    input.goals.reduce((sum, goal) => {
+      const income = resolveIncome(
+        input.incomes,
+        goal.fundedByIncomeId,
+        input.primaryIncomeId,
+      );
+
+      // Normalize to a weekly cashflow-equivalent so mixed pay cadences can be combined.
+      const weeklyEquivalent =
+        (goal.contributionPerPay * payPeriodsPerYear(income.frequency)) / 52;
+
+      return sum + weeklyEquivalent;
+    }, 0),
   );
 
   return {
@@ -224,7 +270,7 @@ export function buildProjectionTimeline(input: {
   availableMoney: number;
   asOf: Date;
   horizonDays: number;
-  income: EngineIncome;
+  incomes: EngineIncome[];
   commitments: EngineCommitment[];
 }) {
   const horizonEnd = new Date(input.asOf);
@@ -238,18 +284,20 @@ export function buildProjectionTimeline(input: {
     type: "income" | "bill";
   }> = [];
 
-  let incomeDate = parseDate(input.income.nextPayDate);
-  while (incomeDate <= horizonEnd) {
-    if (incomeDate >= input.asOf) {
-      scheduledEvents.push({
-        id: `income-${toIsoDate(incomeDate)}`,
-        date: toIsoDate(incomeDate),
-        label: input.income.name,
-        amount: input.income.amount,
-        type: "income",
-      });
+  for (const income of input.incomes) {
+    let incomeDate = parseDate(income.nextPayDate);
+    while (incomeDate <= horizonEnd) {
+      if (incomeDate >= input.asOf) {
+        scheduledEvents.push({
+          id: `income-${income.id}-${toIsoDate(incomeDate)}`,
+          date: toIsoDate(incomeDate),
+          label: income.name,
+          amount: income.amount,
+          type: "income",
+        });
+      }
+      incomeDate = addCycle(incomeDate, income.frequency);
     }
-    incomeDate = addCycle(incomeDate, input.income.frequency);
   }
 
   for (const commitment of input.commitments) {
@@ -270,7 +318,18 @@ export function buildProjectionTimeline(input: {
     }
   }
 
-  scheduledEvents.sort((left, right) => left.date.localeCompare(right.date));
+  scheduledEvents.sort((left, right) => {
+    const dateOrder = left.date.localeCompare(right.date);
+    if (dateOrder !== 0) {
+      return dateOrder;
+    }
+
+    if (left.type !== right.type) {
+      return left.type === "income" ? -1 : 1;
+    }
+
+    return left.label.localeCompare(right.label);
+  });
 
   let runningAvailableMoney = input.availableMoney;
 

@@ -11,10 +11,19 @@ import {
 } from "@/lib/engine/keel";
 
 const income = {
+  id: "income-salary",
   name: "Salary",
   amount: 4200,
   frequency: "fortnightly" as const,
   nextPayDate: "2026-04-24",
+};
+
+const partnerIncome = {
+  id: "income-partner",
+  name: "Partner",
+  amount: 1200,
+  frequency: "weekly" as const,
+  nextPayDate: "2026-04-22",
 };
 
 describe("keel engine", () => {
@@ -43,8 +52,10 @@ describe("keel engine", () => {
         amount: 480,
         frequency: "quarterly",
         nextDueDate: "2026-06-15",
+        fundedByIncomeId: income.id,
       },
-      income,
+      [income],
+      income.id,
       new Date("2026-05-01T00:00:00Z"),
     );
 
@@ -56,7 +67,8 @@ describe("keel engine", () => {
   it("calculates available money from bank balance, reserves, and goals", () => {
     const result = calculateAvailableMoney({
       bankBalance: 6000,
-      income,
+      incomes: [income],
+      primaryIncomeId: income.id,
       asOf: new Date("2026-05-01T00:00:00Z"),
       commitments: [
         {
@@ -65,6 +77,7 @@ describe("keel engine", () => {
           amount: 2400,
           frequency: "monthly",
           nextDueDate: "2026-05-15",
+          fundedByIncomeId: income.id,
         },
       ],
       goals: [
@@ -72,13 +85,16 @@ describe("keel engine", () => {
           id: "holiday",
           name: "Holiday",
           contributionPerPay: 150,
+          fundedByIncomeId: income.id,
         },
       ],
     });
 
-    expect(result.totalGoalContributions).toBe(150);
+    // In the multi-income model goal contributions are normalized to a weekly equivalent.
+    // Fortnightly 150/pay => 150 * 26 / 52 = 75/week.
+    expect(result.totalGoalContributions).toBe(75);
     expect(result.totalReserved).toBeCloseTo(1280, 0);
-    expect(result.availableMoney).toBeCloseTo(4570, 0);
+    expect(result.availableMoney).toBeCloseTo(4645, 0);
   });
 
   it("projects events forward and detects a shortfall", () => {
@@ -86,7 +102,7 @@ describe("keel engine", () => {
       availableMoney: -3500,
       asOf: new Date("2026-04-20T00:00:00Z"),
       horizonDays: 45,
-      income,
+      incomes: [income],
       commitments: [
         {
           id: "rent",
@@ -94,6 +110,7 @@ describe("keel engine", () => {
           amount: 1200,
           frequency: "monthly",
           nextDueDate: "2026-05-01",
+          fundedByIncomeId: income.id,
         },
         {
           id: "insurance",
@@ -101,6 +118,7 @@ describe("keel engine", () => {
           amount: 900,
           frequency: "monthly",
           nextDueDate: "2026-05-10",
+          fundedByIncomeId: income.id,
         },
       ],
     });
@@ -108,5 +126,72 @@ describe("keel engine", () => {
     expect(projection.length).toBeGreaterThan(3);
     expect(projection[0]?.label).toBe("Salary");
     expect(detectProjectedShortfall(projection)?.label).toBe("Rent");
+  });
+
+  it("uses the linked income cadence for per-pay amounts", () => {
+    const weeklyBill = calculateCommitmentReserve(
+      {
+        id: "council-rates",
+        name: "Council Rates",
+        amount: 1200,
+        frequency: "annual",
+        nextDueDate: "2026-08-01",
+        fundedByIncomeId: partnerIncome.id,
+      },
+      [income, partnerIncome],
+      income.id,
+      new Date("2026-05-01T00:00:00Z"),
+    );
+
+    const fortnightlyBill = calculateCommitmentReserve(
+      {
+        id: "council-rates-2",
+        name: "Council Rates",
+        amount: 1200,
+        frequency: "annual",
+        nextDueDate: "2026-08-01",
+        fundedByIncomeId: income.id,
+      },
+      [income, partnerIncome],
+      income.id,
+      new Date("2026-05-01T00:00:00Z"),
+    );
+
+    expect(weeklyBill.perPay).toBe(23.08);
+    expect(fortnightlyBill.perPay).toBe(46.15);
+  });
+
+  it("normalizes mixed goal cadences into a combined weekly equivalent", () => {
+    const result = calculateAvailableMoney({
+      bankBalance: 1000,
+      incomes: [income, partnerIncome],
+      primaryIncomeId: income.id,
+      asOf: new Date("2026-05-01T00:00:00Z"),
+      commitments: [],
+      goals: [
+        { id: "g1", name: "Holiday", contributionPerPay: 150, fundedByIncomeId: income.id },
+        { id: "g2", name: "Kids", contributionPerPay: 50, fundedByIncomeId: partnerIncome.id },
+      ],
+    });
+
+    // Fortnightly 150 => 75/week; Weekly 50 => 50/week; total = 125/week.
+    expect(result.totalGoalContributions).toBe(125);
+  });
+
+  it("merges multiple income streams into the projection timeline", () => {
+    const projection = buildProjectionTimeline({
+      availableMoney: 0,
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      horizonDays: 10,
+      incomes: [income, partnerIncome],
+      commitments: [],
+    });
+
+    expect(projection.some((event) => event.type === "income" && event.label === "Salary")).toBe(
+      true,
+    );
+    expect(
+      projection.some((event) => event.type === "income" && event.label === "Partner"),
+    ).toBe(true);
   });
 });

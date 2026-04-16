@@ -25,11 +25,14 @@ This repository implements the current Keel2 V1 direction:
 
 ## Current Product Scope
 
-### Income model (V1)
+### Income model
 
-- The **calculation engine** uses one pay rhythm: a single income stream (amount, frequency, next pay date).
-- Postgres can store multiple `Income` rows per user, but the app **only loads the earliest-created income** when building the dashboard. The dev file store also models a single income.
-- **Allocating bills across incomes:** V1 does **not** assign a commitment to a specific income. Every bill’s per-pay reserve is derived from your **one** active pay frequency (annualized bill cost ÷ pay periods per year for that pay cadence). Supporting multiple earners with different pay dates would mean extending the engine (for example: multiple income streams in the projection, and optional `paidFromIncomeId` on commitments).
+- Keel supports **multiple incomes**, each with its own amount, frequency, and next pay date.
+- Bills and goals can be allocated to a specific income via **“Funded from”**.
+  - **Bills**: per-pay reservation uses the linked income’s pay cadence.
+  - **Goals**: contribution is interpreted as “each time the linked income pays.”
+- The dashboard timeline merges events from **all** income streams.
+- The headline “Goal contributions” number is a **weekly-equivalent** total when you have mixed pay cadences, so it can be combined into a single household Available Money figure.
 
 The app currently includes:
 

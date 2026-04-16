@@ -15,6 +15,7 @@ const navItems = [
   { href: "/bills", label: "Bills" },
   { href: "/goals", label: "Goals" },
   { href: "/timeline", label: "Timeline" },
+  { href: "/incomes", label: "Incomes" },
 ];
 
 export function AppShell({

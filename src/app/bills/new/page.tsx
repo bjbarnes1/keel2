@@ -7,7 +7,7 @@ export default async function NewBillPage() {
 
   return (
     <AppShell title="Add a bill" currentPath="/bills" backHref="/bills">
-      <BillIntakeFlow payFrequency={snapshot.income.frequency} />
+      <BillIntakeFlow incomes={snapshot.incomes} primaryIncomeId={snapshot.primaryIncomeId} />
     </AppShell>
   );
 }

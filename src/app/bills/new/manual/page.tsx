@@ -2,12 +2,38 @@ import type { ReactNode } from "react";
 
 import { createCommitmentAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
+import { sentenceCaseFrequency } from "@/lib/utils";
 import { formatAud } from "@/lib/utils";
 
-export default function ManualBillPage() {
+export default async function ManualBillPage() {
+  const snapshot = await getDashboardSnapshot();
+
+  const orderedIncomes = snapshot.incomes
+    .slice()
+    .sort((left, right) => {
+      if (left.id === snapshot.primaryIncomeId) return -1;
+      if (right.id === snapshot.primaryIncomeId) return 1;
+      return left.name.localeCompare(right.name);
+    });
+
   return (
     <AppShell title="Add a bill" currentPath="/bills" backHref="/bills/new">
       <form action={createCommitmentAction} className="space-y-4">
+        <Field label="Funded from">
+          <select
+            name="fundedByIncomeId"
+            defaultValue={snapshot.primaryIncomeId}
+            className="w-full rounded-2xl border border-border bg-card px-4 py-4 outline-none"
+          >
+            {orderedIncomes.map((income) => (
+              <option key={income.id} value={income.id}>
+                {income.name} · {sentenceCaseFrequency(income.frequency)}
+              </option>
+            ))}
+          </select>
+        </Field>
+
         <Field label="What's the bill?">
           <input
             name="name"

@@ -37,6 +37,7 @@ export interface CommitmentView {
   reserved: number;
   perPay: number;
   percentFunded: number;
+  fundedByIncomeId?: string;
 }
 
 export interface GoalView {
@@ -46,6 +47,7 @@ export interface GoalView {
   currentBalance: number;
   targetAmount?: number;
   targetDate?: string;
+  fundedByIncomeId?: string;
 }
 
 export interface ProjectionEventView {

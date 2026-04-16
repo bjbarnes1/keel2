@@ -5,8 +5,11 @@ import { redirect } from "next/navigation";
 
 import {
   createCommitment,
+  createIncome,
   createGoal,
   deleteCommitment,
+  deleteIncome,
+  setPrimaryIncome,
   updateBankBalance,
   updateCommitment,
 } from "@/lib/persistence/keel-store";
@@ -40,6 +43,7 @@ export async function createCommitmentAction(formData: FormData) {
       | "annual",
     nextDueDate: String(formData.get("nextDueDate") ?? ""),
     category: parseCategory(formData.get("category")),
+    fundedByIncomeId: String(formData.get("fundedByIncomeId") ?? "").trim() || undefined,
   });
 
   revalidatePath("/");
@@ -60,6 +64,7 @@ export async function updateCommitmentAction(id: string, formData: FormData) {
       | "annual",
     nextDueDate: String(formData.get("nextDueDate") ?? ""),
     category: parseCategory(formData.get("category")),
+    fundedByIncomeId: String(formData.get("fundedByIncomeId") ?? "").trim() || undefined,
   });
 
   revalidatePath("/");
@@ -86,9 +91,60 @@ export async function createGoalAction(formData: FormData) {
     currentBalance: 0,
     targetAmount: targetAmount ? Number.parseFloat(targetAmount) : undefined,
     targetDate: targetDate || undefined,
+    fundedByIncomeId: String(formData.get("fundedByIncomeId") ?? "").trim() || undefined,
   });
 
   revalidatePath("/");
   revalidatePath("/goals");
   redirect("/goals");
+}
+
+export async function createIncomeAction(formData: FormData) {
+  await createIncome({
+    name: String(formData.get("name") ?? ""),
+    amount: parseAmount(formData.get("amount")),
+    frequency: String(formData.get("frequency") ?? "fortnightly") as
+      | "weekly"
+      | "fortnightly"
+      | "monthly",
+    nextPayDate: String(formData.get("nextPayDate") ?? ""),
+    isPrimary: String(formData.get("isPrimary") ?? "") === "on",
+  });
+
+  revalidatePath("/");
+  revalidatePath("/bills");
+  revalidatePath("/goals");
+  revalidatePath("/timeline");
+  revalidatePath("/incomes");
+  redirect("/incomes");
+}
+
+export async function setPrimaryIncomeAction(formData: FormData) {
+  const incomeId = String(formData.get("incomeId") ?? "").trim();
+  if (!incomeId) {
+    throw new Error("Income id is required.");
+  }
+
+  await setPrimaryIncome(incomeId);
+  revalidatePath("/");
+  revalidatePath("/bills");
+  revalidatePath("/goals");
+  revalidatePath("/timeline");
+  revalidatePath("/incomes");
+  redirect("/incomes");
+}
+
+export async function deleteIncomeAction(formData: FormData) {
+  const incomeId = String(formData.get("incomeId") ?? "").trim();
+  if (!incomeId) {
+    throw new Error("Income id is required.");
+  }
+
+  await deleteIncome(incomeId);
+  revalidatePath("/");
+  revalidatePath("/bills");
+  revalidatePath("/goals");
+  revalidatePath("/timeline");
+  revalidatePath("/incomes");
+  redirect("/incomes");
 }

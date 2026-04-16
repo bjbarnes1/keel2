@@ -10,7 +10,7 @@ import { calculatePerPayAmount } from "@/lib/engine/keel";
 import type {
   CommitmentCategory,
   CommitmentFrequency,
-  PayFrequency,
+  IncomeView,
 } from "@/lib/types";
 import { cn, formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
@@ -29,6 +29,7 @@ type BillDraft = {
   frequency: CommitmentFrequency;
   nextDueDate: string;
   category: CommitmentCategory;
+  fundedByIncomeId: string;
 };
 
 const CATEGORY_OPTIONS: CommitmentCategory[] = [
@@ -119,7 +120,13 @@ function fieldClassName(extra?: string) {
   );
 }
 
-export function BillIntakeFlow({ payFrequency }: { payFrequency: PayFrequency }) {
+export function BillIntakeFlow({
+  incomes,
+  primaryIncomeId,
+}: {
+  incomes: IncomeView[];
+  primaryIncomeId: string;
+}) {
   const [text, setText] = useState("");
   const [flowState, setFlowState] = useState<FlowState>("input");
   const [draft, setDraft] = useState<BillDraft | null>(null);
@@ -129,12 +136,24 @@ export function BillIntakeFlow({ payFrequency }: { payFrequency: PayFrequency })
 
   const suggestions = useMemo(() => examples.map((example) => example.prompt), []);
 
-  const perPayFromIncome = useMemo(() => {
+  const selectedIncome = useMemo(() => {
     if (!draft) {
+      return incomes.find((income) => income.id === primaryIncomeId) ?? incomes[0];
+    }
+
+    return incomes.find((income) => income.id === draft.fundedByIncomeId) ?? incomes[0];
+  }, [draft, incomes, primaryIncomeId]);
+
+  const perPayFromIncome = useMemo(() => {
+    if (!draft || !selectedIncome) {
       return 0;
     }
-    return calculatePerPayAmount(draft.amount, draft.frequency, payFrequency);
-  }, [draft, payFrequency]);
+    return calculatePerPayAmount(
+      draft.amount,
+      draft.frequency,
+      selectedIncome.frequency,
+    );
+  }, [draft, selectedIncome]);
 
   const canSave =
     draft !== null &&
@@ -174,6 +193,7 @@ export function BillIntakeFlow({ payFrequency }: { payFrequency: PayFrequency })
         frequency: payload.data.frequency,
         nextDueDate: payload.data.nextDueDate ?? "",
         category: payload.data.category,
+        fundedByIncomeId: primaryIncomeId,
       });
       setFlowState("confirm");
     } catch (error) {
@@ -284,11 +304,33 @@ export function BillIntakeFlow({ payFrequency }: { payFrequency: PayFrequency })
 
           <p className="text-xs text-muted-foreground">
             Adjust anything the model missed. Reserves use your current pay
-            cadence ({sentenceCaseFrequency(payFrequency)}).
+            cadence ({sentenceCaseFrequency(selectedIncome?.frequency ?? "fortnightly")}).
           </p>
 
           <form action={createCommitmentAction} className="space-y-4">
             <SurfaceCard className="space-y-4">
+              <label className="block space-y-2">
+                <span className="text-xs text-muted-foreground">Funded from</span>
+                <select
+                  name="fundedByIncomeId"
+                  value={draft.fundedByIncomeId}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current
+                        ? { ...current, fundedByIncomeId: event.target.value }
+                        : current,
+                    )
+                  }
+                  className={fieldClassName()}
+                >
+                  {incomes.map((income) => (
+                    <option key={income.id} value={income.id}>
+                      {income.name} · {sentenceCaseFrequency(income.frequency)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className="block space-y-2">
                 <span className="text-xs text-muted-foreground">Name</span>
                 <input
@@ -419,7 +461,7 @@ export function BillIntakeFlow({ payFrequency }: { payFrequency: PayFrequency })
               <span className="font-mono font-semibold text-primary">
                 {formatAud(perPayFromIncome)}
               </span>{" "}
-              from each {sentenceCaseFrequency(payFrequency)} pay so this is covered
+              from each {sentenceCaseFrequency(selectedIncome?.frequency ?? "fortnightly")} pay so this is covered
               when it&apos;s due.
             </div>
 

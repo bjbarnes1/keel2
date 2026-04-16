@@ -14,6 +14,7 @@ const rawIncome = {
   frequency: "fortnightly" as const,
   nextPayDate: "2026-04-24",
 };
+const rawIncomes = [rawIncome];
 
 const rawCommitments = [
   {
@@ -104,7 +105,8 @@ function formatShortDate(isoDate: string) {
 
 const availableMoneyResult = calculateAvailableMoney({
   bankBalance: mockBankBalance,
-  income: rawIncome,
+  incomes: rawIncomes,
+  primaryIncomeId: rawIncome.id,
   commitments: rawCommitments,
   goals: rawGoals,
   asOf,
@@ -133,7 +135,7 @@ export const mockTimeline = buildProjectionTimeline({
   availableMoney: mockAvailableMoney,
   asOf,
   horizonDays: 60,
-  income: rawIncome,
+  incomes: rawIncomes,
   commitments: rawCommitments,
 }).map((event) => ({
   ...event,
@@ -145,7 +147,7 @@ const shortfall = detectProjectedShortfall(
     availableMoney: mockAvailableMoney,
     asOf,
     horizonDays: 60,
-    income: rawIncome,
+    incomes: rawIncomes,
     commitments: rawCommitments,
   }),
 );

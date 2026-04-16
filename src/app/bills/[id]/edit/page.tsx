@@ -10,7 +10,7 @@ import {
   getCommitmentForEdit,
   getDashboardSnapshot,
 } from "@/lib/persistence/keel-store";
-import { formatAud } from "@/lib/utils";
+import { formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +35,14 @@ export default async function EditBillPage({
     100,
   );
 
+  const orderedIncomes = snapshot.incomes
+    .slice()
+    .sort((left, right) => {
+      if (left.id === snapshot.primaryIncomeId) return -1;
+      if (right.id === snapshot.primaryIncomeId) return 1;
+      return left.name.localeCompare(right.name);
+    });
+
   return (
     <AppShell title={commitment.name} currentPath="/bills" backHref="/bills">
       <SurfaceCard>
@@ -48,6 +56,20 @@ export default async function EditBillPage({
       </SurfaceCard>
 
       <form action={updateCommitmentAction.bind(null, id)} className="mt-6 space-y-4">
+        <Field label="Funded from">
+          <select
+            name="fundedByIncomeId"
+            defaultValue={commitment.fundedByIncomeId ?? snapshot.primaryIncomeId}
+            className="w-full rounded-2xl border border-border bg-card px-4 py-4 outline-none"
+          >
+            {orderedIncomes.map((income) => (
+              <option key={income.id} value={income.id}>
+                {income.name} · {sentenceCaseFrequency(income.frequency)}
+              </option>
+            ))}
+          </select>
+        </Field>
+
         <Field label="What's the bill?">
           <input
             name="name"
@@ -78,6 +100,7 @@ export default async function EditBillPage({
         <Field label="When's the next one due?">
           <input
             name="nextDueDate"
+            type="date"
             defaultValue={commitment.nextDueDate}
             className="w-full rounded-2xl border border-border bg-card px-4 py-4 outline-none"
           />

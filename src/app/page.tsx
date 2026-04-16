@@ -25,7 +25,18 @@ export default async function HomePage() {
       />
 
       <div className="mt-4">
-        <IncomeCard income={snapshot.income} />
+        <div className="space-y-2">
+          {snapshot.incomes
+            .slice()
+            .sort((left, right) => {
+              if (left.id === snapshot.primaryIncomeId) return -1;
+              if (right.id === snapshot.primaryIncomeId) return 1;
+              return left.name.localeCompare(right.name);
+            })
+            .map((income) => (
+              <IncomeCard key={income.id} income={income} />
+            ))}
+        </div>
       </div>
 
       <SectionTitle title="Upcoming" />
