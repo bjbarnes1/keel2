@@ -25,6 +25,12 @@ This repository implements the current Keel2 V1 direction:
 
 ## Current Product Scope
 
+### Income model (V1)
+
+- The **calculation engine** uses one pay rhythm: a single income stream (amount, frequency, next pay date).
+- Postgres can store multiple `Income` rows per user, but the app **only loads the earliest-created income** when building the dashboard. The dev file store also models a single income.
+- **Allocating bills across incomes:** V1 does **not** assign a commitment to a specific income. Every bill’s per-pay reserve is derived from your **one** active pay frequency (annualized bill cost ÷ pay periods per year for that pay cadence). Supporting multiple earners with different pay dates would mean extending the engine (for example: multiple income streams in the projection, and optional `paidFromIncomeId` on commitments).
+
 The app currently includes:
 
 - Dashboard with Available Money waterfall

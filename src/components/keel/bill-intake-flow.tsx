@@ -2,18 +2,53 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 
+import { createCommitmentAction } from "@/app/actions/keel";
 import { SurfaceCard } from "@/components/keel/primitives";
-import { formatAud } from "@/lib/utils";
+import { calculatePerPayAmount } from "@/lib/engine/keel";
+import type {
+  CommitmentCategory,
+  CommitmentFrequency,
+  PayFrequency,
+} from "@/lib/types";
+import { cn, formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
-type ParsedBill = {
+type ParsedBillResponse = {
   name: string;
   amount: number;
-  frequency: string;
+  frequency: CommitmentFrequency;
   nextDueDate: string | null;
-  category: string;
+  category: CommitmentCategory;
   perPay: number;
 };
+
+type BillDraft = {
+  name: string;
+  amount: number;
+  frequency: CommitmentFrequency;
+  nextDueDate: string;
+  category: CommitmentCategory;
+};
+
+const CATEGORY_OPTIONS: CommitmentCategory[] = [
+  "Housing",
+  "Insurance",
+  "Utilities",
+  "Subscriptions",
+  "Transport",
+  "Education",
+  "Health",
+  "Other",
+];
+
+const FREQUENCY_OPTIONS: { value: CommitmentFrequency; label: string }[] = [
+  { value: "weekly", label: "Weekly" },
+  { value: "fortnightly", label: "Fortnightly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "annual", label: "Annual" },
+];
 
 const examples = [
   {
@@ -62,17 +97,50 @@ const examples = [
   },
 ];
 
-type FlowState = "input" | "thinking" | "confirm" | "saved";
+type FlowState = "input" | "thinking" | "confirm";
 
-export function BillIntakeFlow() {
+function SubmitBillButton({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={disabled || pending}
+      className="w-full rounded-2xl bg-primary px-4 py-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {pending ? "Adding…" : "Add this bill"}
+    </button>
+  );
+}
+
+function fieldClassName(extra?: string) {
+  return cn(
+    "w-full rounded-2xl border border-border bg-card px-4 py-3 text-sm outline-none transition-colors focus:border-primary/50",
+    extra,
+  );
+}
+
+export function BillIntakeFlow({ payFrequency }: { payFrequency: PayFrequency }) {
   const [text, setText] = useState("");
   const [flowState, setFlowState] = useState<FlowState>("input");
-  const [parsedBill, setParsedBill] = useState<ParsedBill | null>(null);
+  const [draft, setDraft] = useState<BillDraft | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const canSubmit = text.trim().length > 5;
 
   const suggestions = useMemo(() => examples.map((example) => example.prompt), []);
+
+  const perPayFromIncome = useMemo(() => {
+    if (!draft) {
+      return 0;
+    }
+    return calculatePerPayAmount(draft.amount, draft.frequency, payFrequency);
+  }, [draft, payFrequency]);
+
+  const canSave =
+    draft !== null &&
+    draft.name.trim().length > 0 &&
+    draft.amount > 0 &&
+    Boolean(draft.nextDueDate);
 
   async function submit(description = text) {
     if (!description.trim()) {
@@ -93,19 +161,19 @@ export function BillIntakeFlow() {
       });
 
       const payload = (await response.json()) as
-        | { success: true; data: ParsedBill }
+        | { success: true; data: ParsedBillResponse }
         | { success: false; error: string };
 
       if (!payload.success) {
         throw new Error(payload.error);
       }
 
-      setParsedBill({
-        ...payload.data,
-        frequency:
-          payload.data.frequency.charAt(0).toUpperCase() +
-          payload.data.frequency.slice(1),
-        nextDueDate: payload.data.nextDueDate,
+      setDraft({
+        name: payload.data.name,
+        amount: payload.data.amount,
+        frequency: payload.data.frequency,
+        nextDueDate: payload.data.nextDueDate ?? "",
+        category: payload.data.category,
       });
       setFlowState("confirm");
     } catch (error) {
@@ -118,59 +186,8 @@ export function BillIntakeFlow() {
 
   function reset() {
     setText("");
-    setParsedBill(null);
+    setDraft(null);
     setFlowState("input");
-  }
-
-  if (flowState === "saved" && parsedBill) {
-    return (
-      <div className="space-y-6 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 text-2xl text-emerald-500">
-          ✓
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold">{parsedBill.name} added</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {formatAud(parsedBill.amount)} · {parsedBill.frequency}
-          </p>
-          <p className="mt-2 text-sm text-emerald-500">
-            Reserving {formatAud(parsedBill.perPay)} per pay from now on
-          </p>
-        </div>
-
-        <SurfaceCard className="space-y-3 text-left">
-          <p className="text-xs text-muted-foreground">Available Money updated</p>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Was</span>
-            <span className="font-mono text-muted-foreground line-through">
-              {formatAud(5299)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-emerald-500">Now</span>
-            <span className="font-mono text-xl font-semibold text-emerald-500">
-              {formatAud(4819)}
-            </span>
-          </div>
-        </SurfaceCard>
-
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={reset}
-            className="w-full rounded-2xl border border-dashed border-primary/30 bg-primary/10 px-4 py-4 text-sm font-medium text-primary"
-          >
-            + Add another bill
-          </button>
-          <Link
-            href="/"
-            className="block w-full rounded-2xl border border-border px-4 py-4 text-sm text-muted-foreground"
-          >
-            Done - back to Home
-          </Link>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -227,7 +244,10 @@ export function BillIntakeFlow() {
 
           <SurfaceCard>
             <p className="text-sm text-muted-foreground">Prefer a form?</p>
-            <Link href="/bills/new/manual" className="mt-2 inline-block text-sm font-medium text-primary">
+            <Link
+              href="/bills/new/manual"
+              className="mt-2 inline-block text-sm font-medium text-primary"
+            >
               Enter details manually instead
             </Link>
           </SurfaceCard>
@@ -253,7 +273,7 @@ export function BillIntakeFlow() {
         </>
       ) : null}
 
-      {flowState === "confirm" && parsedBill ? (
+      {flowState === "confirm" && draft ? (
         <>
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
@@ -262,71 +282,160 @@ export function BillIntakeFlow() {
             <p className="text-sm font-medium">Here&apos;s what I got</p>
           </div>
 
-          <SurfaceCard className="space-y-3">
-            <ConfirmationRow label="Name" value={parsedBill.name} />
-            <ConfirmationRow label="Amount" value={formatAud(parsedBill.amount)} />
-            <ConfirmationRow label="Frequency" value={parsedBill.frequency} />
-            <ConfirmationRow
-              label="Next due"
-              value={parsedBill.nextDueDate ?? "Tap to add"}
-              missing={!parsedBill.nextDueDate}
-            />
-            <ConfirmationRow label="Category" value={parsedBill.category} />
-            <ConfirmationRow label="Per pay" value={`${formatAud(parsedBill.perPay)} / pay`} />
-          </SurfaceCard>
+          <p className="text-xs text-muted-foreground">
+            Adjust anything the model missed. Reserves use your current pay
+            cadence ({sentenceCaseFrequency(payFrequency)}).
+          </p>
 
-          {!parsedBill.nextDueDate ? (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-muted-foreground">
-              I need the next due date to calculate your reserves accurately. Add
-              it before saving if you know it.
+          <form action={createCommitmentAction} className="space-y-4">
+            <SurfaceCard className="space-y-4">
+              <label className="block space-y-2">
+                <span className="text-xs text-muted-foreground">Name</span>
+                <input
+                  name="name"
+                  required
+                  value={draft.name}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current ? { ...current, name: event.target.value } : current,
+                    )
+                  }
+                  className={fieldClassName()}
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-xs text-muted-foreground">Amount (per bill)</span>
+                <input
+                  name="amount"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.01"
+                  required
+                  value={Number.isFinite(draft.amount) ? draft.amount : 0}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            amount: Number.parseFloat(event.target.value) || 0,
+                          }
+                        : current,
+                    )
+                  }
+                  className={cn(fieldClassName(), "font-mono")}
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-xs text-muted-foreground">Frequency</span>
+                <select
+                  name="frequency"
+                  value={draft.frequency}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            frequency: event.target.value as CommitmentFrequency,
+                          }
+                        : current,
+                    )
+                  }
+                  className={fieldClassName()}
+                >
+                  {FREQUENCY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block space-y-2">
+                <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>Next due</span>
+                  {!draft.nextDueDate ? (
+                    <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-500">
+                      Required for reserves
+                    </span>
+                  ) : null}
+                </span>
+                <input
+                  name="nextDueDate"
+                  type="date"
+                  required
+                  value={draft.nextDueDate}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current
+                        ? { ...current, nextDueDate: event.target.value }
+                        : current,
+                    )
+                  }
+                  className={cn(
+                    fieldClassName(),
+                    !draft.nextDueDate && "border-amber-500/40 bg-amber-500/5",
+                  )}
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-xs text-muted-foreground">Category</span>
+                <select
+                  name="category"
+                  value={draft.category}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            category: event.target.value as CommitmentCategory,
+                          }
+                        : current,
+                    )
+                  }
+                  className={fieldClassName()}
+                >
+                  {CATEGORY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </SurfaceCard>
+
+            {!draft.nextDueDate ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-muted-foreground">
+                The model couldn&apos;t infer a due date. Pick the next payment
+                date above so Keel can reserve the right amount before it hits.
+              </div>
+            ) : null}
+
+            <div className="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm leading-6 text-muted-foreground">
+              Keel will reserve{" "}
+              <span className="font-mono font-semibold text-primary">
+                {formatAud(perPayFromIncome)}
+              </span>{" "}
+              from each {sentenceCaseFrequency(payFrequency)} pay so this is covered
+              when it&apos;s due.
             </div>
-          ) : null}
 
-          <div className="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm leading-6 text-muted-foreground">
-            Keel will reserve{" "}
-            <span className="font-mono font-semibold text-primary">
-              {formatAud(parsedBill.perPay)}
-            </span>{" "}
-            from each pay so this is covered when it&apos;s due.
-          </div>
-
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setFlowState("saved")}
-              className="w-full rounded-2xl bg-primary px-4 py-4 text-sm font-semibold text-white"
-            >
-              Add this bill
-            </button>
-            <button
-              type="button"
-              onClick={reset}
-              className="w-full rounded-2xl border border-border px-4 py-4 text-sm text-muted-foreground"
-            >
-              Start over
-            </button>
-          </div>
+            <div className="space-y-3">
+              <SubmitBillButton disabled={!canSave} />
+              <button
+                type="button"
+                onClick={reset}
+                className="w-full rounded-2xl border border-border px-4 py-4 text-sm text-muted-foreground"
+              >
+                Start over
+              </button>
+            </div>
+          </form>
         </>
       ) : null}
-    </div>
-  );
-}
-
-function ConfirmationRow({
-  label,
-  value,
-  missing,
-}: {
-  label: string;
-  value: string;
-  missing?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-border pb-3 last:border-b-0 last:pb-0">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={missing ? "text-sm text-amber-500" : "text-sm"}>
-        {value}
-      </span>
     </div>
   );
 }

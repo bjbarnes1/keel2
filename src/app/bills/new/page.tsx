@@ -1,10 +1,13 @@
 import { BillIntakeFlow } from "@/components/keel/bill-intake-flow";
 import { AppShell } from "@/components/keel/primitives";
+import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
 
-export default function NewBillPage() {
+export default async function NewBillPage() {
+  const snapshot = await getDashboardSnapshot();
+
   return (
     <AppShell title="Add a bill" currentPath="/bills" backHref="/bills">
-      <BillIntakeFlow />
+      <BillIntakeFlow payFrequency={snapshot.income.frequency} />
     </AppShell>
   );
 }
