@@ -65,7 +65,8 @@ npm run build
 Copy `.env.example` to `.env.local` or set the same values in your environment:
 
 ```bash
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/keel2?schema=public"
+DATABASE_URL="postgresql://USER:PASSWORD@aws-REGION.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://USER:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres"
 NEXT_PUBLIC_SUPABASE_URL=""
 NEXT_PUBLIC_SUPABASE_ANON_KEY=""
 ANTHROPIC_API_KEY=""
@@ -73,7 +74,8 @@ ANTHROPIC_API_KEY=""
 
 ### What each variable does
 
-- `DATABASE_URL`: enables Prisma/Postgres persistence
+- `DATABASE_URL`: pooled runtime connection for the app
+- `DIRECT_URL`: direct database connection for Prisma CLI and migrations
 - `NEXT_PUBLIC_SUPABASE_URL`: reserved for Supabase integration
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: reserved for Supabase integration
 - `ANTHROPIC_API_KEY`: enables real Anthropic bill parsing in the AI bill flow
@@ -98,7 +100,7 @@ This is the mode you should use for Vercel deployments.
 
 ### Important Vercel note
 
-The local file-backed fallback is only intended for local development. On Vercel, filesystem writes are not durable. For production writes to work correctly, you must set `DATABASE_URL`.
+The local file-backed fallback is only intended for local development. On Vercel, filesystem writes are not durable. For production writes to work correctly, you must set both `DATABASE_URL` and `DIRECT_URL`.
 
 The app is set up to fail write actions in hosted production if no database is configured, rather than silently pretending data is persistent.
 
@@ -153,6 +155,7 @@ Recommended defaults:
 At minimum, set:
 
 - `DATABASE_URL`
+- `DIRECT_URL`
 
 Optional:
 
@@ -162,7 +165,7 @@ Optional:
 
 ### 4. Deploy
 
-Once `DATABASE_URL` is present, the app is ready for a normal Vercel deployment.
+Once `DATABASE_URL` and `DIRECT_URL` are present, the app is ready for a normal Vercel deployment.
 
 On Vercel, the build now runs:
 
@@ -172,7 +175,8 @@ npm run build:vercel
 
 That command now runs a dedicated script which:
 
-- validates that `DATABASE_URL` is present
+- validates that `DATABASE_URL` is present for runtime
+- validates that `DIRECT_URL` is present when migrations will run
 - runs `prisma generate`
 - runs `prisma migrate deploy` on production deployments
 - runs `next build`
@@ -194,6 +198,16 @@ If you ever need to run the migration command directly, the repo also includes:
 npm run db:migrate:deploy
 ```
 
+### Supabase connection requirements
+
+For Supabase with Prisma 7:
+
+- use the pooled Supabase URL in `DATABASE_URL`
+- append `?pgbouncer=true` to that pooled URL
+- use the direct Supabase database URL in `DIRECT_URL`
+
+This matters because Prisma migrations should not run against the transaction pooler on port `6543`.
+
 ## Branching
 
 The repository default branch should be `main`.
@@ -211,3 +225,4 @@ git push -u origin main
 - add full income editing/setup
 - enable Supabase auth
 - switch fully from the local fallback store to Postgres in production
+

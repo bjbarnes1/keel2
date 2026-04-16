@@ -9,6 +9,7 @@ function run(command) {
 }
 
 const databaseUrl = process.env.DATABASE_URL;
+const directUrl = process.env.DIRECT_URL;
 const vercelEnv = process.env.VERCEL_ENV ?? "local";
 const shouldRunMigrations =
   vercelEnv === "production" ||
@@ -17,7 +18,13 @@ const shouldRunMigrations =
 
 if (!databaseUrl) {
   throw new Error(
-    "DATABASE_URL is required during Vercel builds so Prisma can prepare the app and run migrations.",
+    "DATABASE_URL is required during Vercel builds for Prisma runtime connectivity.",
+  );
+}
+
+if (shouldRunMigrations && !directUrl) {
+  throw new Error(
+    "DIRECT_URL is required when running Prisma migrations on Vercel. Use the direct Supabase connection, not the transaction pooler.",
   );
 }
 
