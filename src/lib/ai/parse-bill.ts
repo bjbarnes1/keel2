@@ -2,10 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
 const parsedBillSchema = z.object({
-  name: z.string(),
-  amount: z.number(),
+  name: z.string().min(1),
+  amount: z.number().finite().nonnegative(),
   frequency: z.enum(["weekly", "fortnightly", "monthly", "quarterly", "annual"]),
-  nextDueDate: z.string().nullable(),
+  nextDueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable(),
   category: z.enum([
     "Housing",
     "Insurance",
@@ -16,8 +19,29 @@ const parsedBillSchema = z.object({
     "Health",
     "Other",
   ]),
-  perPay: z.number(),
+  perPay: z.number().finite().nonnegative(),
 });
+
+type ParsedBill = z.infer<typeof parsedBillSchema>;
+
+const validFrequencies = new Set<ParsedBill["frequency"]>([
+  "weekly",
+  "fortnightly",
+  "monthly",
+  "quarterly",
+  "annual",
+]);
+
+const categoryMap = new Map<string, ParsedBill["category"]>([
+  ["housing", "Housing"],
+  ["insurance", "Insurance"],
+  ["utilities", "Utilities"],
+  ["subscriptions", "Subscriptions"],
+  ["transport", "Transport"],
+  ["education", "Education"],
+  ["health", "Health"],
+  ["other", "Other"],
+]);
 
 const examples = [
   {
@@ -97,6 +121,111 @@ function fallbackParse(description: string) {
   };
 }
 
+function parseMoneyNumber(value: unknown) {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.replace(/[$,\s]/g, "");
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  throw new Error("Unable to parse bill amount.");
+}
+
+function normalizeFrequency(value: unknown): ParsedBill["frequency"] {
+  if (typeof value !== "string") {
+    throw new Error("Bill frequency must be a string.");
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (validFrequencies.has(normalized as ParsedBill["frequency"])) {
+    return normalized as ParsedBill["frequency"];
+  }
+
+  if (normalized.includes("month")) return "monthly";
+  if (normalized.includes("quarter") || normalized.includes("term")) return "quarterly";
+  if (normalized.includes("fortnight")) return "fortnightly";
+  if (normalized.includes("week")) return "weekly";
+  if (normalized.includes("annual") || normalized.includes("year")) return "annual";
+
+  throw new Error(`Unsupported bill frequency: ${value}`);
+}
+
+function normalizeCategory(value: unknown): ParsedBill["category"] {
+  if (typeof value !== "string") {
+    return "Other";
+  }
+
+  return categoryMap.get(value.trim().toLowerCase()) ?? "Other";
+}
+
+function normalizeDate(value: unknown): string | null {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("Bill due date must be a string or null.");
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, "0"),
+    String(parsed.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function extractJsonObject(text: string) {
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1] ?? text;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("No JSON object found in AI response.");
+  }
+
+  return candidate.slice(start, end + 1);
+}
+
+export function normalizeParsedBill(raw: unknown): ParsedBill {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("AI response did not contain a bill object.");
+  }
+
+  const candidate = raw as Record<string, unknown>;
+
+  return parsedBillSchema.parse({
+    name: String(candidate.name ?? "").trim(),
+    amount: parseMoneyNumber(candidate.amount),
+    frequency: normalizeFrequency(candidate.frequency),
+    nextDueDate: normalizeDate(candidate.nextDueDate),
+    category: normalizeCategory(candidate.category),
+    perPay: parseMoneyNumber(candidate.perPay),
+  });
+}
+
 export async function parseBillDescription(description: string) {
   const trimmed = description.trim();
 
@@ -107,7 +236,7 @@ export async function parseBillDescription(description: string) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
-    return parsedBillSchema.parse(fallbackParse(trimmed));
+    return normalizeParsedBill(fallbackParse(trimmed));
   }
 
   const client = new Anthropic({ apiKey });
@@ -135,6 +264,7 @@ Rules:
   });
 
   const text = response.content.find((item) => item.type === "text");
-  const parsed = JSON.parse(text?.type === "text" ? text.text : "{}");
-  return parsedBillSchema.parse(parsed);
+  const body = text?.type === "text" ? text.text : "";
+  const parsed = JSON.parse(extractJsonObject(body));
+  return normalizeParsedBill(parsed);
 }
