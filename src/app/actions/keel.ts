@@ -6,9 +6,11 @@ import { redirect } from "next/navigation";
 import {
   createCommitment,
   createIncome,
+  createBudgetInvite,
   createGoal,
   deleteCommitment,
   deleteIncome,
+  acceptBudgetInvite,
   setPrimaryIncome,
   updateBankBalance,
   updateCommitment,
@@ -21,6 +23,14 @@ function parseAmount(value: FormDataEntryValue | null) {
 
 function parseCategory(value: FormDataEntryValue | null) {
   return (String(value ?? "Other") || "Other") as CommitmentCategory;
+}
+
+function parseIsoDate(value: FormDataEntryValue | null, label: string) {
+  const parsed = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+    throw new Error(`${label} must be a valid date (YYYY-MM-DD).`);
+  }
+  return parsed;
 }
 
 export async function updateBankBalanceAction(formData: FormData) {
@@ -41,7 +51,7 @@ export async function createCommitmentAction(formData: FormData) {
       | "monthly"
       | "quarterly"
       | "annual",
-    nextDueDate: String(formData.get("nextDueDate") ?? ""),
+    nextDueDate: parseIsoDate(formData.get("nextDueDate"), "Next due date"),
     category: parseCategory(formData.get("category")),
     fundedByIncomeId: String(formData.get("fundedByIncomeId") ?? "").trim() || undefined,
   });
@@ -62,7 +72,7 @@ export async function updateCommitmentAction(id: string, formData: FormData) {
       | "monthly"
       | "quarterly"
       | "annual",
-    nextDueDate: String(formData.get("nextDueDate") ?? ""),
+    nextDueDate: parseIsoDate(formData.get("nextDueDate"), "Next due date"),
     category: parseCategory(formData.get("category")),
     fundedByIncomeId: String(formData.get("fundedByIncomeId") ?? "").trim() || undefined,
   });
@@ -107,7 +117,7 @@ export async function createIncomeAction(formData: FormData) {
       | "weekly"
       | "fortnightly"
       | "monthly",
-    nextPayDate: String(formData.get("nextPayDate") ?? ""),
+    nextPayDate: parseIsoDate(formData.get("nextPayDate"), "Next pay date"),
     isPrimary: String(formData.get("isPrimary") ?? "") === "on",
   });
 
@@ -147,4 +157,23 @@ export async function deleteIncomeAction(formData: FormData) {
   revalidatePath("/timeline");
   revalidatePath("/incomes");
   redirect("/incomes");
+}
+
+export async function createBudgetInviteAction(formData: FormData) {
+  const email = String(formData.get("email") ?? "");
+  const token = await createBudgetInvite(email);
+  revalidatePath("/budget/members");
+  redirect(`/budget/members?invite=${encodeURIComponent(token)}`);
+}
+
+export async function acceptBudgetInviteAction(formData: FormData) {
+  const token = String(formData.get("token") ?? "").trim();
+  if (!token) {
+    throw new Error("Invite token is required.");
+  }
+
+  await acceptBudgetInvite(token);
+  revalidatePath("/");
+  revalidatePath("/budget/members");
+  redirect("/");
 }

@@ -85,9 +85,15 @@ ANTHROPIC_API_KEY=""
 
 - `DATABASE_URL`: pooled runtime connection for the app
 - `DIRECT_URL`: direct database connection for Prisma CLI and migrations
-- `NEXT_PUBLIC_SUPABASE_URL`: reserved for Supabase integration
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: reserved for Supabase integration
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL (used for auth)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase publishable key (used for auth)
 - `ANTHROPIC_API_KEY`: enables real Anthropic bill parsing in the AI bill flow
+
+## Authentication + Shared budgets
+
+- Sign in at `/login` (email magic link).
+- A signed-in user is automatically attached to a `Budget` via `BudgetMember`.
+- Manage household members and invite links at `/budget/members`.
 
 ## Persistence Modes
 

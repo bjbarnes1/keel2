@@ -7,22 +7,60 @@ datasource db {
 }
 
 model User {
-  id          String       @id @default(cuid())
-  email       String       @unique
-  name        String?
-  bankBalance Decimal      @default(0)
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships BudgetMember[]
+  invites     BudgetInvite[] @relation("InvitedByUser")
+}
+
+model Budget {
+  id          String    @id @default(cuid())
+  name        String
+  bankBalance Decimal   @default(0)
   balanceAsOf DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  members     BudgetMember[]
+  invites     BudgetInvite[]
   incomes     Income[]
   commitments Commitment[]
   goals       Goal[]
 }
 
+model BudgetMember {
+  id        String   @id @default(cuid())
+  budgetId  String
+  userId    String
+  role      String   @default("owner")
+  createdAt DateTime @default(now())
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, userId])
+}
+
+model BudgetInvite {
+  id              String    @id @default(cuid())
+  budgetId        String
+  budget          Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  email           String
+  token           String    @unique
+  invitedByUserId String
+  invitedByUser   User      @relation("InvitedByUser", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedAt      DateTime?
+  createdAt       DateTime  @default(now())
+}
+
 model Income {
   id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budgetId    String
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   name        String
   amount      Decimal
   frequency   String
@@ -37,8 +75,8 @@ model Income {
 
 model Commitment {
   id               String   @id @default(cuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budgetId         String
+  budget           Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   fundedByIncomeId String?
   fundedByIncome   Income?  @relation("IncomeCommitments", fields: [fundedByIncomeId], references: [id], onDelete: SetNull)
   name             String
@@ -53,8 +91,8 @@ model Commitment {
 
 model Goal {
   id                 String    @id @default(cuid())
-  userId             String
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budgetId           String
+  budget             Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   fundedByIncomeId   String?
   fundedByIncome     Income?   @relation("IncomeGoals", fields: [fundedByIncomeId], references: [id], onDelete: SetNull)
   name               String

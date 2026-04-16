@@ -10,6 +10,7 @@ import {
   detectProjectedShortfall,
 } from "@/lib/engine/keel";
 import { getPrismaClient } from "@/lib/prisma";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   CommitmentCategory,
   CommitmentView,
@@ -24,6 +25,11 @@ type StoredUser = {
   name: string;
   bankBalance: number;
   balanceAsOf: string;
+};
+
+type StoredBudget = {
+  id: string;
+  name: string;
 };
 
 type StoredIncome = {
@@ -57,6 +63,7 @@ type StoredGoal = {
 
 type StoredKeelState = {
   user: StoredUser;
+  budget: StoredBudget;
   incomes: StoredIncome[];
   primaryIncomeId: string;
   commitments: StoredCommitment[];
@@ -65,6 +72,7 @@ type StoredKeelState = {
 
 export type DashboardSnapshot = {
   userName: string;
+  budgetName: string;
   bankBalance: number;
   balanceAsOf: string;
   incomes: IncomeView[];
@@ -83,6 +91,11 @@ const demoStorePath = path.join(process.cwd(), "data", "dev-store.json");
 function hasConfiguredDatabase() {
   const url = process.env.DATABASE_URL ?? "";
   return Boolean(url) && !url.includes("johndoe:randompassword");
+}
+
+function hasSupabaseAuthConfigured() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
 function isHostedProduction() {
@@ -107,9 +120,88 @@ async function writeDemoStore(state: StoredKeelState) {
   await writeFile(demoStorePath, JSON.stringify(state, null, 2));
 }
 
+async function getAuthedUser() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data.user) {
+    throw new Error("Not authenticated.");
+  }
+
+  return data.user;
+}
+
+async function getOrCreateActiveBudget(input: { userId: string; email: string; name: string }) {
+  const prisma = getPrismaClient();
+
+  await prisma.user.upsert({
+    where: { id: input.userId },
+    update: { email: input.email, name: input.name },
+    create: { id: input.userId, email: input.email, name: input.name },
+  });
+
+  const membership = await prisma.budgetMember.findFirst({
+    where: { userId: input.userId },
+    include: { budget: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (membership) {
+    return membership.budget;
+  }
+
+  const budget = await prisma.budget.create({
+    data: {
+      name: input.name ? `${input.name}'s Household` : "Household",
+      bankBalance: 0,
+      balanceAsOf: null,
+      members: {
+        create: {
+          userId: input.userId,
+          role: "owner",
+        },
+      },
+    },
+  });
+
+  return budget;
+}
+
+async function getBudgetContext() {
+  const prisma = getPrismaClient();
+  const authedUser = await getAuthedUser();
+  const budget = await getOrCreateActiveBudget({
+    userId: authedUser.id,
+    email: authedUser.email ?? "",
+    name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
+  });
+
+  const membership = await prisma.budgetMember.findFirst({
+    where: { userId: authedUser.id, budgetId: budget.id },
+  });
+
+  if (!membership) {
+    throw new Error("You are not a member of this budget.");
+  }
+
+  return { authedUser, budget, membership };
+}
+
 async function readPrismaState(): Promise<StoredKeelState> {
   const prisma = getPrismaClient();
-  const user = await prisma.user.findFirst({
+  const authedUser = await getAuthedUser();
+  const budget = await getOrCreateActiveBudget({
+    userId: authedUser.id,
+    email: authedUser.email ?? "",
+    name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
+  });
+
+  const budgetWithData = await prisma.budget.findFirst({
+    where: { id: budget.id },
     include: {
       incomes: { orderBy: { createdAt: "asc" } },
       commitments: { orderBy: { nextDueDate: "asc" } },
@@ -117,29 +209,51 @@ async function readPrismaState(): Promise<StoredKeelState> {
     },
   });
 
-  if (!user || user.incomes.length === 0) {
-    return readDemoStore();
+  if (!budgetWithData) {
+    throw new Error("Budget not found.");
   }
 
   const primaryIncome =
-    user.incomes.find((income) => income.isPrimary) ?? user.incomes[0];
+    budgetWithData.incomes.find((income) => income.isPrimary) ??
+    budgetWithData.incomes[0];
   const primaryIncomeId = primaryIncome?.id;
 
   if (!primaryIncomeId) {
-    return readDemoStore();
+    // Bootstrap a placeholder income so the app can render, then user can edit.
+    const nextPayDate = new Date();
+    nextPayDate.setUTCDate(nextPayDate.getUTCDate() + 14);
+    const created = await prisma.income.create({
+      data: {
+        budgetId: budgetWithData.id,
+        name: "Income",
+        amount: 0,
+        frequency: "fortnightly",
+        nextPayDate,
+        isPrimary: true,
+      },
+    });
+
+    budgetWithData.incomes.push(created);
   }
 
   return {
     user: {
-      id: user.id,
-      email: user.email,
-      name: user.name ?? "Keel User",
-      bankBalance: Number(user.bankBalance),
-      balanceAsOf: user.balanceAsOf
-        ? user.balanceAsOf.toISOString().slice(0, 10)
+      id: authedUser.id,
+      email: authedUser.email ?? "",
+      name:
+        (authedUser.user_metadata?.["name"] as string | undefined) ??
+        authedUser.email ??
+        "Keel User",
+      bankBalance: Number(budgetWithData.bankBalance),
+      balanceAsOf: budgetWithData.balanceAsOf
+        ? budgetWithData.balanceAsOf.toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10),
     },
-    incomes: user.incomes.map((income) => ({
+    budget: {
+      id: budgetWithData.id,
+      name: budgetWithData.name,
+    },
+    incomes: budgetWithData.incomes.map((income) => ({
       id: income.id,
       name: income.name,
       amount: Number(income.amount),
@@ -147,8 +261,8 @@ async function readPrismaState(): Promise<StoredKeelState> {
       nextPayDate: income.nextPayDate.toISOString().slice(0, 10),
       isPrimary: income.isPrimary,
     })),
-    primaryIncomeId,
-    commitments: user.commitments.map((commitment) => ({
+    primaryIncomeId: primaryIncomeId ?? budgetWithData.incomes[0]!.id,
+    commitments: budgetWithData.commitments.map((commitment) => ({
       id: commitment.id,
       name: commitment.name,
       amount: Number(commitment.amount),
@@ -157,7 +271,7 @@ async function readPrismaState(): Promise<StoredKeelState> {
       category: (commitment.category ?? "Other") as CommitmentCategory,
       fundedByIncomeId: commitment.fundedByIncomeId ?? undefined,
     })),
-    goals: user.goals.map((goal) => ({
+    goals: budgetWithData.goals.map((goal) => ({
       id: goal.id,
       name: goal.name,
       contributionPerPay: Number(goal.contributionPerPay),
@@ -171,6 +285,10 @@ async function readPrismaState(): Promise<StoredKeelState> {
 
 async function readState() {
   if (hasConfiguredDatabase()) {
+    if (!hasSupabaseAuthConfigured()) {
+      // Local DB without auth wiring: fall back to demo store behavior.
+      return readDemoStore();
+    }
     return readPrismaState();
   }
 
@@ -210,6 +328,7 @@ function toDashboardSnapshot(state: StoredKeelState): DashboardSnapshot {
 
   return {
     userName: state.user.name,
+    budgetName: state.budget.name,
     bankBalance: state.user.bankBalance,
     balanceAsOf: formatShortDate(state.user.balanceAsOf),
     incomes: state.incomes.map((income) => ({
@@ -265,18 +384,16 @@ export async function getIncomeSnapshot() {
 export async function updateBankBalance(amount: number) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
-    const existingUser = await prisma.user.findFirst();
+    const authedUser = await getAuthedUser();
+    const budget = await getOrCreateActiveBudget({
+      userId: authedUser.id,
+      email: authedUser.email ?? "",
+      name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
+    });
 
-    if (!existingUser) {
-      throw new Error("No user found to update bank balance.");
-    }
-
-    await prisma.user.update({
-      where: { id: existingUser.id },
-      data: {
-        bankBalance: amount,
-        balanceAsOf: new Date(),
-      },
+    await prisma.budget.update({
+      where: { id: budget.id },
+      data: { bankBalance: amount, balanceAsOf: new Date() },
     });
     return;
   }
@@ -296,22 +413,23 @@ export async function createIncome(input: {
 }) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
-    const existingUser = await prisma.user.findFirst();
-
-    if (!existingUser) {
-      throw new Error("No user found to create an income.");
-    }
+    const authedUser = await getAuthedUser();
+    const budget = await getOrCreateActiveBudget({
+      userId: authedUser.id,
+      email: authedUser.email ?? "",
+      name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
+    });
 
     if (input.isPrimary) {
       await prisma.income.updateMany({
-        where: { userId: existingUser.id },
+        where: { budgetId: budget.id },
         data: { isPrimary: false },
       });
     }
 
     await prisma.income.create({
       data: {
-        userId: existingUser.id,
+        budgetId: budget.id,
         name: input.name,
         amount: input.amount,
         frequency: input.frequency,
@@ -348,14 +466,15 @@ export async function createIncome(input: {
 export async function setPrimaryIncome(incomeId: string) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
-    const existingUser = await prisma.user.findFirst();
-
-    if (!existingUser) {
-      throw new Error("No user found to set primary income.");
-    }
+    const authedUser = await getAuthedUser();
+    const budget = await getOrCreateActiveBudget({
+      userId: authedUser.id,
+      email: authedUser.email ?? "",
+      name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
+    });
 
     await prisma.income.updateMany({
-      where: { userId: existingUser.id },
+      where: { budgetId: budget.id },
       data: { isPrimary: false },
     });
     await prisma.income.update({
@@ -397,15 +516,19 @@ export async function setPrimaryIncome(incomeId: string) {
 export async function deleteIncome(incomeId: string) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
-    const existingUser = await prisma.user.findFirst({
-      include: { incomes: { orderBy: { createdAt: "asc" } } },
+    const authedUser = await getAuthedUser();
+    const budget = await getOrCreateActiveBudget({
+      userId: authedUser.id,
+      email: authedUser.email ?? "",
+      name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
     });
 
-    if (!existingUser) {
-      throw new Error("No user found to delete income.");
-    }
+    const incomes = await prisma.income.findMany({
+      where: { budgetId: budget.id },
+      orderBy: { createdAt: "asc" },
+    });
 
-    const remaining = existingUser.incomes.filter((income) => income.id !== incomeId);
+    const remaining = incomes.filter((income) => income.id !== incomeId);
     if (remaining.length === 0) {
       throw new Error("You must have at least one income.");
     }
@@ -413,13 +536,13 @@ export async function deleteIncome(incomeId: string) {
     await prisma.income.delete({ where: { id: incomeId } });
 
     // If we deleted the primary, promote the oldest remaining.
-    const deletedWasPrimary = existingUser.incomes.some(
+    const deletedWasPrimary = incomes.some(
       (income) => income.id === incomeId && income.isPrimary,
     );
 
     if (deletedWasPrimary) {
       await prisma.income.updateMany({
-        where: { userId: existingUser.id },
+        where: { budgetId: budget.id },
         data: { isPrimary: false },
       });
       await prisma.income.update({
@@ -461,6 +584,113 @@ export async function deleteIncome(incomeId: string) {
   await writeState(state);
 }
 
+export async function getBudgetMembers() {
+  noStore();
+
+  if (!hasConfiguredDatabase()) {
+    const state = await readState();
+    return [
+      {
+        userId: state.user.id,
+        email: state.user.email,
+        name: state.user.name,
+        role: "owner",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const members = await prisma.budgetMember.findMany({
+    where: { budgetId: budget.id },
+    include: { user: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return members.map((member) => ({
+    userId: member.userId,
+    email: member.user.email,
+    name: member.user.name ?? "",
+    role: member.role,
+    createdAt: member.createdAt.toISOString(),
+  }));
+}
+
+export async function createBudgetInvite(email: string) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Invites require a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { authedUser, budget, membership } = await getBudgetContext();
+
+  if (membership.role !== "owner") {
+    throw new Error("Only budget owners can invite members.");
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new Error("Email is required.");
+  }
+
+  const token = randomUUID();
+
+  const invite = await prisma.budgetInvite.create({
+    data: {
+      budgetId: budget.id,
+      email: normalizedEmail,
+      token,
+      invitedByUserId: authedUser.id,
+    },
+  });
+
+  return invite.token;
+}
+
+export async function acceptBudgetInvite(token: string) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Invites require a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const authedUser = await getAuthedUser();
+
+  const invite = await prisma.budgetInvite.findFirst({
+    where: { token, acceptedAt: null },
+  });
+
+  if (!invite) {
+    throw new Error("Invite is invalid or already used.");
+  }
+
+  // Ensure the signed-in user's email matches the invite target.
+  const email = (authedUser.email ?? "").trim().toLowerCase();
+  if (!email || email !== invite.email.toLowerCase()) {
+    throw new Error("This invite was created for a different email address.");
+  }
+
+  await prisma.user.upsert({
+    where: { id: authedUser.id },
+    update: { email },
+    create: { id: authedUser.id, email },
+  });
+
+  await prisma.budgetMember.create({
+    data: {
+      budgetId: invite.budgetId,
+      userId: authedUser.id,
+      role: "member",
+    },
+  });
+
+  await prisma.budgetInvite.update({
+    where: { id: invite.id },
+    data: { acceptedAt: new Date() },
+  });
+}
+
 export async function createCommitment(input: {
   name: string;
   amount: number;
@@ -471,21 +701,28 @@ export async function createCommitment(input: {
 }) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
-    const existingUser = await prisma.user.findFirst({
-      include: { incomes: { orderBy: { createdAt: "asc" } } },
+    const authedUser = await getAuthedUser();
+    const budget = await getOrCreateActiveBudget({
+      userId: authedUser.id,
+      email: authedUser.email ?? "",
+      name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
     });
 
-    if (!existingUser || existingUser.incomes.length === 0) {
-      throw new Error("No user/income found to create a commitment.");
+    const incomes = await prisma.income.findMany({
+      where: { budgetId: budget.id },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (incomes.length === 0) {
+      throw new Error("No income found to create a commitment.");
     }
 
     const primaryIncomeId =
-      existingUser.incomes.find((income) => income.isPrimary)?.id ??
-      existingUser.incomes[0]?.id;
+      incomes.find((income) => income.isPrimary)?.id ?? incomes[0]!.id;
 
     await prisma.commitment.create({
       data: {
-        userId: existingUser.id,
+        budgetId: budget.id,
         name: input.name,
         amount: input.amount,
         frequency: input.frequency,
@@ -561,21 +798,28 @@ export async function createGoal(input: {
 }) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
-    const existingUser = await prisma.user.findFirst({
-      include: { incomes: { orderBy: { createdAt: "asc" } } },
+    const authedUser = await getAuthedUser();
+    const budget = await getOrCreateActiveBudget({
+      userId: authedUser.id,
+      email: authedUser.email ?? "",
+      name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
     });
 
-    if (!existingUser || existingUser.incomes.length === 0) {
-      throw new Error("No user/income found to create a goal.");
+    const incomes = await prisma.income.findMany({
+      where: { budgetId: budget.id },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (incomes.length === 0) {
+      throw new Error("No income found to create a goal.");
     }
 
     const primaryIncomeId =
-      existingUser.incomes.find((income) => income.isPrimary)?.id ??
-      existingUser.incomes[0]?.id;
+      incomes.find((income) => income.isPrimary)?.id ?? incomes[0]!.id;
 
     await prisma.goal.create({
       data: {
-        userId: existingUser.id,
+        budgetId: budget.id,
         name: input.name,
         contributionPerPay: input.contributionPerPay,
         currentBalance: input.currentBalance,
