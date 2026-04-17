@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { createIncomeAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 
-export default function NewIncomePage() {
+export default function SettingsNewIncomePage() {
   return (
-    <AppShell title="Add income" currentPath="/incomes" backHref="/incomes">
+    <AppShell title="Add income" currentPath="/settings" backHref="/settings/incomes">
       <form action={createIncomeAction} className="space-y-4">
         <Field label="Name">
           <input
@@ -82,4 +82,3 @@ function Field({
     </label>
   );
 }
-

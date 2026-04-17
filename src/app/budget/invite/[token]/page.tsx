@@ -11,7 +11,7 @@ export default async function AcceptInvitePage({
   const { token } = await params;
 
   return (
-    <AppShell title="Join household" currentPath="/budget/members" backHref="/">
+    <AppShell title="Join household" currentPath="/settings" backHref="/settings/household">
       <div className="space-y-4">
         <SurfaceCard className="space-y-2">
           <p className="text-sm font-medium">Accept invite</p>

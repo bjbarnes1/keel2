@@ -13,7 +13,7 @@ import { formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function IncomesPage() {
+export default async function SettingsIncomesPage() {
   const snapshot = await getDashboardSnapshot();
 
   const ordered = snapshot.incomes
@@ -25,18 +25,19 @@ export default async function IncomesPage() {
     });
 
   return (
-    <AppShell title="Incomes" currentPath="/incomes" backHref="/">
+    <AppShell title="Incomes" currentPath="/settings" backHref="/settings">
       <div className="space-y-3">
         <SurfaceCard className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium">Your pay sources</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Bills and goals can be allocated to a specific income so per-pay
-              amounts match the right cadence.
+              amounts match the right cadence. Edits apply from a date you choose—past
+              periods stay as they were.
             </p>
           </div>
           <Link
-            href="/incomes/new"
+            href="/settings/incomes/new"
             className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-primary"
           >
             + Add
@@ -62,6 +63,12 @@ export default async function IncomesPage() {
               </div>
 
               <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/settings/incomes/${income.id}/edit`}
+                  className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-primary"
+                >
+                  Edit (future)
+                </Link>
                 {isPrimary ? (
                   <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                     Primary
@@ -97,4 +104,3 @@ export default async function IncomesPage() {
     </AppShell>
   );
 }
-

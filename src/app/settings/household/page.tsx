@@ -6,7 +6,7 @@ import { getBudgetMembers } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
 
-export default async function BudgetMembersPage({
+export default async function SettingsHouseholdPage({
   searchParams,
 }: {
   searchParams: Promise<{ invite?: string }>;
@@ -15,7 +15,7 @@ export default async function BudgetMembersPage({
   const members = await getBudgetMembers();
 
   return (
-    <AppShell title="Household" currentPath="/budget/members" backHref="/">
+    <AppShell title="Household" currentPath="/settings" backHref="/settings">
       <div className="space-y-4">
         <SurfaceCard className="space-y-3">
           <p className="text-sm font-medium">Members</p>
@@ -73,4 +73,3 @@ export default async function BudgetMembersPage({
     </AppShell>
   );
 }
-

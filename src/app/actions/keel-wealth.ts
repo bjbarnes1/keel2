@@ -36,7 +36,7 @@ export async function createWealthHoldingAction(formData: FormData) {
     asOf: parseOptionalIsoDate(formData.get("asOf")),
   });
 
-  revalidatePath("/wealth");
-  redirect("/wealth");
+  revalidatePath("/settings/wealth");
+  redirect("/settings/wealth");
 }
 

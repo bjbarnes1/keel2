@@ -75,8 +75,24 @@ model Income {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  versions    IncomeVersion[]
   commitments Commitment[] @relation("IncomeCommitments")
   goals       Goal[]       @relation("IncomeGoals")
+}
+
+model IncomeVersion {
+  id            String    @id @default(cuid())
+  incomeId      String
+  income        Income    @relation(fields: [incomeId], references: [id], onDelete: Cascade)
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+  name          String
+  amount        Decimal
+  frequency     String
+  nextPayDate   DateTime
+  createdAt     DateTime  @default(now())
+
+  @@index([incomeId, effectiveFrom])
 }
 
 model Commitment {

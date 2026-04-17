@@ -9,6 +9,7 @@ import {
   calculateAvailableMoney,
   detectProjectedShortfall,
 } from "@/lib/engine/keel";
+import { pickIncomeVersionAt } from "@/lib/income-version";
 import { getPrismaClient } from "@/lib/prisma";
 import { buildSpendRows, parseCsv, validateSpendCsvMapping, type SpendCsvMapping } from "@/lib/spend/csv";
 import { inclusivePeriodDays, plannedAmountForPeriod } from "@/lib/spend/actual-vs-planned";
@@ -223,7 +224,10 @@ async function readPrismaState(): Promise<StoredKeelState> {
   const budgetWithData = await prisma.budget.findFirst({
     where: { id: budget.id },
     include: {
-      incomes: { orderBy: { createdAt: "asc" } },
+      incomes: {
+        orderBy: { createdAt: "asc" },
+        include: { versions: { orderBy: { effectiveFrom: "desc" } } },
+      },
       commitments: {
         orderBy: { nextDueDate: "asc" },
         include: { categoryRef: true, subcategoryRef: true },
@@ -245,19 +249,41 @@ async function readPrismaState(): Promise<StoredKeelState> {
     // Bootstrap a placeholder income so the app can render, then user can edit.
     const nextPayDate = new Date();
     nextPayDate.setUTCDate(nextPayDate.getUTCDate() + 14);
-    const created = await prisma.income.create({
-      data: {
-        budgetId: budgetWithData.id,
-        name: "Income",
-        amount: 0,
-        frequency: "fortnightly",
-        nextPayDate,
-        isPrimary: true,
-      },
+    const effectiveFrom = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    const created = await prisma.$transaction(async (tx) => {
+      const income = await tx.income.create({
+        data: {
+          budgetId: budgetWithData.id,
+          name: "Income",
+          amount: 0,
+          frequency: "fortnightly",
+          nextPayDate,
+          isPrimary: true,
+        },
+      });
+      await tx.incomeVersion.create({
+        data: {
+          incomeId: income.id,
+          effectiveFrom,
+          effectiveTo: null,
+          name: "Income",
+          amount: 0,
+          frequency: "fortnightly",
+          nextPayDate,
+        },
+      });
+      return tx.income.findFirstOrThrow({
+        where: { id: income.id },
+        include: { versions: { orderBy: { effectiveFrom: "desc" } } },
+      });
     });
 
     budgetWithData.incomes.push(created);
   }
+
+  const asOfIso = budgetWithData.balanceAsOf
+    ? budgetWithData.balanceAsOf.toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
 
   return {
     user: {
@@ -276,14 +302,28 @@ async function readPrismaState(): Promise<StoredKeelState> {
       id: budgetWithData.id,
       name: budgetWithData.name,
     },
-    incomes: budgetWithData.incomes.map((income) => ({
-      id: income.id,
-      name: income.name,
-      amount: Number(income.amount),
-      frequency: income.frequency as StoredIncome["frequency"],
-      nextPayDate: income.nextPayDate.toISOString().slice(0, 10),
-      isPrimary: income.isPrimary,
-    })),
+    incomes: budgetWithData.incomes.map((income) => {
+      const slices =
+        income.versions?.map((version) => ({
+          effectiveFrom: version.effectiveFrom,
+          effectiveTo: version.effectiveTo,
+          name: version.name,
+          amount: Number(version.amount),
+          frequency: version.frequency,
+          nextPayDate: version.nextPayDate,
+        })) ?? [];
+      const picked = pickIncomeVersionAt(slices, asOfIso);
+      return {
+        id: income.id,
+        name: picked?.name ?? income.name,
+        amount: picked ? picked.amount : Number(income.amount),
+        frequency: (picked?.frequency ?? income.frequency) as StoredIncome["frequency"],
+        nextPayDate: (picked ? picked.nextPayDate : income.nextPayDate)
+          .toISOString()
+          .slice(0, 10),
+        isPrimary: income.isPrimary,
+      };
+    }),
     primaryIncomeId: primaryIncomeId ?? budgetWithData.incomes[0]!.id,
     commitments: budgetWithData.commitments.map((commitment) => ({
       id: commitment.id,
@@ -510,22 +550,39 @@ export async function createIncome(input: {
       name: (authedUser.user_metadata?.["name"] as string | undefined) ?? "",
     });
 
-    if (input.isPrimary) {
-      await prisma.income.updateMany({
-        where: { budgetId: budget.id },
-        data: { isPrimary: false },
-      });
-    }
+    const effectiveFrom = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    const nextPayDate = new Date(`${input.nextPayDate}T00:00:00Z`);
 
-    await prisma.income.create({
-      data: {
-        budgetId: budget.id,
-        name: input.name,
-        amount: input.amount,
-        frequency: input.frequency,
-        nextPayDate: new Date(`${input.nextPayDate}T00:00:00Z`),
-        isPrimary: Boolean(input.isPrimary),
-      },
+    await prisma.$transaction(async (tx) => {
+      if (input.isPrimary) {
+        await tx.income.updateMany({
+          where: { budgetId: budget.id },
+          data: { isPrimary: false },
+        });
+      }
+
+      const income = await tx.income.create({
+        data: {
+          budgetId: budget.id,
+          name: input.name,
+          amount: input.amount,
+          frequency: input.frequency,
+          nextPayDate,
+          isPrimary: Boolean(input.isPrimary),
+        },
+      });
+
+      await tx.incomeVersion.create({
+        data: {
+          incomeId: income.id,
+          effectiveFrom,
+          effectiveTo: null,
+          name: input.name,
+          amount: input.amount,
+          frequency: input.frequency,
+          nextPayDate,
+        },
+      });
     });
 
     return;
@@ -551,6 +608,109 @@ export async function createIncome(input: {
     }));
   }
   await writeState(state);
+}
+
+export async function getIncomeForEdit(id: string) {
+  noStore();
+
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    return null;
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const income = await prisma.income.findFirst({
+    where: { id, budgetId: budget.id },
+  });
+
+  if (!income) {
+    return null;
+  }
+
+  return {
+    id: income.id,
+    name: income.name,
+    amount: Number(income.amount),
+    frequency: income.frequency as StoredIncome["frequency"],
+    nextPayDate: income.nextPayDate.toISOString().slice(0, 10),
+    isPrimary: income.isPrimary,
+  };
+}
+
+export async function updateIncomeFuture(input: {
+  incomeId: string;
+  name: string;
+  amount: number;
+  frequency: StoredIncome["frequency"];
+  nextPayDate: string;
+  effectiveFrom: string;
+}) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Income versioning requires a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const income = await prisma.income.findFirst({
+    where: { id: input.incomeId, budgetId: budget.id },
+  });
+
+  if (!income) {
+    throw new Error("Income not found.");
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
+    throw new Error("Effective date must be YYYY-MM-DD.");
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  if (input.effectiveFrom < todayIso) {
+    throw new Error("Changes can only apply from today onward.");
+  }
+
+  const effectiveDate = new Date(`${input.effectiveFrom}T00:00:00Z`);
+  const nextPayDate = new Date(`${input.nextPayDate}T00:00:00Z`);
+
+  const dayBefore = new Date(effectiveDate);
+  dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+  const dayBeforeIso = dayBefore.toISOString().slice(0, 10);
+
+  await prisma.$transaction(async (tx) => {
+    const open = await tx.incomeVersion.findFirst({
+      where: { incomeId: input.incomeId, effectiveTo: null },
+    });
+
+    if (open) {
+      await tx.incomeVersion.update({
+        where: { id: open.id },
+        data: { effectiveTo: new Date(`${dayBeforeIso}T00:00:00Z`) },
+      });
+    }
+
+    await tx.incomeVersion.create({
+      data: {
+        incomeId: input.incomeId,
+        effectiveFrom: effectiveDate,
+        effectiveTo: null,
+        name: input.name.trim(),
+        amount: input.amount,
+        frequency: input.frequency,
+        nextPayDate,
+      },
+    });
+
+    await tx.income.update({
+      where: { id: input.incomeId },
+      data: {
+        name: input.name.trim(),
+        amount: input.amount,
+        frequency: input.frequency,
+        nextPayDate,
+      },
+    });
+  });
 }
 
 export async function setPrimaryIncome(incomeId: string) {

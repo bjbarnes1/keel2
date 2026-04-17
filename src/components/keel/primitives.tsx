@@ -10,14 +10,25 @@ import type {
 } from "@/lib/types";
 import { cn, formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
-const navItems = [
+type NavItem =
+  | { href: string; label: string }
+  | { href: string; label: string; match: (path: string) => boolean };
+
+const navItems: NavItem[] = [
   { href: "/", label: "Home" },
   { href: "/bills", label: "Bills" },
   { href: "/goals", label: "Goals" },
   { href: "/timeline", label: "Timeline" },
-  { href: "/incomes", label: "Incomes" },
-  { href: "/wealth", label: "Wealth" },
+  {
+    href: "/settings",
+    label: "Settings",
+    match: (path) => path === "/settings" || path.startsWith("/settings/"),
+  },
 ];
+
+function isNavActive(item: NavItem, currentPath: string) {
+  return "match" in item ? item.match(currentPath) : item.href === currentPath;
+}
 
 export function AppShell({
   title,
@@ -55,7 +66,7 @@ export function AppShell({
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-[420px] justify-around px-2 pb-5 pt-2">
           {navItems.map((item) => {
-            const active = item.href === currentPath;
+            const active = isNavActive(item, currentPath);
 
             return (
               <Link

@@ -14,6 +14,7 @@ import {
   setPrimaryIncome,
   updateBankBalance,
   updateCommitment,
+  updateIncomeFuture,
 } from "@/lib/persistence/keel-store";
 function parseAmount(value: FormDataEntryValue | null) {
   return Number.parseFloat(String(value ?? "0"));
@@ -134,8 +135,30 @@ export async function createIncomeAction(formData: FormData) {
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
-  revalidatePath("/incomes");
-  redirect("/incomes");
+  revalidatePath("/settings/incomes");
+  redirect("/settings/incomes");
+}
+
+export async function updateIncomeFutureAction(formData: FormData) {
+  const incomeId = parseId(formData.get("incomeId"), "Income");
+  await updateIncomeFuture({
+    incomeId,
+    name: String(formData.get("name") ?? ""),
+    amount: parseAmount(formData.get("amount")),
+    frequency: String(formData.get("frequency") ?? "fortnightly") as
+      | "weekly"
+      | "fortnightly"
+      | "monthly",
+    nextPayDate: parseIsoDate(formData.get("nextPayDate"), "Next pay date"),
+    effectiveFrom: parseIsoDate(formData.get("effectiveFrom"), "Effective from"),
+  });
+
+  revalidatePath("/");
+  revalidatePath("/bills");
+  revalidatePath("/goals");
+  revalidatePath("/timeline");
+  revalidatePath("/settings/incomes");
+  redirect("/settings/incomes");
 }
 
 export async function setPrimaryIncomeAction(formData: FormData) {
@@ -149,8 +172,8 @@ export async function setPrimaryIncomeAction(formData: FormData) {
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
-  revalidatePath("/incomes");
-  redirect("/incomes");
+  revalidatePath("/settings/incomes");
+  redirect("/settings/incomes");
 }
 
 export async function deleteIncomeAction(formData: FormData) {
@@ -164,15 +187,15 @@ export async function deleteIncomeAction(formData: FormData) {
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
-  revalidatePath("/incomes");
-  redirect("/incomes");
+  revalidatePath("/settings/incomes");
+  redirect("/settings/incomes");
 }
 
 export async function createBudgetInviteAction(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const token = await createBudgetInvite(email);
-  revalidatePath("/budget/members");
-  redirect(`/budget/members?invite=${encodeURIComponent(token)}`);
+  revalidatePath("/settings/household");
+  redirect(`/settings/household?invite=${encodeURIComponent(token)}`);
 }
 
 export async function acceptBudgetInviteAction(formData: FormData) {
@@ -183,6 +206,6 @@ export async function acceptBudgetInviteAction(formData: FormData) {
 
   await acceptBudgetInvite(token);
   revalidatePath("/");
-  revalidatePath("/budget/members");
+  revalidatePath("/settings/household");
   redirect("/");
 }

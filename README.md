@@ -93,7 +93,7 @@ ANTHROPIC_API_KEY=""
 
 - Sign in at `/login` (email magic link).
 - A signed-in user is automatically attached to a `Budget` via `BudgetMember`.
-- Manage household members and invite links at `/budget/members`.
+- Manage household, incomes, and wealth under **Settings** (`/settings`). Legacy URLs (`/budget/members`, `/incomes`, `/wealth`) redirect there.
 
 ## Persistence Modes
 

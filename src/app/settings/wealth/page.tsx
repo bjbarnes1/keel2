@@ -6,11 +6,11 @@ import { formatAud } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function WealthPage() {
+export default async function SettingsWealthPage() {
   const snapshot = await getWealthSnapshot();
 
   return (
-    <AppShell title="Wealth" currentPath="/wealth">
+    <AppShell title="Wealth" currentPath="/settings" backHref="/settings">
       <SurfaceCard className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs text-muted-foreground">Net worth (tracked assets)</p>
@@ -22,7 +22,7 @@ export default async function WealthPage() {
           </p>
         </div>
         <Link
-          href="/wealth/new"
+          href="/settings/wealth/new"
           className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-primary"
         >
           + Add
@@ -59,4 +59,3 @@ export default async function WealthPage() {
     </AppShell>
   );
 }
-

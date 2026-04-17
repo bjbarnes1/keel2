@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { createWealthHoldingAction } from "@/app/actions/keel-wealth";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 
-export default function NewWealthHoldingPage() {
+export default function SettingsNewWealthPage() {
   return (
-    <AppShell title="Add holding" currentPath="/wealth" backHref="/wealth">
+    <AppShell title="Add holding" currentPath="/settings" backHref="/settings/wealth">
       <form action={createWealthHoldingAction} className="space-y-4">
         <Field label="Asset type">
           <select
@@ -99,4 +99,3 @@ function Field({
     </label>
   );
 }
-
