@@ -7,13 +7,17 @@ import {
   createCommitment,
   createIncome,
   createBudgetInvite,
+  createCategory,
+  createSubcategory,
   createGoal,
   deleteCommitment,
+  deleteCategory,
   deleteIncome,
+  deleteSubcategory,
   acceptBudgetInvite,
   setPrimaryIncome,
   updateBankBalance,
-  updateCommitment,
+  updateCommitmentFuture,
   updateIncomeFuture,
 } from "@/lib/persistence/keel-store";
 function parseAmount(value: FormDataEntryValue | null) {
@@ -72,7 +76,13 @@ export async function createCommitmentAction(formData: FormData) {
 }
 
 export async function updateCommitmentAction(id: string, formData: FormData) {
-  await updateCommitment(id, {
+  const effectiveFrom = String(formData.get("effectiveFrom") ?? "").trim();
+  if (!effectiveFrom) {
+    throw new Error("Effective from is required.");
+  }
+
+  await updateCommitmentFuture(id, {
+    effectiveFrom: parseIsoDate(formData.get("effectiveFrom"), "Effective from"),
     name: String(formData.get("name") ?? ""),
     amount: parseAmount(formData.get("amount")),
     frequency: String(formData.get("frequency") ?? "monthly") as
@@ -208,4 +218,39 @@ export async function acceptBudgetInviteAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/settings/household");
   redirect("/");
+}
+
+export async function createCategoryAction(formData: FormData) {
+  await createCategory({
+    name: String(formData.get("name") ?? ""),
+  });
+  revalidatePath("/settings/categories");
+  revalidatePath("/bills");
+  revalidatePath("/spend/reconcile");
+  redirect("/settings/categories");
+}
+
+export async function createSubcategoryAction(formData: FormData) {
+  await createSubcategory({
+    categoryId: parseId(formData.get("categoryId"), "Category"),
+    name: String(formData.get("name") ?? ""),
+  });
+  revalidatePath("/settings/categories");
+  revalidatePath("/bills");
+  revalidatePath("/spend/reconcile");
+  redirect("/settings/categories");
+}
+
+export async function deleteCategoryAction(formData: FormData) {
+  const categoryId = parseId(formData.get("categoryId"), "Category");
+  await deleteCategory(categoryId);
+  revalidatePath("/settings/categories");
+  redirect("/settings/categories");
+}
+
+export async function deleteSubcategoryAction(formData: FormData) {
+  const subcategoryId = parseId(formData.get("subcategoryId"), "Subcategory");
+  await deleteSubcategory(subcategoryId);
+  revalidatePath("/settings/categories");
+  redirect("/settings/categories");
 }

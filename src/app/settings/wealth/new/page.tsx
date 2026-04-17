@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { createWealthHoldingAction } from "@/app/actions/keel-wealth";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 
 export default function SettingsNewWealthPage() {
   return (
@@ -74,12 +75,7 @@ export default function SettingsNewWealthPage() {
           </p>
         </SurfaceCard>
 
-        <button
-          type="submit"
-          className="block w-full rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold text-white"
-        >
-          Add holding
-        </button>
+        <SubmitButton label="Add holding" pendingLabel="Saving…" />
       </form>
     </AppShell>
   );

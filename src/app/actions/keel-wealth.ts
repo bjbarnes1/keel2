@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { createWealthHolding } from "@/lib/persistence/keel-store";
+import { createWealthHolding, deleteWealthHolding, updateWealthHolding } from "@/lib/persistence/keel-store";
 
 function parseAmount(value: FormDataEntryValue | null) {
   return Number.parseFloat(String(value ?? "0"));
@@ -36,6 +36,27 @@ export async function createWealthHoldingAction(formData: FormData) {
     asOf: parseOptionalIsoDate(formData.get("asOf")),
   });
 
+  revalidatePath("/settings/wealth");
+  redirect("/settings/wealth");
+}
+
+export async function updateWealthHoldingAction(id: string, formData: FormData) {
+  await updateWealthHolding(id, {
+    assetType: String(formData.get("assetType") ?? "OTHER"),
+    symbol: String(formData.get("symbol") ?? "").trim() || undefined,
+    name: String(formData.get("name") ?? "").trim(),
+    quantity: parseAmount(formData.get("quantity")),
+    unitPrice: parseOptionalAmount(formData.get("unitPrice")),
+    valueOverride: parseOptionalAmount(formData.get("valueOverride")),
+    asOf: parseOptionalIsoDate(formData.get("asOf")),
+  });
+
+  revalidatePath("/settings/wealth");
+  redirect("/settings/wealth");
+}
+
+export async function deleteWealthHoldingAction(id: string) {
+  await deleteWealthHolding(id);
   revalidatePath("/settings/wealth");
   redirect("/settings/wealth");
 }

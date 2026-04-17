@@ -69,6 +69,10 @@ export async function commitSpendCsvAction(formData: FormData) {
 export async function createSpendAccountAction(formData: FormData) {
   await createSpendAccount({
     name: String(formData.get("name") ?? ""),
+    bankName: String(formData.get("bankName") ?? "").trim() || undefined,
+    bsb: String(formData.get("bsb") ?? "").trim() || undefined,
+    accountName: String(formData.get("accountName") ?? "").trim() || undefined,
+    accountNumber: String(formData.get("accountNumber") ?? "").trim() || undefined,
   });
 
   revalidatePath("/spend");

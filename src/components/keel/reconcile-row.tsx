@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { updateSpendTransactionAction } from "@/app/actions/keel-spend";
+import { SubmitButton } from "@/components/keel/submit-button";
 import type { SpendTransactionListItem } from "@/lib/persistence/keel-store";
 import { suggestCommitments } from "@/lib/spend/suggest-commitment";
 import { formatAud } from "@/lib/utils";
@@ -136,13 +137,13 @@ export function ReconcileRow({
         </select>
       </label>
 
-      <button
-        type="submit"
+      <SubmitButton
+        label="Save tagging"
+        pendingLabel="Saving…"
+        variant="soft"
+        className="rounded-xl py-2"
         disabled={!categoryId}
-        className="w-full rounded-xl border border-primary/40 bg-primary/10 py-2 text-sm font-semibold text-primary disabled:opacity-40"
-      >
-        Save tagging
-      </button>
+      />
     </form>
   );
 }

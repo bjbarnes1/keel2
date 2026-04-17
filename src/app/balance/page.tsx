@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { updateBankBalanceAction } from "@/app/actions/keel";
 import { ModalSheet } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +24,7 @@ export default async function BalancePage() {
         />
         <p className="text-xs text-muted-foreground">Last updated: {snapshot.balanceAsOf}</p>
         <div className="space-y-3">
-          <button
-            type="submit"
-            className="block w-full rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold text-white"
-          >
-            Update
-          </button>
+          <SubmitButton label="Update" pendingLabel="Updating…" />
           <Link
             href="/"
             className="block w-full rounded-2xl border border-border px-4 py-4 text-center text-sm text-muted-foreground"

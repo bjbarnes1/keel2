@@ -68,7 +68,11 @@ export default async function SpendPage({
             <SurfaceCard key={account.id} className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">{account.name}</p>
-                <p className="text-xs text-muted-foreground">{account.currency}</p>
+                <p className="text-xs text-muted-foreground">
+                  {account.bankName ? `${account.bankName} · ` : ""}
+                  {account.maskedAccountNumber ? `${account.maskedAccountNumber} · ` : ""}
+                  {account.currency}
+                </p>
               </div>
             </SurfaceCard>
           ))}

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { createIncomeAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 
 export default function SettingsNewIncomePage() {
   return (
@@ -57,12 +58,7 @@ export default function SettingsNewIncomePage() {
           />
         </SurfaceCard>
 
-        <button
-          type="submit"
-          className="block w-full rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold text-white"
-        >
-          Add income
-        </button>
+        <SubmitButton label="Add income" pendingLabel="Adding…" />
       </form>
     </AppShell>
   );

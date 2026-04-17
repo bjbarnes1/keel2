@@ -1,5 +1,6 @@
 import { acceptBudgetInviteAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +23,7 @@ export default async function AcceptInvitePage({
 
         <form action={acceptBudgetInviteAction} className="space-y-3">
           <input type="hidden" name="token" value={token} />
-          <button
-            type="submit"
-            className="block w-full rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold text-white"
-          >
-            Accept invite
-          </button>
+          <SubmitButton label="Accept invite" pendingLabel="Accepting…" />
         </form>
       </div>
     </AppShell>

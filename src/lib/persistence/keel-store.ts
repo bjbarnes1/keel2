@@ -15,6 +15,8 @@ import { buildSpendRows, parseCsv, validateSpendCsvMapping, type SpendCsvMapping
 import { inclusivePeriodDays, plannedAmountForPeriod } from "@/lib/spend/actual-vs-planned";
 import { spendTransactionDedupeKey } from "@/lib/spend/dedupe";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { encryptBankSecret, maskBankAccount } from "@/lib/security/secrets";
+import { pickCommitmentVersionAt } from "@/lib/commitment-version";
 import type {
   CommitmentCategory,
   CommitmentFrequency,
@@ -105,6 +107,7 @@ export type ForecastHorizon = {
   endProjectedAvailableMoney: number;
   incomeEvents: number;
   billEvents: number;
+  sparkline: number[];
 };
 
 const demoStorePath = path.join(process.cwd(), "data", "dev-store.json");
@@ -230,7 +233,11 @@ async function readPrismaState(): Promise<StoredKeelState> {
       },
       commitments: {
         orderBy: { nextDueDate: "asc" },
-        include: { categoryRef: true, subcategoryRef: true },
+        include: {
+          categoryRef: true,
+          subcategoryRef: true,
+          versions: { orderBy: { effectiveFrom: "desc" } },
+        },
       },
       goals: { orderBy: { createdAt: "asc" } },
     },
@@ -325,18 +332,41 @@ async function readPrismaState(): Promise<StoredKeelState> {
       };
     }),
     primaryIncomeId: primaryIncomeId ?? budgetWithData.incomes[0]!.id,
-    commitments: budgetWithData.commitments.map((commitment) => ({
-      id: commitment.id,
-      name: commitment.name,
-      amount: Number(commitment.amount),
-      frequency: commitment.frequency as StoredCommitment["frequency"],
-      nextDueDate: commitment.nextDueDate.toISOString().slice(0, 10),
-      categoryId: commitment.categoryId,
-      category: commitment.categoryRef.name,
-      subcategoryId: commitment.subcategoryId ?? undefined,
-      subcategory: commitment.subcategoryRef?.name ?? undefined,
-      fundedByIncomeId: commitment.fundedByIncomeId ?? undefined,
-    })),
+    commitments: budgetWithData.commitments.map((commitment) => {
+      const slices =
+        commitment.versions?.map((version) => ({
+          effectiveFrom: version.effectiveFrom,
+          effectiveTo: version.effectiveTo,
+          name: version.name,
+          amount: Number(version.amount),
+          frequency: version.frequency,
+          nextDueDate: version.nextDueDate,
+          categoryId: version.categoryId,
+          subcategoryId: version.subcategoryId,
+          fundedByIncomeId: version.fundedByIncomeId,
+        })) ?? [];
+
+      const picked = pickCommitmentVersionAt(slices, asOfIso);
+
+      const categoryId = picked?.categoryId ?? commitment.categoryId;
+      const subcategoryId =
+        picked?.subcategoryId ?? commitment.subcategoryId ?? null;
+
+      return {
+        id: commitment.id,
+        name: picked?.name ?? commitment.name,
+        amount: picked ? picked.amount : Number(commitment.amount),
+        frequency: (picked?.frequency ?? commitment.frequency) as StoredCommitment["frequency"],
+        nextDueDate: (picked ? picked.nextDueDate : commitment.nextDueDate)
+          .toISOString()
+          .slice(0, 10),
+        categoryId,
+        category: commitment.categoryRef.name,
+        subcategoryId: subcategoryId ?? undefined,
+        subcategory: commitment.subcategoryRef?.name ?? undefined,
+        fundedByIncomeId: picked?.fundedByIncomeId ?? commitment.fundedByIncomeId ?? undefined,
+      };
+    }),
     goals: budgetWithData.goals.map((goal) => ({
       id: goal.id,
       name: goal.name,
@@ -390,6 +420,48 @@ function toDashboardSnapshot(state: StoredKeelState): DashboardSnapshot {
     commitments: state.commitments,
   });
 
+  function sampleProjectionSparkline(
+    startingAvailableMoney: number,
+    events: Array<{ date: string; projectedAvailableMoney: number }>,
+    horizonDays: number,
+    maxPoints: number,
+  ) {
+    if (maxPoints <= 1) {
+      return [startingAvailableMoney];
+    }
+
+    const byIsoDate = new Map<string, number>();
+    for (const event of events) {
+      byIsoDate.set(event.date, event.projectedAvailableMoney);
+    }
+
+    let current = startingAvailableMoney;
+    const out: number[] = [];
+
+    for (let i = 0; i <= horizonDays; i += 1) {
+      const day = new Date(asOf);
+      day.setUTCDate(day.getUTCDate() + i);
+      const iso = day.toISOString().slice(0, 10);
+      const updated = byIsoDate.get(iso);
+      if (updated != null) {
+        current = updated;
+      }
+      out.push(current);
+    }
+
+    if (out.length <= maxPoints) {
+      return out;
+    }
+
+    const stride = (out.length - 1) / (maxPoints - 1);
+    const sampled: number[] = [];
+    for (let i = 0; i < maxPoints; i += 1) {
+      const index = Math.round(i * stride);
+      sampled.push(out[Math.min(out.length - 1, index)]!);
+    }
+    return sampled;
+  }
+
   function summarizeForecast(horizonDays: number): ForecastHorizon {
     const events = buildProjectionTimeline({
       availableMoney: availableMoneyResult.availableMoney,
@@ -408,12 +480,20 @@ function toDashboardSnapshot(state: StoredKeelState): DashboardSnapshot {
         ? events[events.length - 1]!.projectedAvailableMoney
         : availableMoneyResult.availableMoney;
 
+    const sparkline = sampleProjectionSparkline(
+      availableMoneyResult.availableMoney,
+      events,
+      horizonDays,
+      60,
+    );
+
     return {
       horizonDays,
       minProjectedAvailableMoney: minProjected,
       endProjectedAvailableMoney: endProjected,
       incomeEvents: events.filter((event) => event.type === "income").length,
       billEvents: events.filter((event) => event.type === "bill").length,
+      sparkline,
     };
   }
 
@@ -500,6 +580,115 @@ export async function getCategoryOptions() {
     name: category.name,
     subcategories: category.subcategories.map((sub) => ({ id: sub.id, name: sub.name })),
   }));
+}
+
+export async function createCategory(input: { name: string }) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Categories require a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Category name is required.");
+  }
+
+  await prisma.category.create({
+    data: {
+      budgetId: budget.id,
+      name,
+      sortOrder: 0,
+    },
+  });
+}
+
+export async function createSubcategory(input: { categoryId: string; name: string }) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Categories require a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const category = await prisma.category.findFirst({
+    where: { id: input.categoryId, budgetId: budget.id },
+  });
+
+  if (!category) {
+    throw new Error("Category not found.");
+  }
+
+  const name = input.name.trim();
+  if (!name) {
+    throw new Error("Subcategory name is required.");
+  }
+
+  await prisma.subcategory.create({
+    data: {
+      categoryId: category.id,
+      name,
+      sortOrder: 0,
+    },
+  });
+}
+
+export async function deleteCategory(categoryId: string) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Categories require a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, budgetId: budget.id },
+  });
+
+  if (!category) {
+    throw new Error("Category not found.");
+  }
+
+  const [commitments, spend] = await Promise.all([
+    prisma.commitment.count({ where: { budgetId: budget.id, categoryId: category.id } }),
+    prisma.spendTransaction.count({ where: { budgetId: budget.id, categoryId: category.id } }),
+  ]);
+
+  if (commitments > 0 || spend > 0) {
+    throw new Error("This category is in use and cannot be deleted.");
+  }
+
+  await prisma.category.delete({ where: { id: category.id } });
+}
+
+export async function deleteSubcategory(subcategoryId: string) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Categories require a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const subcategory = await prisma.subcategory.findFirst({
+    where: { id: subcategoryId, category: { budgetId: budget.id } },
+    include: { category: true },
+  });
+
+  if (!subcategory) {
+    throw new Error("Subcategory not found.");
+  }
+
+  const [commitments, spend] = await Promise.all([
+    prisma.commitment.count({ where: { budgetId: budget.id, subcategoryId: subcategory.id } }),
+    prisma.spendTransaction.count({ where: { budgetId: budget.id, subcategoryId: subcategory.id } }),
+  ]);
+
+  if (commitments > 0 || spend > 0) {
+    throw new Error("This subcategory is in use and cannot be deleted.");
+  }
+
+  await prisma.subcategory.delete({ where: { id: subcategory.id } });
 }
 
 export async function getIncomeSnapshot() {
@@ -979,6 +1168,76 @@ export async function getWealthSnapshot() {
   };
 }
 
+async function getWealthTotalValueForBudget(budgetId: string) {
+  const prisma = getPrismaClient();
+  const holdings = await prisma.wealthHolding.findMany({
+    where: { budgetId },
+    select: {
+      quantity: true,
+      unitPrice: true,
+      valueOverride: true,
+    },
+  });
+
+  return holdings.reduce((sum, holding) => {
+    const quantity = Number(holding.quantity);
+    const unitPrice = holding.unitPrice ? Number(holding.unitPrice) : undefined;
+    const valueOverride = holding.valueOverride ? Number(holding.valueOverride) : undefined;
+    const value = valueOverride ?? (unitPrice != null ? quantity * unitPrice : 0);
+    return sum + value;
+  }, 0);
+}
+
+export async function getWealthHistory(input?: { years?: number }) {
+  noStore();
+
+  const years = input?.years ?? 3;
+
+  if (!hasConfiguredDatabase()) {
+    return { values: [] as number[] };
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const start = new Date();
+  start.setUTCFullYear(start.getUTCFullYear() - years);
+  start.setUTCHours(0, 0, 0, 0);
+
+  const rows = await prisma.wealthSnapshot.findMany({
+    where: { budgetId: budget.id, recordedAt: { gte: start } },
+    orderBy: { recordedAt: "asc" },
+    select: { recordedAt: true, totalValue: true },
+  });
+
+  // Downsample to monthly buckets for stable sparklines.
+  const byMonth = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.recordedAt.toISOString().slice(0, 7); // YYYY-MM
+    byMonth.set(key, Number(row.totalValue));
+  }
+
+  const values = Array.from(byMonth.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, value]) => value);
+
+  return { values };
+}
+
+async function recordWealthSnapshot(budgetId: string, totalValue: number) {
+  const prisma = getPrismaClient();
+  const recordedAtIso = new Date().toISOString().slice(0, 10);
+  const recordedAt = new Date(`${recordedAtIso}T00:00:00Z`);
+
+  await prisma.wealthSnapshot.create({
+    data: {
+      budgetId,
+      recordedAt,
+      totalValue,
+    },
+  });
+}
+
 export async function createWealthHolding(input: {
   assetType: string;
   symbol?: string;
@@ -1020,6 +1279,75 @@ export async function createWealthHolding(input: {
       asOf: input.asOf ? new Date(`${input.asOf}T00:00:00Z`) : null,
     },
   });
+
+  const totalValue = await getWealthTotalValueForBudget(budget.id);
+  await recordWealthSnapshot(budget.id, totalValue);
+}
+
+export async function updateWealthHolding(
+  id: string,
+  input: {
+    assetType: string;
+    symbol?: string;
+    name: string;
+    quantity: number;
+    unitPrice?: number;
+    valueOverride?: number;
+    asOf?: string;
+  },
+) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Wealth tracking requires a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const existing = await prisma.wealthHolding.findFirst({
+    where: { id, budgetId: budget.id },
+  });
+
+  if (!existing) {
+    throw new Error("Holding not found.");
+  }
+
+  await prisma.wealthHolding.update({
+    where: { id },
+    data: {
+      assetType: input.assetType,
+      symbol: input.symbol ?? null,
+      name: input.name,
+      quantity: input.quantity,
+      unitPrice: input.unitPrice ?? null,
+      valueOverride: input.valueOverride ?? null,
+      asOf: input.asOf ? new Date(`${input.asOf}T00:00:00Z`) : null,
+    },
+  });
+
+  const totalValue = await getWealthTotalValueForBudget(budget.id);
+  await recordWealthSnapshot(budget.id, totalValue);
+}
+
+export async function deleteWealthHolding(id: string) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Wealth tracking requires a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const existing = await prisma.wealthHolding.findFirst({
+    where: { id, budgetId: budget.id },
+  });
+
+  if (!existing) {
+    throw new Error("Holding not found.");
+  }
+
+  await prisma.wealthHolding.delete({ where: { id } });
+
+  const totalValue = await getWealthTotalValueForBudget(budget.id);
+  await recordWealthSnapshot(budget.id, totalValue);
 }
 
 export async function createCommitment(input: {
@@ -1114,6 +1442,102 @@ export async function updateCommitment(
   await writeState(state);
 }
 
+export async function updateCommitmentFuture(
+  id: string,
+  input: {
+    effectiveFrom: string;
+    name: string;
+    amount: number;
+    frequency: StoredCommitment["frequency"];
+    nextDueDate: string;
+    categoryId: string;
+    subcategoryId?: string;
+    fundedByIncomeId?: string;
+  },
+) {
+  if (!hasConfiguredDatabase()) {
+    // Demo store: treat as direct edit.
+    await updateCommitment(id, {
+      name: input.name,
+      amount: input.amount,
+      frequency: input.frequency,
+      nextDueDate: input.nextDueDate,
+      categoryId: input.categoryId,
+      subcategoryId: input.subcategoryId,
+      fundedByIncomeId: input.fundedByIncomeId,
+    });
+    return;
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const commitment = await prisma.commitment.findFirst({
+    where: { id, budgetId: budget.id },
+  });
+
+  if (!commitment) {
+    throw new Error("Bill not found.");
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
+    throw new Error("Effective date must be YYYY-MM-DD.");
+  }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  if (input.effectiveFrom < todayIso) {
+    throw new Error("Changes can only apply from today onward.");
+  }
+
+  const effectiveDate = new Date(`${input.effectiveFrom}T00:00:00Z`);
+  const nextDueDate = new Date(`${input.nextDueDate}T00:00:00Z`);
+
+  const dayBefore = new Date(effectiveDate);
+  dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+  const dayBeforeIso = dayBefore.toISOString().slice(0, 10);
+
+  await prisma.$transaction(async (tx) => {
+    const open = await tx.commitmentVersion.findFirst({
+      where: { commitmentId: id, effectiveTo: null },
+    });
+
+    if (open) {
+      await tx.commitmentVersion.update({
+        where: { id: open.id },
+        data: { effectiveTo: new Date(`${dayBeforeIso}T00:00:00Z`) },
+      });
+    }
+
+    await tx.commitmentVersion.create({
+      data: {
+        commitmentId: id,
+        effectiveFrom: effectiveDate,
+        effectiveTo: null,
+        name: input.name.trim(),
+        amount: input.amount,
+        frequency: input.frequency,
+        nextDueDate,
+        categoryId: input.categoryId,
+        subcategoryId: input.subcategoryId ?? null,
+        fundedByIncomeId: input.fundedByIncomeId ?? null,
+      },
+    });
+
+    await tx.commitment.update({
+      where: { id },
+      data: {
+        name: input.name.trim(),
+        amount: input.amount,
+        frequency: input.frequency,
+        nextDueDate,
+        categoryId: input.categoryId,
+        subcategoryId: input.subcategoryId ?? null,
+        fundedByIncomeId: input.fundedByIncomeId,
+      },
+    });
+  });
+}
+
 export async function deleteCommitment(id: string) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
@@ -1183,6 +1607,10 @@ export type SpendAccountView = {
   id: string;
   name: string;
   currency: string;
+  bankName?: string;
+  bsb?: string;
+  accountName?: string;
+  maskedAccountNumber?: string;
 };
 
 export type SpendTransactionListItem = {
@@ -1240,6 +1668,10 @@ export async function getSpendOverview() {
       id: account.id,
       name: account.name,
       currency: account.currency,
+      bankName: account.bankName ?? undefined,
+      bsb: account.bsb ?? undefined,
+      accountName: account.accountName ?? undefined,
+      maskedAccountNumber: maskBankAccount(account.accountNumberLastFour),
     })),
     recent: recent.map((transaction) => ({
       id: transaction.id,
@@ -1259,7 +1691,13 @@ export async function getSpendOverview() {
   };
 }
 
-export async function createSpendAccount(input: { name: string }) {
+export async function createSpendAccount(input: {
+  name: string;
+  bankName?: string;
+  bsb?: string;
+  accountName?: string;
+  accountNumber?: string;
+}) {
   if (!hasConfiguredDatabase()) {
     throw new Error("Spend tracking requires a database.");
   }
@@ -1272,11 +1710,29 @@ export async function createSpendAccount(input: { name: string }) {
     throw new Error("Account name is required.");
   }
 
+  const bankName = input.bankName?.trim() || null;
+  const bsb = input.bsb?.trim() || null;
+  const accountName = input.accountName?.trim() || null;
+  const accountNumberRaw = input.accountNumber?.trim() || "";
+  const accountDigits = accountNumberRaw.replace(/\s+/g, "");
+  const lastFour = accountDigits.replace(/\D/g, "").slice(-4) || null;
+
+  const encrypted =
+    accountNumberRaw.trim()
+      ? encryptBankSecret(accountNumberRaw.trim())
+      : null;
+
   await prisma.spendAccount.create({
     data: {
       budgetId: budget.id,
       name,
       currency: "AUD",
+      bankName,
+      bsb,
+      accountName,
+      accountNumberEnc: encrypted?.enc ?? null,
+      accountNumberIv: encrypted?.iv ?? null,
+      accountNumberLastFour: lastFour,
     },
   });
 }

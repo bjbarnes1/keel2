@@ -32,6 +32,7 @@ model Budget {
   goals          Goal[]
   wealthAccounts WealthAccount[]
   wealthHoldings WealthHolding[]
+  wealthSnapshots WealthSnapshot[]
   categories     Category[]
   spendAccounts     SpendAccount[]
   spendImportBatches SpendImportBatch[]
@@ -113,7 +114,26 @@ model Commitment {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
+  versions         CommitmentVersion[]
   spendTransactions SpendTransaction[]
+}
+
+model CommitmentVersion {
+  id             String    @id @default(cuid())
+  commitmentId   String
+  commitment     Commitment @relation(fields: [commitmentId], references: [id], onDelete: Cascade)
+  effectiveFrom  DateTime  @db.Date
+  effectiveTo    DateTime? @db.Date
+  name           String
+  amount         Decimal
+  frequency      String
+  nextDueDate    DateTime
+  categoryId     String
+  subcategoryId  String?
+  fundedByIncomeId String?
+  createdAt      DateTime  @default(now())
+
+  @@index([commitmentId, effectiveFrom])
 }
 
 model Category {
@@ -199,11 +219,28 @@ model WealthHolding {
   @@index([accountId])
 }
 
+model WealthSnapshot {
+  id         String   @id @default(cuid())
+  budgetId   String
+  budget     Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  recordedAt DateTime @db.Date
+  totalValue Decimal
+  createdAt  DateTime @default(now())
+
+  @@index([budgetId, recordedAt])
+}
+
 model SpendAccount {
   id        String   @id @default(cuid())
   budgetId  String
   budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   name      String
+  bankName  String?
+  bsb       String?
+  accountName String?
+  accountNumberEnc String?
+  accountNumberIv  String?
+  accountNumberLastFour String?
   currency  String   @default("AUD")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

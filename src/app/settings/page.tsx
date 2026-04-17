@@ -47,6 +47,19 @@ export default function SettingsPage() {
 
         <SurfaceCard className="flex items-center justify-between gap-4">
           <div>
+            <p className="text-sm font-medium">Categories</p>
+            <p className="mt-1 text-xs text-muted-foreground">Add and organize budget categories</p>
+          </div>
+          <Link
+            href="/settings/categories"
+            className="text-sm font-medium text-primary"
+          >
+            Open
+          </Link>
+        </SurfaceCard>
+
+        <SurfaceCard className="flex items-center justify-between gap-4">
+          <div>
             <p className="text-sm font-medium">Spend</p>
             <p className="mt-1 text-xs text-muted-foreground">CSV import, reconcile, budget vs actual</p>
           </div>

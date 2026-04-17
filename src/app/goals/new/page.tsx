@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { createGoalAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
 import { formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
@@ -74,12 +75,7 @@ export default async function NewGoalPage() {
           </p>
         </SurfaceCard>
 
-        <button
-          type="submit"
-          className="block w-full rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold text-white"
-        >
-          Start saving
-        </button>
+        <SubmitButton label="Start saving" pendingLabel="Saving…" />
       </form>
     </AppShell>
   );

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { createCommitmentAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 import { getCategoryOptions, getDashboardSnapshot } from "@/lib/persistence/keel-store";
 import { sentenceCaseFrequency } from "@/lib/utils";
 import { formatAud } from "@/lib/utils";
@@ -96,12 +97,7 @@ export default async function ManualBillPage() {
           </p>
         </SurfaceCard>
 
-        <button
-          type="submit"
-          className="block w-full rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold text-white"
-        >
-          Add this bill
-        </button>
+        <SubmitButton label="Add this bill" pendingLabel="Adding…" />
       </form>
     </AppShell>
   );

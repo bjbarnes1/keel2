@@ -6,6 +6,7 @@ import {
   commitSpendCsvAction,
   prepareSpendCsvAction,
 } from "@/app/actions/keel-spend";
+import { SubmitButton } from "@/components/keel/submit-button";
 import type { SpendAccountView } from "@/lib/persistence/keel-store";
 import type { SpendCsvMapping } from "@/lib/spend/csv";
 import type { SpendCsvPreview } from "@/lib/spend/import";
@@ -309,8 +310,10 @@ export function SpendImportFlow({ accounts }: Props) {
         <input type="hidden" name="mapping" value={mappingJson} />
         <input type="hidden" name="accountId" value={accountId} />
 
-        <button
-          type="submit"
+        <SubmitButton
+          label="Import transactions"
+          pendingLabel="Importing…"
+          className="py-3"
           disabled={
             isPending ||
             !csvText.trim() ||
@@ -319,10 +322,7 @@ export function SpendImportFlow({ accounts }: Props) {
             Boolean(preview?.mappingError) ||
             !preview?.previewRows.length
           }
-          className="w-full rounded-2xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-        >
-          {isPending ? "Working…" : "Import transactions"}
-        </button>
+        />
       </form>
     </div>
   );

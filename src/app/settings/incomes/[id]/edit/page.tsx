@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { updateIncomeFutureAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 import { getIncomeForEdit } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
@@ -88,12 +89,7 @@ export default async function SettingsEditIncomePage({
           <p className="text-xs text-muted-foreground">This is your primary income.</p>
         ) : null}
 
-        <button
-          type="submit"
-          className="block w-full rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold text-white"
-        >
-          Save future change
-        </button>
+        <SubmitButton label="Save future change" pendingLabel="Saving…" />
       </form>
     </AppShell>
   );

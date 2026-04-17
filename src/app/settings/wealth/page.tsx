@@ -1,13 +1,19 @@
 import Link from "next/link";
 
+import { Sparkline } from "@/components/keel/sparkline";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
-import { getWealthSnapshot } from "@/lib/persistence/keel-store";
+import { SubmitButton } from "@/components/keel/submit-button";
+import { deleteWealthHoldingAction } from "@/app/actions/keel-wealth";
+import { getWealthHistory, getWealthSnapshot } from "@/lib/persistence/keel-store";
 import { formatAud } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsWealthPage() {
-  const snapshot = await getWealthSnapshot();
+  const [snapshot, history] = await Promise.all([
+    getWealthSnapshot(),
+    getWealthHistory({ years: 3 }),
+  ]);
 
   return (
     <AppShell title="Wealth" currentPath="/settings" backHref="/settings">
@@ -17,6 +23,18 @@ export default async function SettingsWealthPage() {
           <p className="mt-2 font-mono text-3xl font-bold text-emerald-500">
             {formatAud(snapshot.totalValue)}
           </p>
+          {history.values.length ? (
+            <div className="mt-3">
+              <Sparkline values={history.values} />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Last 3 years (monthly)
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Add holdings over time to build a 3-year sparkline.
+            </p>
+          )}
           <p className="mt-2 text-xs text-muted-foreground">
             Manual values for now. Live pricing comes later.
           </p>
@@ -49,9 +67,19 @@ export default async function SettingsWealthPage() {
                   {holding.asOf ? `As of ${holding.asOf}` : "As of: not set"}
                 </p>
               </div>
-              <p className="font-mono text-sm font-semibold">
-                {formatAud(holding.value)}
-              </p>
+              <div className="flex flex-col items-end gap-2">
+                <p className="font-mono text-sm font-semibold">
+                  {formatAud(holding.value)}
+                </p>
+                <form action={deleteWealthHoldingAction.bind(null, holding.id)}>
+                  <SubmitButton
+                    label="Delete"
+                    pendingLabel="Deleting…"
+                    variant="outline"
+                    className="w-auto rounded-xl border-red-500/30 px-3 py-2 text-xs text-red-500 hover:text-red-500"
+                  />
+                </form>
+              </div>
             </SurfaceCard>
           ))
         )}

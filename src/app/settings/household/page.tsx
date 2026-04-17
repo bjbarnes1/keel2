@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { createBudgetInviteAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 import { getBudgetMembers } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
@@ -47,12 +48,11 @@ export default async function SettingsHouseholdPage({
               placeholder="person@example.com"
               className="w-full rounded-2xl border border-border bg-card px-4 py-3 text-sm outline-none"
             />
-            <button
-              type="submit"
-              className="rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white"
-            >
-              Invite
-            </button>
+            <SubmitButton
+              label="Invite"
+              pendingLabel="Inviting…"
+              className="w-auto rounded-2xl px-4 py-3"
+            />
           </form>
           <p className="text-xs text-muted-foreground">
             This creates a link you can share. Email sending comes later.

@@ -6,6 +6,7 @@ import { useFormStatus } from "react-dom";
 
 import { createCommitmentAction } from "@/app/actions/keel";
 import { SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 import { calculatePerPayAmount } from "@/lib/engine/keel";
 import type {
   CommitmentFrequency,
@@ -92,13 +93,11 @@ type FlowState = "input" | "thinking" | "confirm";
 function SubmitBillButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
+    <SubmitButton
+      label="Add this bill"
+      pendingLabel="Adding…"
       disabled={disabled || pending}
-      className="w-full rounded-2xl bg-primary px-4 py-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {pending ? "Adding…" : "Add this bill"}
-    </button>
+    />
   );
 }
 

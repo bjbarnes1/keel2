@@ -6,6 +6,7 @@ import {
   updateCommitmentAction,
 } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SubmitButton } from "@/components/keel/submit-button";
 import {
   getCommitmentForEdit,
   getCategoryOptions,
@@ -58,6 +59,17 @@ export default async function EditBillPage({
       </SurfaceCard>
 
       <form action={updateCommitmentAction.bind(null, id)} className="mt-6 space-y-4">
+        <Field label="Applies from (UTC date)">
+          <input
+            name="effectiveFrom"
+            type="date"
+            required
+            min={new Date().toISOString().slice(0, 10)}
+            defaultValue={new Date().toISOString().slice(0, 10)}
+            className="w-full rounded-2xl border border-border bg-card px-4 py-4 outline-none"
+          />
+        </Field>
+
         <Field label="Funded from">
           <select
             name="fundedByIncomeId"
@@ -131,22 +143,17 @@ export default async function EditBillPage({
         </SurfaceCard>
 
         <div className="space-y-3">
-          <button
-            type="submit"
-            className="block w-full rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold text-white"
-          >
-            Save changes
-          </button>
+          <SubmitButton label="Save changes" pendingLabel="Saving…" />
         </div>
       </form>
 
       <form action={deleteCommitmentAction.bind(null, id)} className="mt-6">
-        <button
-          type="submit"
-          className="w-full rounded-2xl border border-red-500/30 px-4 py-4 text-sm text-red-500"
-        >
-          Remove this bill
-        </button>
+        <SubmitButton
+          label="Remove this bill"
+          pendingLabel="Removing…"
+          variant="outline"
+          className="border-red-500/30 text-red-500 hover:text-red-500"
+        />
       </form>
     </AppShell>
   );
