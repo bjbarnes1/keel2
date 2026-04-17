@@ -14,8 +14,10 @@ export default async function TimelinePage() {
   return (
     <AppShell title="Timeline" currentPath="/timeline">
       {minProjected < 500 ? (
-        <SurfaceCard className="border-amber-500/30 bg-amber-500/10">
-          <p className="text-sm font-semibold text-amber-500">Heads up</p>
+        <SurfaceCard className="glass-tint-attention">
+          <p className="text-sm font-medium text-[color:var(--color-attention)]">
+            Heads up
+          </p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {snapshot.alert}
           </p>

@@ -42,28 +42,28 @@ export function AppShell({
   backHref?: string;
 }) {
   return (
-    <div className="mx-auto min-h-screen max-w-[420px] bg-background text-foreground">
-      <header className="sticky top-0 z-30 flex items-center justify-between bg-background px-5 pb-2 pt-3">
+    <div className="keel-bg mx-auto min-h-screen max-w-[420px] bg-background text-foreground">
+      <header className="sticky top-0 z-30 flex items-center justify-between bg-background/70 px-5 pb-2 pt-3 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           {backHref ? (
             <Link
               href={backHref}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+              className="glass-clear inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
               <span className="sr-only">Back</span>
             </Link>
           ) : null}
-          <h1 className="text-xl font-bold tracking-[-0.5px]">{title}</h1>
+          <h1 className="text-[22px] font-medium tracking-[-0.025em]">{title}</h1>
         </div>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-sm text-muted-foreground">
+        <div className="glass-clear flex h-8 w-8 items-center justify-center rounded-full text-sm text-muted-foreground">
           B
         </div>
       </header>
 
       <main className="px-5 pb-28">{children}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[420px] justify-around px-2 pb-5 pt-2">
           {navItems.map((item) => {
             const active = isNavActive(item, currentPath);
@@ -105,31 +105,29 @@ export function HeroAvailableMoneyCard({
   const theme =
     state === "healthy"
       ? {
-          card: "border-emerald-500/20 bg-emerald-500/10",
-          text: "text-emerald-500",
+          card: "glass-tint-positive",
+          text: "text-primary",
           subtitle: "You're in good shape",
         }
       : state === "tight"
         ? {
-            card: "border-amber-500/20 bg-amber-500/10",
-            text: "text-amber-500",
+            card: "glass-tint-attention",
+            text: "text-[color:var(--color-attention)]",
             subtitle: "Getting tight this cycle",
           }
         : {
-            card: "border-red-500/20 bg-red-500/10",
-            text: "text-red-500",
+            card: "glass-clear",
+            text: "text-muted-foreground",
             subtitle: "Attention needed",
           };
 
   return (
-    <section className={cn("rounded-2xl border p-6", theme.card)}>
-      <p className="text-xs uppercase tracking-[0.5px] text-muted-foreground">
-        Available Money
-      </p>
-      <p className={cn("mt-3 font-mono text-5xl font-bold tracking-[-1px]", theme.text)}>
+    <section className={cn("rounded-[var(--radius-xl)] p-6", theme.card)}>
+      <p className="label-upper">Available money</p>
+      <p className={cn("tabular-nums mt-3 font-mono text-5xl font-medium tracking-[-0.035em]", theme.text)}>
         {formatAud(amount)}
       </p>
-      <p className={cn("mt-3 text-sm font-semibold", theme.text)}>{theme.subtitle}</p>
+      <p className={cn("mt-3 text-sm font-medium", theme.text)}>{theme.subtitle}</p>
 
       <div className="mt-5 space-y-2 text-sm">
         <WaterfallRow label="Bank balance" amount={bankBalance} />
@@ -161,7 +159,7 @@ function WaterfallRow({
   return (
     <div className="flex items-center justify-between gap-4">
       <span className={cn("text-sm text-muted-foreground", labelClassName)}>{label}</span>
-      <span className={cn("font-mono text-sm text-foreground/90", amountClassName)}>
+      <span className={cn("tabular-nums font-mono text-sm text-foreground/90", amountClassName)}>
         {amount < 0 ? "-" : ""}
         {formatAud(Math.abs(amount))}
       </span>
@@ -176,7 +174,16 @@ export function SurfaceCard({
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={cn("rounded-2xl border border-border bg-card p-4", className)}>{children}</section>;
+  return (
+    <section
+      className={cn(
+        "glass-clear rounded-[var(--radius-md)] p-4",
+        className,
+      )}
+    >
+      {children}
+    </section>
+  );
 }
 
 export function IncomeCard({ income }: { income: IncomeView }) {
@@ -185,10 +192,11 @@ export function IncomeCard({ income }: { income: IncomeView }) {
       <div>
         <p className="text-xs text-muted-foreground">Next pay</p>
         <p className="mt-1 text-sm font-medium">
-          {income.nextPayDate} · <span className="font-mono">{formatAud(income.amount)}</span>
+          {income.nextPayDate} ·{" "}
+          <span className="tabular-nums font-mono">{formatAud(income.amount)}</span>
         </p>
       </div>
-      <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-500">
+      <span className="glass-tint-positive rounded-full px-3 py-1 text-xs font-medium text-primary">
         {sentenceCaseFrequency(income.frequency)}
       </span>
     </SurfaceCard>

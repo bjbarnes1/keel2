@@ -19,8 +19,8 @@ export default async function SettingsWealthPage() {
     <AppShell title="Wealth" currentPath="/settings" backHref="/settings">
       <SurfaceCard className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs text-muted-foreground">Net worth (tracked assets)</p>
-          <p className="mt-2 font-mono text-3xl font-bold text-emerald-500">
+          <p className="label-upper">Net worth (tracked assets)</p>
+          <p className="tabular-nums mt-2 font-mono text-3xl font-medium text-primary">
             {formatAud(snapshot.totalValue)}
           </p>
           {history.values.length ? (
@@ -41,7 +41,7 @@ export default async function SettingsWealthPage() {
         </div>
         <Link
           href="/settings/wealth/new"
-          className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-primary"
+          className="glass-clear rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium text-primary"
         >
           + Add
         </Link>
@@ -68,7 +68,7 @@ export default async function SettingsWealthPage() {
                 </p>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <p className="font-mono text-sm font-semibold">
+                <p className="tabular-nums font-mono text-sm font-medium">
                   {formatAud(holding.value)}
                 </p>
                 <form action={deleteWealthHoldingAction.bind(null, holding.id)}>
@@ -76,7 +76,7 @@ export default async function SettingsWealthPage() {
                     label="Delete"
                     pendingLabel="Deleting…"
                     variant="outline"
-                    className="w-auto rounded-xl border-red-500/30 px-3 py-2 text-xs text-red-500 hover:text-red-500"
+                    className="w-auto rounded-[var(--radius-sm)] border-white/10 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
                   />
                 </form>
               </div>
