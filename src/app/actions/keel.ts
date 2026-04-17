@@ -15,14 +15,21 @@ import {
   updateBankBalance,
   updateCommitment,
 } from "@/lib/persistence/keel-store";
-import type { CommitmentCategory } from "@/lib/types";
-
 function parseAmount(value: FormDataEntryValue | null) {
   return Number.parseFloat(String(value ?? "0"));
 }
 
-function parseCategory(value: FormDataEntryValue | null) {
-  return (String(value ?? "Other") || "Other") as CommitmentCategory;
+function parseId(value: FormDataEntryValue | null, label: string) {
+  const parsed = String(value ?? "").trim();
+  if (!parsed) {
+    throw new Error(`${label} is required.`);
+  }
+  return parsed;
+}
+
+function parseOptionalId(value: FormDataEntryValue | null) {
+  const parsed = String(value ?? "").trim();
+  return parsed || undefined;
 }
 
 function parseIsoDate(value: FormDataEntryValue | null, label: string) {
@@ -52,7 +59,8 @@ export async function createCommitmentAction(formData: FormData) {
       | "quarterly"
       | "annual",
     nextDueDate: parseIsoDate(formData.get("nextDueDate"), "Next due date"),
-    category: parseCategory(formData.get("category")),
+    categoryId: parseId(formData.get("categoryId"), "Category"),
+    subcategoryId: parseOptionalId(formData.get("subcategoryId")),
     fundedByIncomeId: String(formData.get("fundedByIncomeId") ?? "").trim() || undefined,
   });
 
@@ -73,7 +81,8 @@ export async function updateCommitmentAction(id: string, formData: FormData) {
       | "quarterly"
       | "annual",
     nextDueDate: parseIsoDate(formData.get("nextDueDate"), "Next due date"),
-    category: parseCategory(formData.get("category")),
+    categoryId: parseId(formData.get("categoryId"), "Category"),
+    subcategoryId: parseOptionalId(formData.get("subcategoryId")),
     fundedByIncomeId: String(formData.get("fundedByIncomeId") ?? "").trim() || undefined,
   });
 

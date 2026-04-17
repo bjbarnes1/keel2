@@ -9,16 +9,7 @@ const parsedBillSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullable(),
-  category: z.enum([
-    "Housing",
-    "Insurance",
-    "Utilities",
-    "Subscriptions",
-    "Transport",
-    "Education",
-    "Health",
-    "Other",
-  ]),
+  category: z.string().min(1),
   perPay: z.number().finite().nonnegative(),
 });
 
@@ -32,7 +23,7 @@ const validFrequencies = new Set<ParsedBill["frequency"]>([
   "annual",
 ]);
 
-const categoryMap = new Map<string, ParsedBill["category"]>([
+const categoryMap = new Map<string, string>([
   ["housing", "Housing"],
   ["insurance", "Insurance"],
   ["utilities", "Utilities"],
@@ -40,6 +31,7 @@ const categoryMap = new Map<string, ParsedBill["category"]>([
   ["transport", "Transport"],
   ["education", "Education"],
   ["health", "Health"],
+  ["medical", "Health"],
   ["other", "Other"],
 ]);
 
@@ -162,7 +154,9 @@ function normalizeCategory(value: unknown): ParsedBill["category"] {
     return "Other";
   }
 
-  return categoryMap.get(value.trim().toLowerCase()) ?? "Other";
+  const trimmed = value.trim();
+  const normalized = trimmed.toLowerCase();
+  return categoryMap.get(normalized) ?? "Other";
 }
 
 function normalizeDate(value: unknown): string | null {

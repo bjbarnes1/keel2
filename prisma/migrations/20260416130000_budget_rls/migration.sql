@@ -6,6 +6,10 @@
 ALTER TABLE "Budget" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "BudgetMember" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "BudgetInvite" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "WealthAccount" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "WealthHolding" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Category" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Subcategory" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Income" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Commitment" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Goal" ENABLE ROW LEVEL SECURITY;
@@ -178,6 +182,82 @@ CREATE POLICY "goal_crud_member" ON "Goal"
     EXISTS (
       SELECT 1 FROM "BudgetMember" m
       WHERE m."budgetId" = "Goal"."budgetId"
+        AND m."userId" = auth.uid()::text
+    )
+  );
+
+CREATE POLICY "wealthaccount_crud_member" ON "WealthAccount"
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM "BudgetMember" m
+      WHERE m."budgetId" = "WealthAccount"."budgetId"
+        AND m."userId" = auth.uid()::text
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM "BudgetMember" m
+      WHERE m."budgetId" = "WealthAccount"."budgetId"
+        AND m."userId" = auth.uid()::text
+    )
+  );
+
+CREATE POLICY "wealthholding_crud_member" ON "WealthHolding"
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM "BudgetMember" m
+      WHERE m."budgetId" = "WealthHolding"."budgetId"
+        AND m."userId" = auth.uid()::text
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM "BudgetMember" m
+      WHERE m."budgetId" = "WealthHolding"."budgetId"
+        AND m."userId" = auth.uid()::text
+    )
+  );
+
+CREATE POLICY "category_crud_member" ON "Category"
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM "BudgetMember" m
+      WHERE m."budgetId" = "Category"."budgetId"
+        AND m."userId" = auth.uid()::text
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM "BudgetMember" m
+      WHERE m."budgetId" = "Category"."budgetId"
+        AND m."userId" = auth.uid()::text
+    )
+  );
+
+CREATE POLICY "subcategory_crud_member" ON "Subcategory"
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM "Category" c
+      JOIN "BudgetMember" m ON m."budgetId" = c."budgetId"
+      WHERE c."id" = "Subcategory"."categoryId"
+        AND m."userId" = auth.uid()::text
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM "Category" c
+      JOIN "BudgetMember" m ON m."budgetId" = c."budgetId"
+      WHERE c."id" = "Subcategory"."categoryId"
         AND m."userId" = auth.uid()::text
     )
   );

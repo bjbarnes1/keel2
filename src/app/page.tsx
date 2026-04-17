@@ -55,6 +55,18 @@ export default async function HomePage() {
           Update
         </Link>
       </SurfaceCard>
+
+      <SurfaceCard className="mt-4 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium">Spend &amp; imports</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Import bank CSVs and tag real transactions to your categories.
+          </p>
+        </div>
+        <Link href="/spend" className="text-sm font-medium text-primary">
+          Open
+        </Link>
+      </SurfaceCard>
     </AppShell>
   );
 }

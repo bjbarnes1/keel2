@@ -8,6 +8,7 @@ import {
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import {
   getCommitmentForEdit,
+  getCategoryOptions,
   getDashboardSnapshot,
 } from "@/lib/persistence/keel-store";
 import { formatAud, sentenceCaseFrequency } from "@/lib/utils";
@@ -22,6 +23,7 @@ export default async function EditBillPage({
   const { id } = await params;
   const commitment = await getCommitmentForEdit(id);
   const snapshot = await getDashboardSnapshot();
+  const categories = await getCategoryOptions();
   const displayCommitment = snapshot.commitments.find(
     (candidate) => candidate.id === id,
   );
@@ -107,12 +109,14 @@ export default async function EditBillPage({
         </Field>
         <Field label="Category">
           <select
-            name="category"
-            defaultValue={commitment.category}
+            name="categoryId"
+            defaultValue={commitment.categoryId}
             className="w-full rounded-2xl border border-border bg-card px-4 py-4 outline-none"
           >
-            {["Housing", "Insurance", "Utilities", "Subscriptions", "Transport", "Education", "Health", "Other"].map((option) => (
-              <option key={option}>{option}</option>
+            {categories.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
             ))}
           </select>
         </Field>

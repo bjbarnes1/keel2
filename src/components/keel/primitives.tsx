@@ -16,7 +16,7 @@ const navItems = [
   { href: "/goals", label: "Goals" },
   { href: "/timeline", label: "Timeline" },
   { href: "/incomes", label: "Incomes" },
-  { href: "/budget/members", label: "Household" },
+  { href: "/wealth", label: "Wealth" },
 ];
 
 export function AppShell({

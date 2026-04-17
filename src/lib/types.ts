@@ -7,15 +7,8 @@ export type CommitmentFrequency =
   | "quarterly"
   | "annual";
 
-export type CommitmentCategory =
-  | "Housing"
-  | "Insurance"
-  | "Utilities"
-  | "Subscriptions"
-  | "Transport"
-  | "Education"
-  | "Health"
-  | "Other";
+// Categories are budget-scoped and stored in the database.
+export type CommitmentCategory = string;
 
 export type ProjectionEventType = "income" | "bill";
 
@@ -34,6 +27,7 @@ export interface CommitmentView {
   frequency: CommitmentFrequency;
   nextDueDate: string;
   category: CommitmentCategory;
+  subcategory?: string;
   reserved: number;
   perPay: number;
   percentFunded: number;

@@ -2,12 +2,13 @@ import type { ReactNode } from "react";
 
 import { createCommitmentAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
-import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
+import { getCategoryOptions, getDashboardSnapshot } from "@/lib/persistence/keel-store";
 import { sentenceCaseFrequency } from "@/lib/utils";
 import { formatAud } from "@/lib/utils";
 
 export default async function ManualBillPage() {
   const snapshot = await getDashboardSnapshot();
+  const categories = await getCategoryOptions();
 
   const orderedIncomes = snapshot.incomes
     .slice()
@@ -74,11 +75,13 @@ export default async function ManualBillPage() {
 
         <Field label="Category (optional)">
           <select
-            name="category"
+            name="categoryId"
             className="w-full rounded-2xl border border-border bg-card px-4 py-4 outline-none"
           >
-            {["Housing", "Insurance", "Utilities", "Subscriptions", "Transport", "Education", "Health", "Other"].map((option) => (
-              <option key={option}>{option}</option>
+            {categories.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
             ))}
           </select>
         </Field>

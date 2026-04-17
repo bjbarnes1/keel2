@@ -25,11 +25,17 @@ model Budget {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  members     BudgetMember[]
-  invites     BudgetInvite[]
-  incomes     Income[]
-  commitments Commitment[]
-  goals       Goal[]
+  members        BudgetMember[]
+  invites        BudgetInvite[]
+  incomes        Income[]
+  commitments    Commitment[]
+  goals          Goal[]
+  wealthAccounts WealthAccount[]
+  wealthHoldings WealthHolding[]
+  categories     Category[]
+  spendAccounts     SpendAccount[]
+  spendImportBatches SpendImportBatch[]
+  spendTransactions  SpendTransaction[]
 }
 
 model BudgetMember {
@@ -74,19 +80,57 @@ model Income {
 }
 
 model Commitment {
-  id               String   @id @default(cuid())
+  id               String       @id @default(cuid())
   budgetId         String
-  budget           Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  budget           Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   fundedByIncomeId String?
-  fundedByIncome   Income?  @relation("IncomeCommitments", fields: [fundedByIncomeId], references: [id], onDelete: SetNull)
+  fundedByIncome   Income?      @relation("IncomeCommitments", fields: [fundedByIncomeId], references: [id], onDelete: SetNull)
+  categoryId       String
+  categoryRef      Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  subcategoryId    String?
+  subcategoryRef   Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
   name             String
   amount           Decimal
   frequency        String
   nextDueDate      DateTime
-  category         String?
-  isPaused         Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  isPaused         Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  spendTransactions SpendTransaction[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  budgetId  String
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subcategories Subcategory[]
+  commitments   Commitment[]
+  spendTransactions SpendTransaction[]
+
+  @@unique([budgetId, name])
+  @@index([budgetId])
+}
+
+model Subcategory {
+  id         String   @id @default(cuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name       String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  commitments Commitment[]
+  spendTransactions SpendTransaction[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
 }
 
 model Goal {
@@ -102,4 +146,96 @@ model Goal {
   currentBalance     Decimal   @default(0)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+}
+
+model WealthAccount {
+  id        String   @id @default(cuid())
+  budgetId  String
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  name      String
+  type      String   @default("OTHER")
+  currency  String   @default("AUD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  holdings WealthHolding[]
+
+  @@index([budgetId])
+}
+
+model WealthHolding {
+  id            String        @id @default(cuid())
+  budgetId      String
+  budget        Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       WealthAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  assetType     String
+  symbol        String?
+  name          String
+  quantity      Decimal       @default(0)
+  unitPrice     Decimal?
+  valueOverride Decimal?
+  asOf          DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([budgetId])
+  @@index([accountId])
+}
+
+model SpendAccount {
+  id        String   @id @default(cuid())
+  budgetId  String
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  name      String
+  currency  String   @default("AUD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions SpendTransaction[]
+  importBatches SpendImportBatch[]
+
+  @@index([budgetId])
+}
+
+model SpendImportBatch {
+  id        String   @id @default(cuid())
+  budgetId  String
+  budget    Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  accountId String
+  account   SpendAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  filename  String?
+  rowCount  Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  transactions SpendTransaction[]
+
+  @@index([budgetId])
+  @@index([accountId])
+}
+
+model SpendTransaction {
+  id            String    @id @default(cuid())
+  budgetId      String
+  budget        Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       SpendAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  importBatchId String?
+  importBatch   SpendImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  postedOn      DateTime  @db.Date
+  amount        Decimal
+  memo          String
+  dedupeKey     String
+  categoryId    String?
+  categoryRef   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategoryId String?
+  subcategoryRef Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  commitmentId  String?
+  commitment    Commitment? @relation(fields: [commitmentId], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([budgetId, dedupeKey])
+  @@index([budgetId, postedOn])
+  @@index([accountId, postedOn])
 }

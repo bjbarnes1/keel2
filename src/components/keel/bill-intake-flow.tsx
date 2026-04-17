@@ -8,7 +8,6 @@ import { createCommitmentAction } from "@/app/actions/keel";
 import { SurfaceCard } from "@/components/keel/primitives";
 import { calculatePerPayAmount } from "@/lib/engine/keel";
 import type {
-  CommitmentCategory,
   CommitmentFrequency,
   IncomeView,
 } from "@/lib/types";
@@ -19,7 +18,7 @@ type ParsedBillResponse = {
   amount: number;
   frequency: CommitmentFrequency;
   nextDueDate: string | null;
-  category: CommitmentCategory;
+  category: string;
   perPay: number;
 };
 
@@ -28,20 +27,10 @@ type BillDraft = {
   amount: number;
   frequency: CommitmentFrequency;
   nextDueDate: string;
-  category: CommitmentCategory;
+  categoryId: string;
+  subcategoryId?: string;
   fundedByIncomeId: string;
 };
-
-const CATEGORY_OPTIONS: CommitmentCategory[] = [
-  "Housing",
-  "Insurance",
-  "Utilities",
-  "Subscriptions",
-  "Transport",
-  "Education",
-  "Health",
-  "Other",
-];
 
 const FREQUENCY_OPTIONS: { value: CommitmentFrequency; label: string }[] = [
   { value: "weekly", label: "Weekly" },
@@ -123,9 +112,11 @@ function fieldClassName(extra?: string) {
 export function BillIntakeFlow({
   incomes,
   primaryIncomeId,
+  categories,
 }: {
   incomes: IncomeView[];
   primaryIncomeId: string;
+  categories: Array<{ id: string; name: string; subcategories: Array<{ id: string; name: string }> }>;
 }) {
   const [text, setText] = useState("");
   const [flowState, setFlowState] = useState<FlowState>("input");
@@ -187,12 +178,18 @@ export function BillIntakeFlow({
         throw new Error(payload.error);
       }
 
+      const matchedCategory =
+        categories.find((category) => category.name === payload.data.category) ??
+        categories.find((category) => category.name.toLowerCase() === payload.data.category.toLowerCase()) ??
+        categories.find((category) => category.name === "Other") ??
+        categories[0];
+
       setDraft({
         name: payload.data.name,
         amount: payload.data.amount,
         frequency: payload.data.frequency,
         nextDueDate: payload.data.nextDueDate ?? "",
-        category: payload.data.category,
+        categoryId: matchedCategory?.id ?? "",
         fundedByIncomeId: primaryIncomeId,
       });
       setFlowState("confirm");
@@ -426,27 +423,59 @@ export function BillIntakeFlow({
               <label className="block space-y-2">
                 <span className="text-xs text-muted-foreground">Category</span>
                 <select
-                  name="category"
-                  value={draft.category}
+                  name="categoryId"
+                  value={draft.categoryId}
                   onChange={(event) =>
                     setDraft((current) =>
                       current
                         ? {
                             ...current,
-                            category: event.target.value as CommitmentCategory,
+                            categoryId: event.target.value,
+                            subcategoryId: undefined,
                           }
                         : current,
                     )
                   }
                   className={fieldClassName()}
                 >
-                  {CATEGORY_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  {categories.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
                     </option>
                   ))}
                 </select>
               </label>
+
+              {categories.find((c) => c.id === draft.categoryId)?.subcategories
+                .length ? (
+                <label className="block space-y-2">
+                  <span className="text-xs text-muted-foreground">Subcategory (optional)</span>
+                  <select
+                    name="subcategoryId"
+                    value={draft.subcategoryId ?? ""}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              subcategoryId: event.target.value || undefined,
+                            }
+                          : current,
+                      )
+                    }
+                    className={fieldClassName()}
+                  >
+                    <option value="">None</option>
+                    {categories
+                      .find((c) => c.id === draft.categoryId)!
+                      .subcategories.map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : null}
             </SurfaceCard>
 
             {!draft.nextDueDate ? (
