@@ -24,7 +24,7 @@ if (!databaseUrl) {
 
 if (shouldRunMigrations && !directUrl) {
   throw new Error(
-    "DIRECT_URL is required when running Prisma migrations on Vercel. Use the direct Supabase connection, not the transaction pooler.",
+    "DIRECT_URL is required when running Prisma migrations on Vercel. Use a migration-safe Postgres URL, such as the Supabase session pooler when the direct host is unreachable from Vercel.",
   );
 }
 
