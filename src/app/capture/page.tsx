@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { CaptureKeelPanel } from "@/components/keel/capture-keel-panel";
 import { AppShell } from "@/components/keel/primitives";
@@ -21,7 +22,9 @@ export default function CapturePage() {
       }
     >
       <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15" aria-hidden="true" />
-      <CaptureKeelPanel />
+      <Suspense fallback={null}>
+        <CaptureKeelPanel />
+      </Suspense>
     </AppShell>
   );
 }

@@ -70,19 +70,18 @@ export async function createCommitmentAction(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/timeline");
-  redirect("/bills");
+  redirect("/commitments");
 }
 
 export async function updateCommitmentAction(id: string, formData: FormData) {
-  const effectiveFrom = String(formData.get("effectiveFrom") ?? "").trim();
-  if (!effectiveFrom) {
-    throw new Error("Effective from is required.");
-  }
+  const effectiveFromRaw = String(formData.get("effectiveFrom") ?? "").trim();
+  const effectiveFrom = effectiveFromRaw || new Date().toISOString().slice(0, 10);
 
   await updateCommitmentFuture(id, {
-    effectiveFrom: parseIsoDate(formData.get("effectiveFrom"), "Effective from"),
+    effectiveFrom: parseIsoDate(effectiveFrom, "Effective from"),
     name: String(formData.get("name") ?? ""),
     amount: parseAmount(formData.get("amount")),
     frequency: String(formData.get("frequency") ?? "monthly") as
@@ -98,17 +97,22 @@ export async function updateCommitmentAction(id: string, formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/timeline");
-  redirect("/bills");
+}
+
+export async function archiveCommitmentAction(id: string) {
+  await deleteCommitment(id);
+  revalidatePath("/");
+  revalidatePath("/commitments");
+  revalidatePath("/bills");
+  revalidatePath("/timeline");
 }
 
 export async function deleteCommitmentAction(id: string) {
-  await deleteCommitment(id);
-  revalidatePath("/");
-  revalidatePath("/bills");
-  revalidatePath("/timeline");
-  redirect("/bills");
+  await archiveCommitmentAction(id);
+  redirect("/commitments");
 }
 
 export async function createGoalAction(formData: FormData) {
@@ -142,6 +146,7 @@ export async function createIncomeAction(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
@@ -164,6 +169,7 @@ export async function updateIncomeFutureAction(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
@@ -179,6 +185,7 @@ export async function setPrimaryIncomeAction(formData: FormData) {
 
   await setPrimaryIncome(incomeId);
   revalidatePath("/");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
@@ -194,6 +201,7 @@ export async function deleteIncomeAction(formData: FormData) {
 
   await deleteIncome(incomeId);
   revalidatePath("/");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
@@ -225,6 +233,7 @@ export async function createCategoryAction(formData: FormData) {
     name: String(formData.get("name") ?? ""),
   });
   revalidatePath("/settings/categories");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/spend/reconcile");
   redirect("/settings/categories");
@@ -236,6 +245,7 @@ export async function createSubcategoryAction(formData: FormData) {
     name: String(formData.get("name") ?? ""),
   });
   revalidatePath("/settings/categories");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/spend/reconcile");
   redirect("/settings/categories");

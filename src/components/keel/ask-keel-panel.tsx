@@ -193,7 +193,9 @@ export function AskKeelPanel() {
                           }
                           const bill = parseSkipCommitmentAction(action);
                           if (bill) {
-                            router.push(`/bills/${bill.commitmentId}/edit?skipDate=${encodeURIComponent(bill.iso)}`);
+                            router.push(
+                              `/commitments/${bill.commitmentId}?skipDate=${encodeURIComponent(bill.iso)}`,
+                            );
                             return;
                           }
                           const goal = parseSkipGoalAction(action);

@@ -65,7 +65,7 @@ export function BillEditUpcoming({
 
   return (
     <section className="mt-8 space-y-3">
-      <h2 className="text-sm font-semibold text-[color:var(--keel-ink)]">Upcoming payments</h2>
+      <h2 className="text-sm font-semibold text-[color:var(--keel-ink)]">Upcoming commitment payments</h2>
       <p className="text-xs text-[color:var(--keel-ink-3)]">Based on your current schedule and due date.</p>
       <ul className="space-y-2">
         {occurrences.length === 0 ? (

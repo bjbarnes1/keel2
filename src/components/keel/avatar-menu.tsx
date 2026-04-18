@@ -136,6 +136,32 @@ export function AvatarMenu({ initialLetter = "K" }: { initialLetter?: string }) 
           >
             Settings
           </Link>
+          <div className="my-1 h-px bg-white/10" />
+          <Link
+            role="menuitem"
+            href="/commitments"
+            onClick={close}
+            className="block rounded-[var(--radius-md)] px-3 py-2.5 text-sm text-[color:var(--keel-ink)] transition-colors hover:bg-white/6"
+          >
+            Commitments
+          </Link>
+          <Link
+            role="menuitem"
+            href="/incomes"
+            onClick={close}
+            className="block rounded-[var(--radius-md)] px-3 py-2.5 text-sm text-[color:var(--keel-ink)] transition-colors hover:bg-white/6"
+          >
+            Incomes
+          </Link>
+          <Link
+            role="menuitem"
+            href="/wealth"
+            onClick={close}
+            className="block rounded-[var(--radius-md)] px-3 py-2.5 text-sm text-[color:var(--keel-ink)] transition-colors hover:bg-white/6"
+          >
+            Assets
+          </Link>
+          <div className="my-1 h-px bg-white/10" />
           <Link
             role="menuitem"
             href="/help"

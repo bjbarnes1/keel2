@@ -31,7 +31,7 @@ export default async function SettingsIncomesPage() {
           <div>
             <p className="text-sm font-medium">Your pay sources</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Bills and goals can be allocated to a specific income so per-pay
+              Commitments and goals can be allocated to a specific income so per-pay
               amounts match the right cadence. Edits apply from a date you choose—past
               periods stay as they were.
             </p>

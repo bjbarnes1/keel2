@@ -19,7 +19,7 @@ export default async function SpendReconcilePage() {
     <AppShell title="Reconcile" currentPath="/spend" backHref="/spend">
       <SurfaceCard className="mb-4">
         <p className="text-sm text-muted-foreground">
-          Tag imported rows with a budget category. Optionally link a row to a bill when the description clearly
+          Tag imported rows with a budget category. Optionally link a row to a commitment when the description clearly
           matches a commitment.
         </p>
       </SurfaceCard>

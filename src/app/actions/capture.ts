@@ -64,6 +64,7 @@ export async function createCommitmentFromCapture(input: unknown) {
 
   revalidatePath("/timeline");
   revalidatePath("/");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
 }
 

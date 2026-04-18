@@ -20,7 +20,10 @@ export async function POST(request: Request) {
 
     assertWithinAiRateLimit({ userId: data.user.id, limit: 20, windowMs: 60 * 60 * 1000 });
 
-    const body = (await request.json()) as { sentence?: string };
+    const body = (await request.json()) as {
+      sentence?: string;
+      forcedKind?: "commitment" | "income" | "asset";
+    };
     const sentence = String(body.sentence ?? "").trim();
     if (!sentence) {
       return NextResponse.json({ error: "Sentence is required." }, { status: 400 });
@@ -30,7 +33,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Capture is offline right now." }, { status: 503 });
     }
 
-    const kind = await classifyCaptureSentence(sentence);
+    const forced = body.forcedKind;
+    const kind =
+      forced === "commitment" || forced === "income" || forced === "asset"
+        ? forced
+        : await classifyCaptureSentence(sentence);
+
     if (kind === "unknown") {
       return NextResponse.json({ kind: "unknown" as const });
     }

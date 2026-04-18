@@ -11,7 +11,7 @@ const steps = [
   "Pay amount",
   "Next payday",
   "Bank balance",
-  "Add bills",
+  "Add commitments",
   "Reveal",
 ];
 
@@ -151,7 +151,7 @@ export function OnboardingFlow() {
 
       {step === 5 ? (
         <StepFrame
-          title="Now let's add your bills"
+          title="Now let's add your commitments"
           description="Tell Keel about your regular expenses. The more you add, the more accurate your Available Money will be."
           nextLabel="Done - see my Available Money"
           onNext={() => setStep(6)}
@@ -181,7 +181,7 @@ export function OnboardingFlow() {
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">{addedBills.length} bills added</p>
+            <p className="text-xs text-muted-foreground">{addedBills.length} commitments added</p>
           </div>
         </StepFrame>
       ) : null}
@@ -197,7 +197,7 @@ export function OnboardingFlow() {
           <div className="mx-auto max-w-sm rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 text-left">
             <div className="space-y-2 text-sm">
               <RevealRow label="Bank balance" value={formatAud(Number(bankBalance))} />
-              <RevealRow label="Reserved for bills" value={formatAud(3997)} negative />
+              <RevealRow label="Reserved for commitments" value={formatAud(3997)} negative />
               <RevealRow label="Goal contributions" value={formatAud(400)} negative />
               <div className="my-2 h-px bg-white/10" />
               <RevealRow label="Yours to spend" value={formatAud(availableMoney)} highlight />
@@ -215,7 +215,7 @@ export function OnboardingFlow() {
               Go to Dashboard
             </Link>
             <p className="text-xs text-muted-foreground">
-              You can always add more bills and goals later.
+              You can always add more commitments and goals later.
             </p>
           </div>
         </section>

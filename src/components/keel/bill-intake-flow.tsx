@@ -94,7 +94,7 @@ function SubmitBillButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
     <SubmitButton
-      label="Add this bill"
+      label="Add this commitment"
       pendingLabel="Adding…"
       disabled={disabled || pending}
     />
@@ -194,7 +194,7 @@ export function BillIntakeFlow({
       setFlowState("confirm");
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Unable to parse bill.",
+        error instanceof Error ? error.message : "Unable to parse commitment.",
       );
       setFlowState("input");
     }
@@ -211,7 +211,7 @@ export function BillIntakeFlow({
       {flowState === "input" ? (
         <>
           <p className="text-[15px] leading-7 text-muted-foreground">
-            Just describe the bill in your own words. How much, how often, when
+            Describe the commitment in your own words: how much, how often, and when it is due
             it&apos;s due - whatever you know.
           </p>
 
@@ -261,7 +261,7 @@ export function BillIntakeFlow({
           <SurfaceCard>
             <p className="text-sm text-muted-foreground">Prefer a form?</p>
             <Link
-              href="/bills/new/manual"
+              href="/commitments/new/manual"
               className="mt-2 inline-block text-sm font-medium text-primary"
             >
               Enter details manually instead
@@ -280,7 +280,7 @@ export function BillIntakeFlow({
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
             </div>
             <div>
-              <p className="text-sm font-medium">Understanding your bill...</p>
+              <p className="text-sm font-medium">Understanding your commitment...</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Extracting amount, frequency, and due date
               </p>
@@ -343,7 +343,7 @@ export function BillIntakeFlow({
               </label>
 
               <label className="block space-y-2">
-                <span className="text-xs text-muted-foreground">Amount (per bill)</span>
+                <span className="text-xs text-muted-foreground">Amount (per occurrence)</span>
                 <input
                   name="amount"
                   type="number"

@@ -61,7 +61,7 @@ export function ReconcileRow({
       {suggestions.length ? (
         <div className="space-y-1">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Suggested bills
+            Suggested commitments
           </p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((suggestion) => (
@@ -121,7 +121,7 @@ export function ReconcileRow({
       )}
 
       <label className="block space-y-1 text-xs text-muted-foreground">
-        Link to bill (optional)
+        Link to commitment (optional)
         <select
           name="commitmentId"
           value={commitmentId}

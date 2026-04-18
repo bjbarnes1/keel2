@@ -48,6 +48,7 @@ function parseGoalRedirect(redirectTo: string | null | undefined) {
 function revalidateSkipPaths() {
   revalidatePath("/");
   revalidatePath("/timeline");
+  revalidatePath("/commitments");
   revalidatePath("/bills");
   revalidatePath("/goals");
 }

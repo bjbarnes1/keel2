@@ -242,14 +242,14 @@ export default async function TimelinePage() {
             </p>
           </div>
           <div>
-            <p className="text-[11px] font-medium text-[color:var(--keel-ink-3)]">Annual bills (forecast)</p>
+            <p className="text-[11px] font-medium text-[color:var(--keel-ink-3)]">Annual commitments (forecast)</p>
             <p className="mt-2 font-mono text-sm tabular-nums text-[color:var(--keel-ink)]">
               {formatAud(snapshot.annualCommitmentsForecast)}
             </p>
           </div>
           <div>
             <p className="text-[11px] font-medium text-[color:var(--keel-ink-3)]">
-              Spend allocated to bills (last 12 months)
+              Spend allocated to commitments (last 12 months)
             </p>
             <p className="mt-2 font-mono text-sm tabular-nums text-[color:var(--keel-ink)]">
               {formatAud(snapshot.annualSpendActualToDate)}

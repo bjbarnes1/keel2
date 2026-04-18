@@ -29,7 +29,7 @@ export default async function SpendReportPage({
     <AppShell title="Budget vs actual" currentPath="/spend" backHref="/spend">
       <SurfaceCard className="mb-4">
         <p className="text-sm text-muted-foreground">
-          Planned amounts come from active bills, scaled to the days in the month. Actuals are imported debits with a
+          Planned amounts come from active commitments, scaled to the days in the month. Actuals are imported debits with a
           category (plus anything still uncategorized).
         </p>
       </SurfaceCard>
@@ -57,7 +57,7 @@ export default async function SpendReportPage({
       {report.rows.length === 0 ? (
         <SurfaceCard>
           <p className="text-sm text-muted-foreground">
-            No data for this month yet. Add bills and import or tag bank transactions to see comparisons.
+            No data for this month yet. Add commitments and import or tag bank transactions to see comparisons.
           </p>
         </SurfaceCard>
       ) : (

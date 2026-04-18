@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import {
@@ -18,6 +19,13 @@ type CaptureApiResponse =
   | { kind: "asset"; payload: AssetCapturePayload };
 
 export function CaptureKeelPanel() {
+  const searchParams = useSearchParams();
+  const forcedKindParam = searchParams.get("kind");
+  const forcedKind =
+    forcedKindParam === "commitment" || forcedKindParam === "income" || forcedKindParam === "asset"
+      ? forcedKindParam
+      : undefined;
+
   const [sentence, setSentence] = useState("");
   const [draftSentence, setDraftSentence] = useState("");
   const [pending, setPending] = useState(false);
@@ -38,7 +46,10 @@ export function CaptureKeelPanel() {
       const res = await fetch("/api/capture", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sentence: trimmed }),
+        body: JSON.stringify({
+          sentence: trimmed,
+          ...(forcedKind ? { forcedKind } : {}),
+        }),
       });
 
       const json = (await res.json()) as CaptureApiResponse & { error?: string };
@@ -103,7 +114,7 @@ export function CaptureKeelPanel() {
 
       {preview?.kind === "unknown" ? (
         <div className="glass-clear mt-5 rounded-[var(--radius-lg)] p-4 text-sm leading-6 text-[color:var(--keel-ink-3)]">
-          I can help with bills, income, and assets — try &apos;my electricity is $240 a quarter&apos;
+          I can help with commitments, income, and assets — try &apos;my electricity is $240 a quarter&apos;
         </div>
       ) : null}
 

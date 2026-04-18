@@ -48,7 +48,7 @@ export default function SettingsNewIncomePage() {
           <div>
             <p className="text-sm font-medium">Make this primary</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Used as the default for new bills and goals.
+              Used as the default for new commitments and goals.
             </p>
           </div>
           <input

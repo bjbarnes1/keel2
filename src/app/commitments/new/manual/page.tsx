@@ -5,9 +5,8 @@ import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import { SubmitButton } from "@/components/keel/submit-button";
 import { getCategoryOptions, getDashboardSnapshot } from "@/lib/persistence/keel-store";
 import { sentenceCaseFrequency } from "@/lib/utils";
-import { formatAud } from "@/lib/utils";
 
-export default async function ManualBillPage() {
+export default async function ManualCommitmentPage() {
   const snapshot = await getDashboardSnapshot();
   const categories = await getCategoryOptions();
 
@@ -20,7 +19,7 @@ export default async function ManualBillPage() {
     });
 
   return (
-    <AppShell title="Add a bill" currentPath="/bills" backHref="/bills/new">
+    <AppShell title="Add a commitment" currentPath="/commitments" backHref="/commitments/new">
       <form action={createCommitmentAction} className="space-y-4">
         <Field label="Funded from">
           <select
@@ -36,11 +35,11 @@ export default async function ManualBillPage() {
           </select>
         </Field>
 
-        <Field label="What's the bill?">
+        <Field label="What is it?">
           <input
             name="name"
             className="w-full rounded-2xl border border-border bg-card px-4 py-4 outline-none"
-            placeholder="e.g. Car Insurance"
+            placeholder="e.g. Car insurance"
           />
         </Field>
 
@@ -66,7 +65,7 @@ export default async function ManualBillPage() {
           </select>
         </Field>
 
-        <Field label="When's the next one due?">
+        <Field label="When is the next one due?">
           <input
             name="nextDueDate"
             type="date"
@@ -74,7 +73,7 @@ export default async function ManualBillPage() {
           />
         </Field>
 
-        <Field label="Category (optional)">
+        <Field label="Category">
           <select
             name="categoryId"
             className="w-full rounded-2xl border border-border bg-card px-4 py-4 outline-none"
@@ -89,15 +88,12 @@ export default async function ManualBillPage() {
 
         <SurfaceCard className="bg-primary/10">
           <p className="text-sm text-muted-foreground">
-            Keel will reserve{" "}
-            <span className="font-mono font-semibold text-primary">
-              {formatAud(80)}
-            </span>{" "}
-            per fortnight for this.
+            Keel computes how much to reserve each pay from the income you fund this from and the amount and cadence
+            above.
           </p>
         </SurfaceCard>
 
-        <SubmitButton label="Add this bill" pendingLabel="Adding…" />
+        <SubmitButton label="Add commitment" pendingLabel="Adding…" />
       </form>
     </AppShell>
   );

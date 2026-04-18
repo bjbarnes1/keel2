@@ -16,7 +16,11 @@ const navItems: NavItem[] = [
     href: "/",
     label: "Home",
     match: (path) =>
-      path === "/" || path.startsWith("/spend") || path.startsWith("/balance") || path.startsWith("/bills"),
+      path === "/" ||
+      path.startsWith("/spend") ||
+      path.startsWith("/balance") ||
+      path.startsWith("/bills") ||
+      path.startsWith("/commitments"),
   },
   { href: "/timeline", label: "Timeline" },
   { href: "/wealth", label: "Wealth" },
@@ -224,7 +228,11 @@ export function HeroAvailableMoneyCard({
 
       <div className="mt-5 space-y-2 text-sm">
         <WaterfallRow label="Bank balance" amount={bankBalance} />
-        <WaterfallRow label="Reserved for bills" amount={-reserved} amountClassName="text-amber-500" />
+        <WaterfallRow
+          label="Reserved for commitments"
+          amount={-reserved}
+          amountClassName="text-[color:var(--keel-ink-2)]"
+        />
         <WaterfallRow label="Goal contributions" amount={-goalContributions} amountClassName="text-primary" />
         <div className="my-2 h-px bg-white/10" />
         <WaterfallRow
@@ -317,37 +325,56 @@ export function SectionTitle({
   );
 }
 
-export function CommitmentCard({ commitment }: { commitment: CommitmentView }) {
-  const percentReserved = Math.min(
-    Math.round((commitment.reserved / commitment.amount) * 100),
-    100,
-  );
-  const progressClass = percentReserved >= 100 ? "bg-emerald-500" : "bg-amber-500";
-  const statusClass = percentReserved >= 100 ? "text-emerald-500" : "text-amber-500";
+export function CommitmentCardContent({ commitment }: { commitment: CommitmentView }) {
+  const pctFunded = Math.min(Math.round(commitment.percentFunded), 100);
+  const fillColor = commitment.isAttention ? "var(--keel-attend)" : "var(--keel-safe)";
+  const statusLine = commitment.isAttention
+    ? "Needs a look this pay period"
+    : pctFunded >= 100
+      ? "Fully reserved for the next due date"
+      : `${pctFunded}% funded toward next due date`;
 
   return (
-    <Link
-      href={`/bills/${commitment.id}/edit`}
-      className="block rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
-    >
+    <>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[15px] font-medium">{commitment.name}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="text-[15px] font-medium text-[color:var(--keel-ink)]">{commitment.name}</p>
+          <p className="mt-1 text-xs text-[color:var(--keel-ink-3)]">
             {sentenceCaseFrequency(commitment.frequency)} · Due {commitment.nextDueDate}
           </p>
         </div>
-        <p className="font-mono text-[15px] font-semibold">{formatAud(commitment.amount)}</p>
+        <p className="font-mono text-[15px] font-semibold tabular-nums text-[color:var(--keel-ink)]">
+          {formatAud(commitment.amount)}
+        </p>
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-4 text-xs">
-        <span className="text-muted-foreground">{commitment.category}</span>
-        <span className={statusClass}>{percentReserved}% reserved</span>
+        <span className="text-[color:var(--keel-ink-4)]">{commitment.category}</span>
+        <span
+          className={cn(
+            commitment.isAttention ? "text-[color:var(--keel-attend)]" : "text-[color:var(--keel-safe-soft)]",
+          )}
+        >
+          {statusLine}
+        </span>
       </div>
 
-      <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
-        <div className={cn("h-full rounded-full", progressClass)} style={{ width: `${percentReserved}%` }} />
+      <div className="mt-3 h-1 overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+        <div
+          className="h-full rounded-full transition-[width] duration-300"
+          style={{ width: `${pctFunded}%`, backgroundColor: fillColor }}
+        />
       </div>
+    </>
+  );
+}
+
+export function CommitmentCard({ commitment }: { commitment: CommitmentView }) {
+  return (
+    <Link href={`/commitments/${commitment.id}`} className="block">
+      <SurfaceCard className="transition-colors hover:border-white/16">
+        <CommitmentCardContent commitment={commitment} />
+      </SurfaceCard>
     </Link>
   );
 }

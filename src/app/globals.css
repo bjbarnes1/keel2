@@ -222,3 +222,31 @@ textarea::placeholder {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+@keyframes keel-sheet-enter {
+  from {
+    transform: translateY(100%);
+    opacity: 0.85;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes keel-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.keel-glass-sheet-backdrop {
+  animation: keel-backdrop-enter var(--dur-sheet) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.keel-glass-sheet-panel {
+  animation: keel-sheet-enter var(--dur-sheet) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}

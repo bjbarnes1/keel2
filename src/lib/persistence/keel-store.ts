@@ -781,6 +781,85 @@ export async function getDashboardSnapshot() {
   return toDashboardSnapshot(state, spendRollups, activeSkips);
 }
 
+/** Baseline cashflow + active skips for commitment skip preview UIs (list + detail). */
+export async function getCommitmentSkipPreviewBundle(snapshot: DashboardSnapshot) {
+  const { budget } = await getBudgetContext();
+  const activeSkips = await getActiveSkipsForBudget(budget.id);
+  const asOf = new Date(`${snapshot.balanceAsOfIso}T00:00:00Z`);
+
+  const engineIncomes = snapshot.incomes
+    .filter((income) => Boolean(income.nextPayDateIso))
+    .map((income) => ({
+      id: income.id,
+      name: income.name,
+      amount: income.amount,
+      frequency: income.frequency,
+      nextPayDate: income.nextPayDateIso!,
+    }));
+
+  const engineCommitments = snapshot.commitments
+    .filter((c) => Boolean(c.nextDueDateIso))
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      amount: c.amount,
+      frequency: c.frequency,
+      nextDueDate: c.nextDueDateIso!,
+      fundedByIncomeId: c.fundedByIncomeId,
+      category: c.category,
+    }));
+
+  const engineGoals = snapshot.goals.map((goal) => ({
+    id: goal.id,
+    name: goal.name,
+    contributionPerPay: goal.contributionPerPay,
+    fundedByIncomeId: goal.fundedByIncomeId,
+    currentBalance: goal.currentBalance,
+    targetAmount: goal.targetAmount,
+  }));
+
+  const availableMoneyResult = calculateAvailableMoney({
+    bankBalance: snapshot.bankBalance,
+    incomes: engineIncomes,
+    primaryIncomeId: snapshot.primaryIncomeId,
+    commitments: engineCommitments,
+    goals: engineGoals,
+    asOf,
+  });
+
+  return {
+    baselineOrdered: collectScheduledProjectionEvents({
+      asOf,
+      horizonDays: 42,
+      incomes: engineIncomes,
+      commitments: engineCommitments,
+    }),
+    startingAvailableMoney: availableMoneyResult.availableMoney,
+    existingCommitmentSkips: activeSkips.commitmentSkips,
+  };
+}
+
+export async function getRecentSpendForCommitment(commitmentId: string, take = 8) {
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    return [];
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  return prisma.spendTransaction.findMany({
+    where: { budgetId: budget.id, commitmentId },
+    orderBy: { postedOn: "desc" },
+    take,
+    select: {
+      id: true,
+      postedOn: true,
+      amount: true,
+      memo: true,
+    },
+  });
+}
+
 /** Auth-bound engine inputs for Ask Keel scenario math (no side effects). */
 export async function getProjectionEngineInput() {
   noStore();
@@ -1728,7 +1807,7 @@ export async function updateCommitmentFuture(
   });
 
   if (!commitment) {
-    throw new Error("Bill not found.");
+    throw new Error("Commitment not found.");
   }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
@@ -1801,7 +1880,7 @@ export async function deleteCommitment(id: string) {
     });
 
     if (result.count === 0) {
-      throw new Error("Bill not found.");
+      throw new Error("Commitment not found.");
     }
 
     return;
@@ -1810,7 +1889,7 @@ export async function deleteCommitment(id: string) {
   const state = await readState();
   const commitment = state.commitments.find((row) => row.id === id);
   if (!commitment) {
-    throw new Error("Bill not found.");
+    throw new Error("Commitment not found.");
   }
 
   commitment.archivedAt = new Date().toISOString();
@@ -2184,7 +2263,7 @@ export async function updateSpendTransactionClassification(input: {
     });
 
     if (!commitment) {
-      throw new Error("Bill not found.");
+      throw new Error("Commitment not found.");
     }
   }
 
