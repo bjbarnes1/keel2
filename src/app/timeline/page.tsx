@@ -113,6 +113,10 @@ export default async function TimelinePage() {
       isAttention: commitment.isAttention,
     }));
 
+  const skippedOccurrenceKeys = new Set(
+    snapshot.commitmentSkipsActive.map((row) => `${row.commitmentId}:${row.originalDateIso}`),
+  );
+
   // 42-day cash window totals (scheduled occurrences within [start, end)).
   const windowStart = payPeriod.start;
   const windowEndExclusive = windowEnd;
@@ -205,6 +209,7 @@ export default async function TimelinePage() {
           windowStartIso={windowStartIso}
           incomes={waterlineIncomes}
           commitments={waterlineCommitments}
+          skippedOccurrenceKeys={skippedOccurrenceKeys}
         />
       </div>
 

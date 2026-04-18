@@ -1,10 +1,37 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import type { AskKeelResponse } from "@/app/api/ask-keel/route";
 import { cn, formatAud } from "@/lib/utils";
+
+type Chip = string | { text: string; action?: string };
+
+function chipText(chip: Chip) {
+  return typeof chip === "string" ? chip : chip.text;
+}
+
+function chipAction(chip: Chip) {
+  return typeof chip === "string" ? undefined : chip.action;
+}
+
+function parseSkipCommitmentAction(action: string) {
+  const match = /^skip_commitment:(.+):(\d{4}-\d{2}-\d{2})$/.exec(action);
+  if (!match) {
+    return null;
+  }
+  return { commitmentId: match[1]!, iso: match[2]! };
+}
+
+function parseSkipGoalAction(action: string) {
+  const match = /^skip_goal:(.+):(\d{4}-\d{2}-\d{2})$/.exec(action);
+  if (!match) {
+    return null;
+  }
+  return { goalId: match[1]!, iso: match[2]! };
+}
 
 function MicDisabledButton() {
   const [open, setOpen] = useState(false);
@@ -38,6 +65,7 @@ function MicDisabledButton() {
 }
 
 export function AskKeelPanel() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string; payload?: AskKeelResponse }>>(
     [],
   );
@@ -138,18 +166,48 @@ export function AskKeelPanel() {
                 <p className="mt-2 text-xs leading-6 text-[color:var(--keel-ink-3)]">{message.payload.body}</p>
               ) : null}
 
+              {message.payload?.type === "scenario_whatif" && message.payload.body ? (
+                <div className="mt-2 space-y-2 text-xs leading-6 text-[color:var(--keel-ink-3)]">
+                  <p>{message.payload.body}</p>
+                  <p className="font-mono text-[color:var(--keel-ink-2)]">
+                    End balance {formatAud(message.payload.deltas.endProjectedAvailableMoney)} · Delta{" "}
+                    {formatAud(message.payload.deltas.endAvailableMoneyDelta)}
+                  </p>
+                </div>
+              ) : null}
+
               {message.payload?.chips?.length ? (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {message.payload.chips.map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      className="keel-chip px-3 py-1 text-xs text-[color:var(--keel-ink-2)]"
-                      onClick={() => send(chip)}
-                    >
-                      {chip}
-                    </button>
-                  ))}
+                  {message.payload.chips.map((chip, chipIdx) => {
+                    const label = chipText(chip as Chip);
+                    const action = chipAction(chip as Chip);
+                    return (
+                      <button
+                        key={`${label}-${chipIdx}`}
+                        type="button"
+                        className="keel-chip px-3 py-1 text-xs text-[color:var(--keel-ink-2)]"
+                        onClick={() => {
+                          if (!action) {
+                            void send(label);
+                            return;
+                          }
+                          const bill = parseSkipCommitmentAction(action);
+                          if (bill) {
+                            router.push(`/bills/${bill.commitmentId}/edit?skipDate=${encodeURIComponent(bill.iso)}`);
+                            return;
+                          }
+                          const goal = parseSkipGoalAction(action);
+                          if (goal) {
+                            router.push(`/goals/${goal.goalId}?skipDate=${encodeURIComponent(goal.iso)}`);
+                            return;
+                          }
+                          void send(label);
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>

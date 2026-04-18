@@ -1,4 +1,12 @@
-import type { CommitmentFrequency, PayFrequency } from "@/lib/types";
+import type { CommitmentFrequency, CommitmentSkipInput, PayFrequency, SkipInput } from "@/lib/types";
+
+import {
+  applyGoalSkipsToGoal,
+  applySkipsToEvents,
+  type ScheduledCashflowEvent,
+} from "@/lib/engine/skips";
+
+export type { ScheduledCashflowEvent } from "@/lib/engine/skips";
 
 export interface EngineIncome {
   id: string;
@@ -26,6 +34,8 @@ export interface EngineGoal {
   currentBalance?: number;
   targetAmount?: number;
   targetDate?: string;
+  /** Optional display hint after goal skips (simple simulation, not a promise date). */
+  projectedCompletionIso?: string;
 }
 
 export interface CommitmentReserve {
@@ -65,7 +75,7 @@ export interface PayPeriodWindow {
   totalDays: number;
 }
 
-function roundCurrency(value: number) {
+export function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
 
@@ -354,23 +364,16 @@ export function calculateAvailableMoney(input: {
   };
 }
 
-export function buildProjectionTimeline(input: {
-  availableMoney: number;
+export function collectScheduledProjectionEvents(input: {
   asOf: Date;
   horizonDays: number;
   incomes: EngineIncome[];
   commitments: EngineCommitment[];
-}) {
+}): ScheduledCashflowEvent[] {
   const horizonEnd = new Date(input.asOf);
   horizonEnd.setUTCDate(horizonEnd.getUTCDate() + input.horizonDays);
 
-  const scheduledEvents: Array<{
-    id: string;
-    date: string;
-    label: string;
-    amount: number;
-    type: "income" | "bill";
-  }> = [];
+  const scheduledEvents: ScheduledCashflowEvent[] = [];
 
   for (const income of input.incomes) {
     let incomeDate = parseDate(income.nextPayDate);
@@ -419,18 +422,102 @@ export function buildProjectionTimeline(input: {
     return left.label.localeCompare(right.label);
   });
 
+  return scheduledEvents;
+}
+
+/** Bill-only occurrences for one commitment (no incomes required). */
+export function listCommitmentBillOccurrences(input: {
+  commitment: EngineCommitment;
+  asOf: Date;
+  horizonDays: number;
+}) {
+  return collectScheduledProjectionEvents({
+    asOf: input.asOf,
+    horizonDays: input.horizonDays,
+    incomes: [],
+    commitments: [input.commitment],
+  }).filter((event) => event.type === "bill");
+}
+
+export function buildProjectionTimeline(input: {
+  availableMoney: number;
+  asOf: Date;
+  horizonDays: number;
+  incomes: EngineIncome[];
+  commitments: EngineCommitment[];
+  skips?: SkipInput[];
+}) {
+  const baseline = collectScheduledProjectionEvents({
+    asOf: input.asOf,
+    horizonDays: input.horizonDays,
+    incomes: input.incomes,
+    commitments: input.commitments,
+  });
+
+  const commitmentSkips =
+    input.skips?.filter((skip): skip is CommitmentSkipInput => skip.kind === "commitment") ?? [];
+  const cashflow = applySkipsToEvents(baseline, commitmentSkips);
+
+  const cashflowBillAmountById = new Map(
+    cashflow.filter((event) => event.type === "bill").map((event) => [event.id, event.amount]),
+  );
+
   let runningAvailableMoney = input.availableMoney;
 
-  return scheduledEvents.map((event) => {
+  return baseline.map((event) => {
     runningAvailableMoney =
       event.type === "income"
-        ? runningAvailableMoney + event.amount
-        : runningAvailableMoney - event.amount;
+        ? roundCurrency(runningAvailableMoney + event.amount)
+        : roundCurrency(runningAvailableMoney - (cashflowBillAmountById.get(event.id) ?? 0));
 
     return {
       ...event,
       projectedAvailableMoney: roundCurrency(runningAvailableMoney),
     } satisfies ProjectionEvent;
+  });
+}
+
+/** Pure integration-style helper for tests (no Prisma). */
+export function buildTimelineForTest(input: {
+  asOfIso: string;
+  bankBalance: number;
+  incomes: EngineIncome[];
+  primaryIncomeId?: string;
+  commitments: EngineCommitment[];
+  goals: EngineGoal[];
+  skips?: SkipInput[];
+  horizonDays?: number;
+}) {
+  const asOf = new Date(`${input.asOfIso}T00:00:00Z`);
+  const goalSkips = input.skips?.filter((s) => s.kind === "goal") ?? [];
+  const goalsAdjusted = input.goals.map((goal) =>
+    applyGoalSkipsToGoal(
+      goal,
+      goalSkips.filter((s) => s.kind === "goal" && s.goalId === goal.id),
+      {
+        payFrequency: input.incomes.find((i) => i.id === input.primaryIncomeId)?.frequency,
+      },
+    ),
+  );
+
+  const availableMoneyResult = calculateAvailableMoney({
+    bankBalance: input.bankBalance,
+    incomes: input.incomes,
+    primaryIncomeId: input.primaryIncomeId,
+    commitments: input.commitments,
+    goals: goalsAdjusted,
+    asOf,
+  });
+
+  const horizonDays = input.horizonDays ?? 42;
+
+  return buildProjectionTimeline({
+    availableMoney: availableMoneyResult.availableMoney,
+    asOf,
+    horizonDays,
+    incomes: input.incomes,
+    commitments: input.commitments,
+    skips: input.skips,
   });
 }
 

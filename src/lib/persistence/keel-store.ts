@@ -8,10 +8,16 @@ import {
   annualizeAmount,
   buildProjectionTimeline,
   calculateAvailableMoney,
+  collectScheduledProjectionEvents,
   detectProjectedShortfall,
   getCurrentPayPeriod,
   isCommitmentInAttention,
 } from "@/lib/engine/keel";
+import {
+  applyGoalSkipsToGoal,
+  commitmentSkipDisplayIndex,
+  parseBillEventCommitmentId,
+} from "@/lib/engine/skips";
 import { pickIncomeVersionAt } from "@/lib/income-version";
 import { getPrismaClient } from "@/lib/prisma";
 import { buildSpendRows, parseCsv, validateSpendCsvMapping, type SpendCsvMapping } from "@/lib/spend/csv";
@@ -23,8 +29,13 @@ import { pickCommitmentVersionAt } from "@/lib/commitment-version";
 import type {
   CommitmentCategory,
   CommitmentFrequency,
+  CommitmentSkipInput,
+  CommitmentSkipStrategy,
   DashboardSnapshot,
   ForecastHorizon,
+  GoalSkipInput,
+  GoalSkipStrategy,
+  SkipInput,
 } from "@/lib/types";
 
 type StoredUser = {
@@ -84,12 +95,12 @@ type StoredKeelState = {
 
 const demoStorePath = path.join(process.cwd(), "data", "dev-store.json");
 
-function hasConfiguredDatabase() {
+export function hasConfiguredDatabase() {
   const url = process.env.DATABASE_URL ?? "";
   return Boolean(url) && !url.includes("johndoe:randompassword");
 }
 
-function hasSupabaseAuthConfigured() {
+export function hasSupabaseAuthConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
     Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -174,7 +185,7 @@ async function getOrCreateActiveBudget(input: { userId: string; email: string; n
   return budget;
 }
 
-async function getBudgetContext() {
+export async function getBudgetContext() {
   const prisma = getPrismaClient();
   const authedUser = await getAuthedUser();
   const budget = await getOrCreateActiveBudget({
@@ -433,31 +444,108 @@ async function writeState(state: StoredKeelState) {
   await writeDemoStore(state);
 }
 
-function parseBillEventCommitmentId(eventId: string) {
-  const parts = eventId.split("-");
-  if (parts.length < 5) {
-    return null;
+function isCommitmentSkipStrategy(value: string): value is CommitmentSkipStrategy {
+  return value === "MAKE_UP_NEXT" || value === "SPREAD" || value === "MOVE_ON";
+}
+
+function isGoalSkipStrategy(value: string): value is GoalSkipStrategy {
+  return value === "EXTEND_DATE" || value === "REBALANCE";
+}
+
+export type ActiveSkipsBundle = {
+  commitmentSkips: CommitmentSkipInput[];
+  goalSkips: GoalSkipInput[];
+};
+
+export async function getActiveSkipsForBudget(budgetId: string): Promise<ActiveSkipsBundle> {
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    return { commitmentSkips: [], goalSkips: [] };
   }
 
-  const date = parts.slice(-3).join("-");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return null;
-  }
+  const prisma = getPrismaClient();
+  const [commitmentRows, goalRows] = await Promise.all([
+    prisma.commitmentSkip.findMany({
+      where: { budgetId, revokedAt: null },
+    }),
+    prisma.goalSkip.findMany({
+      where: { budgetId, revokedAt: null },
+    }),
+  ]);
 
-  return parts.slice(0, -3).join("-");
+  return {
+    commitmentSkips: commitmentRows.map((row) => ({
+      kind: "commitment" as const,
+      skipId: row.id,
+      commitmentId: row.commitmentId,
+      originalDateIso: row.originalDate.toISOString().slice(0, 10),
+      strategy: isCommitmentSkipStrategy(row.strategy) ? row.strategy : "MAKE_UP_NEXT",
+      spreadOverN: row.spreadOverN ?? undefined,
+      redirectTo: row.redirectTo ?? undefined,
+    })),
+    goalSkips: goalRows.map((row) => ({
+      kind: "goal" as const,
+      skipId: row.id,
+      goalId: row.goalId,
+      originalDateIso: row.originalDate.toISOString().slice(0, 10),
+      strategy: isGoalSkipStrategy(row.strategy) ? row.strategy : "EXTEND_DATE",
+    })),
+  };
+}
+
+export async function getSkipHistoryForCommitment(commitmentId: string) {
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    return [];
+  }
+  const { budget } = await getBudgetContext();
+  const prisma = getPrismaClient();
+  return prisma.commitmentSkip.findMany({
+    where: { budgetId: budget.id, commitmentId },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function getSkipHistoryForGoal(goalId: string) {
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    return [];
+  }
+  const { budget } = await getBudgetContext();
+  const prisma = getPrismaClient();
+  return prisma.goalSkip.findMany({
+    where: { budgetId: budget.id, goalId },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 function toDashboardSnapshot(
   state: StoredKeelState,
   spendRollups: { annualSpendActualToDate: number; spendByCommitment: DashboardSnapshot["spendByCommitment"] },
+  activeSkips: ActiveSkipsBundle = { commitmentSkips: [], goalSkips: [] },
 ): DashboardSnapshot {
   const asOf = new Date(`${state.user.balanceAsOf}T00:00:00Z`);
+  const primaryIncomeForGoals = state.incomes.find((income) => income.id === state.primaryIncomeId) ?? null;
+
+  const goalsAdjusted = state.goals.map((goal) =>
+    applyGoalSkipsToGoal(
+      {
+        id: goal.id,
+        name: goal.name,
+        contributionPerPay: goal.contributionPerPay,
+        fundedByIncomeId: goal.fundedByIncomeId,
+        currentBalance: goal.currentBalance,
+        targetAmount: goal.targetAmount,
+        targetDate: goal.targetDate,
+      },
+      activeSkips.goalSkips.filter((skip) => skip.goalId === goal.id),
+      { payFrequency: primaryIncomeForGoals?.frequency },
+    ),
+  );
+
   const availableMoneyResult = calculateAvailableMoney({
     bankBalance: state.user.bankBalance,
     incomes: state.incomes,
     primaryIncomeId: state.primaryIncomeId,
     commitments: state.commitments,
-    goals: state.goals,
+    goals: goalsAdjusted,
     asOf,
   });
 
@@ -478,12 +566,29 @@ function toDashboardSnapshot(
   );
 
   const timelineHorizonDays = 42;
+  const skipInputs: SkipInput[] = [...activeSkips.commitmentSkips, ...activeSkips.goalSkips];
+  const timelineBaseline = collectScheduledProjectionEvents({
+    asOf,
+    horizonDays: timelineHorizonDays,
+    incomes: state.incomes,
+    commitments: state.commitments,
+  });
+  const commitmentDisplayRows = activeSkips.commitmentSkips.map((row) => ({
+    skipId: row.skipId,
+    commitmentId: row.commitmentId,
+    originalDateIso: row.originalDateIso,
+    strategy: row.strategy,
+    spreadOverN: row.spreadOverN,
+  }));
+  const skipDisplayIndex = commitmentSkipDisplayIndex(timelineBaseline, commitmentDisplayRows);
+
   const timelineRaw = buildProjectionTimeline({
     availableMoney: availableMoneyResult.availableMoney,
     asOf,
     horizonDays: timelineHorizonDays,
     incomes: state.incomes,
     commitments: state.commitments,
+    skips: skipInputs,
   });
 
   function sampleProjectionSparkline(
@@ -535,6 +640,7 @@ function toDashboardSnapshot(
       horizonDays,
       incomes: state.incomes,
       commitments: state.commitments,
+      skips: skipInputs,
     });
 
     const minProjected = events.reduce(
@@ -594,9 +700,18 @@ function toDashboardSnapshot(
         ? true
         : undefined,
     })),
-    goals: state.goals.map((goal) => ({
-      ...goal,
-      targetDate: goal.targetDate ? formatShortDate(goal.targetDate) : undefined,
+    goals: state.goals.map((goal, index) => {
+      const adjusted = goalsAdjusted[index]!;
+      return {
+        ...goal,
+        contributionPerPay: adjusted.contributionPerPay,
+        targetDate: goal.targetDate ? formatShortDate(goal.targetDate) : undefined,
+        projectedCompletionIso: adjusted.projectedCompletionIso,
+      };
+    }),
+    commitmentSkipsActive: activeSkips.commitmentSkips.map((row) => ({
+      commitmentId: row.commitmentId,
+      originalDateIso: row.originalDateIso,
     })),
     annualIncomeForecast,
     annualCommitmentsForecast,
@@ -622,6 +737,8 @@ function toDashboardSnapshot(
           ? true
           : undefined;
 
+      const skipRow = event.type === "bill" ? skipDisplayIndex.get(event.id) : undefined;
+
       return {
         ...event,
         isoDate,
@@ -630,6 +747,11 @@ function toDashboardSnapshot(
         isAttention: isAttention ? true : undefined,
         attentionReserved: isAttention && reserve ? reserve.reserved : undefined,
         isNextPayIncome,
+        isSkipped: skipRow?.isSkipped ? true : undefined,
+        skipId: skipRow?.skipId,
+        skipStrategy: skipRow?.isSkipped ? skipRow.strategy : undefined,
+        isSkipSpreadTarget: skipRow?.isSpreadTarget ? true : undefined,
+        displayAmount: skipRow?.isSkipped ? event.amount : undefined,
       };
     }),
     forecast: {
@@ -654,13 +776,29 @@ export async function getDashboardSnapshot() {
       ? await fetchSpendAttributionRollups({ budgetId: state.budget.id })
       : { annualSpendActualToDate: 0, spendByCommitment: [] as DashboardSnapshot["spendByCommitment"] };
 
-  return toDashboardSnapshot(state, spendRollups);
+  const activeSkips = await getActiveSkipsForBudget(state.budget.id);
+
+  return toDashboardSnapshot(state, spendRollups, activeSkips);
+}
+
+/** Auth-bound engine inputs for Ask Keel scenario math (no side effects). */
+export async function getProjectionEngineInput() {
+  noStore();
+  const state = await readState();
+  const activeSkips = await getActiveSkipsForBudget(state.budget.id);
+  return { state, activeSkips };
 }
 
 export async function getCommitmentForEdit(id: string) {
   noStore();
   const state = await readState();
   return state.commitments.find((commitment) => commitment.id === id) ?? null;
+}
+
+export async function getGoalForEdit(id: string) {
+  noStore();
+  const state = await readState();
+  return state.goals.find((goal) => goal.id === id) ?? null;
 }
 
 export async function getCategoryOptions() {

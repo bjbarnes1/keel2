@@ -37,6 +37,8 @@ model Budget {
   spendAccounts     SpendAccount[]
   spendImportBatches SpendImportBatch[]
   spendTransactions  SpendTransaction[]
+  commitmentSkips    CommitmentSkip[]
+  goalSkips          GoalSkip[]
 }
 
 model BudgetMember {
@@ -117,6 +119,7 @@ model Commitment {
 
   versions         CommitmentVersion[]
   spendTransactions SpendTransaction[]
+  skips            CommitmentSkip[]
 
   @@index([budgetId, archivedAt])
 }
@@ -185,6 +188,49 @@ model Goal {
   currentBalance     Decimal   @default(0)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+
+  skips GoalSkip[]
+}
+
+model CommitmentSkip {
+  id              String    @id @default(cuid())
+  budgetId        String
+  commitmentId    String
+  originalDate    DateTime  @db.Date
+  strategy        String
+  spreadOverN     Int?
+  redirectTo      String?
+  skippedAmount   Decimal?
+  notes           String?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  createdByUserId String
+
+  budget     Budget     @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  commitment Commitment @relation(fields: [commitmentId], references: [id], onDelete: Cascade)
+
+  @@unique([commitmentId, originalDate])
+  @@index([budgetId, revokedAt])
+  @@index([budgetId])
+}
+
+model GoalSkip {
+  id              String    @id @default(cuid())
+  budgetId        String
+  goalId          String
+  originalDate    DateTime  @db.Date
+  strategy        String
+  notes           String?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  createdByUserId String
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  goal   Goal   @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, originalDate])
+  @@index([budgetId, revokedAt])
+  @@index([budgetId])
 }
 
 model WealthAccount {

@@ -49,7 +49,44 @@ export interface GoalView {
   targetAmount?: number;
   targetDate?: string;
   fundedByIncomeId?: string;
+  /** After active goal skips (simple projection). */
+  projectedCompletionIso?: string;
 }
+
+export type CommitmentSkipStrategy = "MAKE_UP_NEXT" | "SPREAD" | "MOVE_ON";
+export type GoalSkipStrategy = "EXTEND_DATE" | "REBALANCE";
+
+/** JSON-serializable; optional `skipId` when sourced from persisted rows. */
+export type CommitmentSkipInput = {
+  kind: "commitment";
+  skipId?: string;
+  commitmentId: string;
+  originalDateIso: string;
+  strategy: CommitmentSkipStrategy;
+  spreadOverN?: number;
+  /** MOVE_ON redirect, e.g. `goal:{goalId}` */
+  redirectTo?: string;
+};
+
+export type GoalSkipInput = {
+  kind: "goal";
+  skipId?: string;
+  goalId: string;
+  originalDateIso: string;
+  strategy: GoalSkipStrategy;
+};
+
+export type SkipInput = CommitmentSkipInput | GoalSkipInput;
+
+/** Pure preview / Ask payload: deltas vs baseline projection. */
+export type SkipPreview = {
+  /** Bill event ids whose cashflow amount differs from baseline (includes removed as omitted from map) */
+  billAmountByEventId: Record<string, number>;
+  /** End-of-horizon projected available money under the hypothetical skip */
+  endProjectedAvailableMoney: number;
+  /** Delta vs baseline end balance */
+  endAvailableMoneyDelta: number;
+};
 
 export interface ProjectionEventView {
   id: string;
@@ -66,6 +103,14 @@ export interface ProjectionEventView {
   attentionReserved?: number;
   /** First pay-day income row in the projection window (whole-row safe tint) */
   isNextPayIncome?: boolean;
+  /** Display-only: user skipped this occurrence; amount may still show for MOVE_ON */
+  isSkipped?: boolean;
+  skipId?: string;
+  skipStrategy?: CommitmentSkipStrategy;
+  /** Bill rows that received extra from MAKE_UP_NEXT / SPREAD */
+  isSkipSpreadTarget?: boolean;
+  /** When set, row amount shown in UI (baseline); balances use cashflow */
+  displayAmount?: number;
 }
 
 export type ForecastHorizon = {
@@ -87,6 +132,8 @@ export type DashboardSnapshot = {
   primaryIncomeId: string;
   commitments: CommitmentView[];
   goals: GoalView[];
+  /** Active commitment skips (for waterline / deep links). */
+  commitmentSkipsActive: Array<{ commitmentId: string; originalDateIso: string }>;
   annualIncomeForecast: number;
   annualCommitmentsForecast: number;
   annualSpendActualToDate: number;

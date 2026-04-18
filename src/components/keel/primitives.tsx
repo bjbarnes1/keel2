@@ -405,6 +405,9 @@ export function ProjectionRow({ event }: { event: ProjectionEventView }) {
   const projected = event.projectedAvailableMoney ?? 0;
   const isAttention = Boolean(event.isAttention);
   const isNextPayIncome = Boolean(event.isNextPayIncome);
+  const isSkipped = Boolean(event.isSkipped);
+  const isSpreadTarget = Boolean(event.isSkipSpreadTarget);
+  const showAmount = typeof event.displayAmount === "number" ? event.displayAmount : event.amount;
   const projectedClassName = isAttention
     ? "text-[color:var(--keel-attend)]"
     : projected < 0
@@ -417,6 +420,7 @@ export function ProjectionRow({ event }: { event: ProjectionEventView }) {
     <div
       className={cn(
         "flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-3",
+        isSkipped ? "opacity-70" : null,
         isAttention ? "glass-tint-attend" : isNextPayIncome ? "glass-tint-safe" : "glass-clear",
       )}
     >
@@ -429,7 +433,19 @@ export function ProjectionRow({ event }: { event: ProjectionEventView }) {
         {isIncome ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{event.label}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-medium">{event.label}</p>
+          {isSkipped ? (
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+              Skipped
+            </span>
+          ) : null}
+          {isSpreadTarget && !isSkipped ? (
+            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-500/90">
+              Catch-up
+            </span>
+          ) : null}
+        </div>
         <p className="text-xs text-muted-foreground">{event.date}</p>
         {isAttention && typeof event.attentionReserved === "number" ? (
           <p className="mt-1 text-xs text-[color:var(--keel-attend)]">
@@ -438,9 +454,15 @@ export function ProjectionRow({ event }: { event: ProjectionEventView }) {
         ) : null}
       </div>
       <div className="text-right">
-        <p className={cn("font-mono text-sm font-semibold", isIncome ? "text-emerald-500" : "text-foreground")}>
+        <p
+          className={cn(
+            "font-mono text-sm font-semibold",
+            isIncome ? "text-emerald-500" : "text-foreground",
+            isSkipped && !isIncome ? "line-through decoration-amber-500/60" : null,
+          )}
+        >
           {isIncome ? "+" : "-"}
-          {formatAud(event.amount)}
+          {formatAud(showAmount)}
         </p>
         <p className={cn("font-mono text-xs", projectedClassName)}>{formatAud(projected)}</p>
       </div>

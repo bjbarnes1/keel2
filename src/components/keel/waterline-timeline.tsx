@@ -23,6 +23,10 @@ type WaterlineCommitment = {
   isAttention?: boolean;
 };
 
+function skipOccurrenceKey(commitmentId: string, iso: string) {
+  return `${commitmentId}:${iso}`;
+}
+
 function parseIsoDate(iso: string) {
   return new Date(`${iso}T00:00:00Z`);
 }
@@ -82,11 +86,14 @@ export function WaterlineTimeline({
   windowStartIso,
   incomes,
   commitments,
+  skippedOccurrenceKeys,
 }: {
   asOfIso: string;
   windowStartIso: string;
   incomes: WaterlineIncome[];
   commitments: WaterlineCommitment[];
+  /** `commitmentId:yyyy-mm-dd` for hollow skipped anchors */
+  skippedOccurrenceKeys?: ReadonlySet<string>;
 }) {
   const model = useMemo(() => {
     const asOf = parseIsoDate(asOfIso);
@@ -135,7 +142,7 @@ export function WaterlineTimeline({
 
     const anchors = commitments.flatMap((commitment) => {
       const depth = 18 + (annualizeAmount(commitment.amount, commitment.frequency) / maxAnnual) * 52;
-      const points: Array<{ x: number; depth: number; attention: boolean }> = [];
+      const points: Array<{ x: number; depth: number; attention: boolean; skipped: boolean }> = [];
 
       let due = parseIsoDate(commitment.nextDueDateIso);
       while (due < windowStart) {
@@ -144,10 +151,13 @@ export function WaterlineTimeline({
 
       while (due < windowEnd) {
         if (due >= windowStart) {
+          const iso = due.toISOString().slice(0, 10);
+          const skipped = skippedOccurrenceKeys?.has(skipOccurrenceKey(commitment.id, iso)) ?? false;
           points.push({
             x: xForDate(due),
             depth,
             attention: Boolean(commitment.isAttention),
+            skipped,
           });
         }
         due = addCycle(due, commitment.frequency);
@@ -167,7 +177,7 @@ export function WaterlineTimeline({
     const elapsedX2 = clamp(todayX, 0, 1);
 
     return { payMarkers, anchors, fortnightTicks, elapsedX1, elapsedX2, todayX };
-  }, [asOfIso, commitments, incomes, windowStartIso]);
+  }, [asOfIso, commitments, incomes, skippedOccurrenceKeys, windowStartIso]);
 
   const width = 360;
   const height = 150;
@@ -241,9 +251,21 @@ export function WaterlineTimeline({
             cx={0}
             cy={anchor.depth}
             r={4.25}
-            fill={anchor.attention ? "rgba(212, 165, 92, 0.95)" : "rgba(240, 235, 220, 0.9)"}
-            stroke={anchor.attention ? "rgba(212, 165, 92, 0.55)" : "rgba(255, 255, 255, 0.18)"}
-            strokeWidth={0.75}
+            fill={
+              anchor.skipped
+                ? "transparent"
+                : anchor.attention
+                  ? "rgba(212, 165, 92, 0.95)"
+                  : "rgba(240, 235, 220, 0.9)"
+            }
+            stroke={
+              anchor.skipped
+                ? "rgba(212, 165, 92, 0.75)"
+                : anchor.attention
+                  ? "rgba(212, 165, 92, 0.55)"
+                  : "rgba(255, 255, 255, 0.18)"
+            }
+            strokeWidth={anchor.skipped ? 1.35 : 0.75}
           />
         </g>
       ))}

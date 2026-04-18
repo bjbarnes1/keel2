@@ -1,16 +1,20 @@
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 
 import {
   deleteCommitmentAction,
   updateCommitmentAction,
 } from "@/app/actions/keel";
+import { BillEditUpcoming } from "@/components/keel/bill-edit-upcoming";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import { SubmitButton } from "@/components/keel/submit-button";
+import { listCommitmentBillOccurrences } from "@/lib/engine/keel";
 import {
   getCommitmentForEdit,
   getCategoryOptions,
   getDashboardSnapshot,
+  getSkipHistoryForCommitment,
 } from "@/lib/persistence/keel-store";
 import { formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
@@ -18,10 +22,13 @@ export const dynamic = "force-dynamic";
 
 export default async function EditBillPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ skipDate?: string }>;
 }) {
   const { id } = await params;
+  const query = await searchParams;
   const commitment = await getCommitmentForEdit(id);
   const snapshot = await getDashboardSnapshot();
   const categories = await getCategoryOptions();
@@ -46,6 +53,36 @@ export default async function EditBillPage({
       return left.name.localeCompare(right.name);
     });
 
+  const asOf = new Date(`${snapshot.balanceAsOfIso}T00:00:00Z`);
+  const upcomingBills = listCommitmentBillOccurrences({
+    commitment: {
+      id: commitment.id,
+      name: commitment.name,
+      amount: commitment.amount,
+      frequency: commitment.frequency,
+      nextDueDate: commitment.nextDueDate,
+      fundedByIncomeId: commitment.fundedByIncomeId,
+      category: commitment.category,
+    },
+    asOf,
+    horizonDays: 366,
+  });
+
+  const skipHistory = await getSkipHistoryForCommitment(id);
+  const activeSkipByIso = new Map(
+    skipHistory
+      .filter((row) => !row.revokedAt)
+      .map((row) => [row.originalDate.toISOString().slice(0, 10), row.id]),
+  );
+
+  const occurrences = upcomingBills.slice(0, 8).map((event) => ({
+    iso: event.date,
+    amount: event.amount,
+    activeSkipId: activeSkipByIso.get(event.date),
+  }));
+
+  const goalOptions = snapshot.goals.map((goal) => ({ id: goal.id, name: goal.name }));
+
   return (
     <AppShell title={commitment.name} currentPath="/bills" backHref="/bills">
       <SurfaceCard>
@@ -57,6 +94,16 @@ export default async function EditBillPage({
           <div className="h-full rounded-full bg-amber-500" style={{ width: `${reservedPercent}%` }} />
         </div>
       </SurfaceCard>
+
+      <Suspense fallback={null}>
+        <BillEditUpcoming
+          commitmentId={id}
+          commitmentName={commitment.name}
+          occurrences={occurrences}
+          goals={goalOptions}
+          prefillSkipDate={query.skipDate}
+        />
+      </Suspense>
 
       <form action={updateCommitmentAction.bind(null, id)} className="mt-6 space-y-4">
         <Field label="Applies from (UTC date)">
