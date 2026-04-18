@@ -1,5 +1,6 @@
+import { TimelineFortnightRows } from "@/components/keel/timeline-fortnight-rows";
 import { WaterlineTimeline } from "@/components/keel/waterline-timeline";
-import { AppShell, ProjectionRow } from "@/components/keel/primitives";
+import { AppShell } from "@/components/keel/primitives";
 import { getCurrentPayPeriod } from "@/lib/engine/keel";
 import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
 import type { CommitmentFrequency, PayFrequency } from "@/lib/types";
@@ -197,6 +198,16 @@ export default async function TimelinePage() {
     groups.set(idx, existing);
   }
 
+  const fortnightSections = [0, 1, 2].map((idx) => {
+    const opacity = idx === 0 ? 1 : idx === 1 ? 0.75 : 0.55;
+    return {
+      idx,
+      opacity,
+      label: fortnightLabel(idx),
+      rows: groups.get(idx) ?? [],
+    };
+  });
+
   return (
     <AppShell title="Timeline" currentPath="/timeline">
       <div className="relative">
@@ -250,27 +261,7 @@ export default async function TimelinePage() {
         </p>
       </section>
 
-      <div className="mt-6 space-y-6">
-        {[0, 1, 2].map((idx) => {
-          const opacity = idx === 0 ? 1 : idx === 1 ? 0.75 : 0.55;
-          const rows = groups.get(idx) ?? [];
-
-          return (
-            <section key={idx} style={{ opacity }}>
-              <p className="label-upper">{fortnightLabel(idx)}</p>
-              <div className="mt-2 space-y-2">
-                {rows.length === 0 ? (
-                  <div className="glass-clear rounded-[var(--radius-md)] px-3 py-4 text-sm text-[color:var(--keel-ink-3)]">
-                    No scheduled cash events in this fortnight.
-                  </div>
-                ) : (
-                  rows.map((event) => <ProjectionRow key={event.id} event={event} />)
-                )}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+      <TimelineFortnightRows sections={fortnightSections} />
     </AppShell>
   );
 }

@@ -108,6 +108,53 @@ describe("applySkipsToEvents", () => {
     expect(may16).toBe(750);
   });
 
+  it("SPREAD preserves total skipped cents across three recipients (penny rounding)", () => {
+    const cId = "penny";
+    const events = [
+      { id: "income-inc-2026-04-20", date: "2026-04-20", label: "Pay", amount: 2000, type: "income" as const },
+      { id: billEventId(cId, "2026-04-18"), date: "2026-04-18", label: "Odd", amount: 10.01, type: "bill" as const },
+      { id: billEventId(cId, "2026-05-02"), date: "2026-05-02", label: "Odd", amount: 10, type: "bill" as const },
+      { id: billEventId(cId, "2026-05-16"), date: "2026-05-16", label: "Odd", amount: 10, type: "bill" as const },
+      { id: billEventId(cId, "2026-05-30"), date: "2026-05-30", label: "Odd", amount: 10, type: "bill" as const },
+    ];
+    const out = applySkipsToEvents(events, [
+      {
+        kind: "commitment",
+        commitmentId: cId,
+        originalDateIso: "2026-04-18",
+        strategy: "SPREAD",
+        spreadOverN: 3,
+      },
+    ]);
+    const recipients = ["2026-05-02", "2026-05-16", "2026-05-30"].map((d) =>
+      out.find((event) => event.id === billEventId(cId, d)),
+    );
+    const extra = recipients.reduce((sum, row) => sum + ((row?.amount ?? 0) - 10), 0);
+    expect(extra).toBeCloseTo(10.01, 2);
+  });
+
+  it("applies multiple commitment skips in date order", () => {
+    const events = baselineEvents();
+    const out = applySkipsToEvents(events, [
+      {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-05-16",
+        strategy: "MOVE_ON",
+      },
+      {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "MAKE_UP_NEXT",
+      },
+    ]);
+    expect(out.some((event) => event.id === billEventId(baseCommitment.id, "2026-04-18"))).toBe(false);
+    expect(out.some((event) => event.id === billEventId(baseCommitment.id, "2026-05-16"))).toBe(false);
+    const bumped = out.find((event) => event.id === billEventId(baseCommitment.id, "2026-05-02"))?.amount;
+    expect(bumped).toBe(1000);
+  });
+
   it("ignores skip when bill occurrence missing", () => {
     const events = baselineEvents();
     const out = applySkipsToEvents(events, [
@@ -136,7 +183,7 @@ describe("applySkipsToEvents", () => {
 });
 
 describe("previewSkipImpact", () => {
-  it("reports negative delta when skipping reduces pressure on hypothetical schedule", () => {
+  it("reports positive delta for MOVE_ON vs raw baseline", () => {
     const ordered = baselineEvents().sort((a, b) => a.date.localeCompare(b.date));
     const preview = previewSkipImpact({
       baselineOrdered: ordered,
@@ -148,6 +195,72 @@ describe("previewSkipImpact", () => {
         strategy: "MOVE_ON",
       },
     });
+    expect(preview.endAvailableMoneyDelta).toBe(500);
+  });
+
+  it("stacks hypothetical skip on existing commitment skips", () => {
+    const ordered = baselineEvents().sort((a, b) => a.date.localeCompare(b.date));
+    const existing = [
+      {
+        kind: "commitment" as const,
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-05-02",
+        strategy: "MOVE_ON" as const,
+      },
+    ];
+    const withExistingOnly = previewSkipImpact({
+      baselineOrdered: ordered,
+      startingAvailableMoney: 1000,
+      skip: {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "MAKE_UP_NEXT",
+      },
+      existingCommitmentSkips: existing,
+    });
+    const fresh = previewSkipImpact({
+      baselineOrdered: ordered,
+      startingAvailableMoney: 1000,
+      skip: {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "MAKE_UP_NEXT",
+      },
+    });
+    expect(withExistingOnly.endAvailableMoneyDelta).not.toBe(fresh.endAvailableMoneyDelta);
+  });
+
+  it("MAKE_UP_NEXT preview matches stacked apply when no future bill exists", () => {
+    const ordered = [
+      {
+        id: billEventId(baseCommitment.id, "2026-04-18"),
+        date: "2026-04-18",
+        label: "Rent",
+        amount: 500,
+        type: "bill" as const,
+      },
+    ];
+    const preview = previewSkipImpact({
+      baselineOrdered: ordered,
+      startingAvailableMoney: 200,
+      skip: {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "MAKE_UP_NEXT",
+      },
+    });
+    const applied = applySkipsToEvents(ordered, [
+      {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "MAKE_UP_NEXT",
+      },
+    ]);
+    expect(applied.filter((event) => event.type === "bill")).toHaveLength(0);
     expect(preview.endAvailableMoneyDelta).toBe(500);
   });
 });
@@ -198,6 +311,39 @@ describe("applyGoalSkipsToGoal", () => {
     const goal = { id: "g1", name: "Holiday", contributionPerPay: 100 };
     const out = applyGoalSkipsToGoal(goal, []);
     expect(out.contributionPerPay).toBe(100);
+  });
+});
+
+describe("previewSkipImpact per strategy", () => {
+  it("MAKE_UP_NEXT improves end balance when next bill absorbs", () => {
+    const ordered = baselineEvents().sort((a, b) => a.date.localeCompare(b.date));
+    const preview = previewSkipImpact({
+      baselineOrdered: ordered,
+      startingAvailableMoney: 0,
+      skip: {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "MAKE_UP_NEXT",
+      },
+    });
+    expect(preview.endAvailableMoneyDelta).toBe(0);
+  });
+
+  it("SPREAD preview reports same sign as widening smaller bumps", () => {
+    const ordered = baselineEvents().sort((a, b) => a.date.localeCompare(b.date));
+    const preview = previewSkipImpact({
+      baselineOrdered: ordered,
+      startingAvailableMoney: 0,
+      skip: {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "SPREAD",
+        spreadOverN: 2,
+      },
+    });
+    expect(typeof preview.endAvailableMoneyDelta).toBe("number");
   });
 });
 

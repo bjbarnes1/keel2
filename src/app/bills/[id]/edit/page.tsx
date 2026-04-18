@@ -9,8 +9,17 @@ import {
 import { BillEditUpcoming } from "@/components/keel/bill-edit-upcoming";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import { SubmitButton } from "@/components/keel/submit-button";
-import { listCommitmentBillOccurrences } from "@/lib/engine/keel";
 import {
+  calculateAvailableMoney,
+  collectScheduledProjectionEvents,
+  listCommitmentBillOccurrences,
+  type EngineCommitment,
+  type EngineGoal,
+  type EngineIncome,
+} from "@/lib/engine/keel";
+import {
+  getActiveSkipsForBudget,
+  getBudgetContext,
   getCommitmentForEdit,
   getCategoryOptions,
   getDashboardSnapshot,
@@ -83,6 +92,55 @@ export default async function EditBillPage({
 
   const goalOptions = snapshot.goals.map((goal) => ({ id: goal.id, name: goal.name }));
 
+  const { budget } = await getBudgetContext();
+  const activeSkips = await getActiveSkipsForBudget(budget.id);
+  const engineIncomes: EngineIncome[] = snapshot.incomes
+    .filter((income) => Boolean(income.nextPayDateIso))
+    .map((income) => ({
+      id: income.id,
+      name: income.name,
+      amount: income.amount,
+      frequency: income.frequency,
+      nextPayDate: income.nextPayDateIso!,
+    }));
+  const engineCommitments: EngineCommitment[] = snapshot.commitments
+    .filter((commitment) => Boolean(commitment.nextDueDateIso))
+    .map((commitment) => ({
+      id: commitment.id,
+      name: commitment.name,
+      amount: commitment.amount,
+      frequency: commitment.frequency,
+      nextDueDate: commitment.nextDueDateIso!,
+      fundedByIncomeId: commitment.fundedByIncomeId,
+      category: commitment.category,
+    }));
+  const engineGoals: EngineGoal[] = snapshot.goals.map((goal) => ({
+    id: goal.id,
+    name: goal.name,
+    contributionPerPay: goal.contributionPerPay,
+    fundedByIncomeId: goal.fundedByIncomeId,
+    currentBalance: goal.currentBalance,
+    targetAmount: goal.targetAmount,
+  }));
+  const availableMoneyResult = calculateAvailableMoney({
+    bankBalance: snapshot.bankBalance,
+    incomes: engineIncomes,
+    primaryIncomeId: snapshot.primaryIncomeId,
+    commitments: engineCommitments,
+    goals: engineGoals,
+    asOf,
+  });
+  const skipPreview = {
+    baselineOrdered: collectScheduledProjectionEvents({
+      asOf,
+      horizonDays: 42,
+      incomes: engineIncomes,
+      commitments: engineCommitments,
+    }),
+    startingAvailableMoney: availableMoneyResult.availableMoney,
+    existingCommitmentSkips: activeSkips.commitmentSkips,
+  };
+
   return (
     <AppShell title={commitment.name} currentPath="/bills" backHref="/bills">
       <SurfaceCard>
@@ -102,6 +160,7 @@ export default async function EditBillPage({
           occurrences={occurrences}
           goals={goalOptions}
           prefillSkipDate={query.skipDate}
+          skipPreview={skipPreview}
         />
       </Suspense>
 

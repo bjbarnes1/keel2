@@ -177,14 +177,19 @@ export function previewSkipImpact(input: {
   baselineOrdered: ScheduledCashflowEvent[];
   startingAvailableMoney: number;
   skip: CommitmentSkipInput;
+  /** Active skips already persisted; preview stacks the hypothetical `skip` on top. */
+  existingCommitmentSkips?: CommitmentSkipInput[];
 }): SkipPreview {
+  const existing = input.existingCommitmentSkips ?? [];
+  const baselineCashflowSorted = sortScheduled(applySkipsToEvents(input.baselineOrdered, existing));
   const baselineEnd = runningEndBalance(
     input.baselineOrdered,
-    input.baselineOrdered,
+    baselineCashflowSorted,
     input.startingAvailableMoney,
   );
-  const cashflow = applySkipsToEvents(input.baselineOrdered, [input.skip]);
-  const cashflowSorted = sortScheduled(cashflow);
+  const cashflowSorted = sortScheduled(
+    applySkipsToEvents(input.baselineOrdered, [...existing, input.skip]),
+  );
   const endWithSkip = runningEndBalance(input.baselineOrdered, cashflowSorted, input.startingAvailableMoney);
 
   const billAmountByEventId: Record<string, number> = {};

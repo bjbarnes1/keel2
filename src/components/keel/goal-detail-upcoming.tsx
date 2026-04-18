@@ -1,11 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 
-import { revokeGoalSkip } from "@/app/actions/skips";
+import type { EngineGoal } from "@/lib/engine/keel";
+import type { GoalSkipInput, PayFrequency } from "@/lib/types";
 import { formatAud } from "@/lib/utils";
 
+import { GoalRestoreSheet } from "./goal-restore-sheet";
 import { GoalSkipSheet } from "./goal-skip-sheet";
 
 type Occurrence = { iso: string; amount: number; activeSkipId?: string };
@@ -26,31 +27,29 @@ export function GoalDetailUpcoming({
   goalName,
   occurrences,
   prefillSkipDate,
+  baseGoal,
+  existingGoalSkips,
+  payFrequency,
 }: {
   goalId: string;
   goalName: string;
   occurrences: Occurrence[];
   prefillSkipDate?: string;
+  baseGoal: EngineGoal;
+  existingGoalSkips: GoalSkipInput[];
+  payFrequency: PayFrequency;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
   const initial = useMemo(
     () => resolvePrefill(prefillSkipDate, occurrences),
     [prefillSkipDate, occurrences],
   );
   const [sheetOpen, setSheetOpen] = useState(initial.sheetOpen);
   const [sheetDate, setSheetDate] = useState<string | null>(initial.sheetDate);
+  const [restoreSkipId, setRestoreSkipId] = useState<string | null>(null);
 
   function openSkip(iso: string) {
     setSheetDate(iso);
     setSheetOpen(true);
-  }
-
-  function restore(skipId: string) {
-    startTransition(async () => {
-      await revokeGoalSkip({ skipId });
-      router.refresh();
-    });
   }
 
   return (
@@ -70,9 +69,8 @@ export function GoalDetailUpcoming({
             {row.activeSkipId ? (
               <button
                 type="button"
-                disabled={pending}
-                onClick={() => restore(row.activeSkipId!)}
-                className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-medium text-[color:var(--keel-ink-2)] hover:bg-white/5 disabled:opacity-40"
+                onClick={() => setRestoreSkipId(row.activeSkipId!)}
+                className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-medium text-[color:var(--keel-ink-2)] hover:bg-white/5"
               >
                 Restore
               </button>
@@ -80,7 +78,7 @@ export function GoalDetailUpcoming({
               <button
                 type="button"
                 onClick={() => openSkip(row.iso)}
-                className="rounded-full bg-emerald-700/90 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                className="glass-tint-safe rounded-full border border-white/12 px-3 py-1.5 text-xs font-semibold text-[color:var(--keel-ink)]"
               >
                 Skip transfer
               </button>
@@ -95,6 +93,16 @@ export function GoalDetailUpcoming({
         goalId={goalId}
         goalName={goalName}
         originalDateIso={sheetDate ?? occurrences[0]?.iso ?? ""}
+        baseGoal={baseGoal}
+        existingGoalSkips={existingGoalSkips}
+        payFrequency={payFrequency}
+      />
+
+      <GoalRestoreSheet
+        open={restoreSkipId != null}
+        onClose={() => setRestoreSkipId(null)}
+        skipId={restoreSkipId}
+        goalName={goalName}
       />
     </section>
   );

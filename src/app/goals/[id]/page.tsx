@@ -4,8 +4,15 @@ import { Suspense } from "react";
 
 import { GoalDetailUpcoming } from "@/components/keel/goal-detail-upcoming";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import type { EngineGoal } from "@/lib/engine/keel";
 import { collectScheduledProjectionEvents } from "@/lib/engine/keel";
-import { getDashboardSnapshot, getGoalForEdit, getSkipHistoryForGoal } from "@/lib/persistence/keel-store";
+import {
+  getActiveSkipsForBudget,
+  getBudgetContext,
+  getDashboardSnapshot,
+  getGoalForEdit,
+  getSkipHistoryForGoal,
+} from "@/lib/persistence/keel-store";
 import { formatAud } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +73,20 @@ export default async function GoalDetailPage({
     activeSkipId: activeSkipByIso.get(row.iso),
   }));
 
+  const { budget } = await getBudgetContext();
+  const activeSkips = await getActiveSkipsForBudget(budget.id);
+  const existingGoalSkips = activeSkips.goalSkips.filter((row) => row.goalId === id);
+  const payFrequency = incomeSource?.frequency ?? "fortnightly";
+  const baseGoal: EngineGoal = {
+    id: goal.id,
+    name: goal.name,
+    contributionPerPay: goal.contributionPerPay,
+    fundedByIncomeId: goal.fundedByIncomeId,
+    currentBalance: goal.currentBalance,
+    targetAmount: goal.targetAmount,
+    targetDate: goal.targetDate,
+  };
+
   return (
     <AppShell title={goal.name} currentPath="/goals" backHref="/goals">
       <SurfaceCard>
@@ -88,6 +109,9 @@ export default async function GoalDetailPage({
             goalName={goal.name}
             occurrences={occurrencesWithSkips}
             prefillSkipDate={query.skipDate}
+            baseGoal={baseGoal}
+            existingGoalSkips={existingGoalSkips}
+            payFrequency={payFrequency}
           />
         </Suspense>
       ) : (

@@ -454,6 +454,7 @@ export function buildProjectionTimeline(input: {
     commitments: input.commitments,
   });
 
+  /** Commitment skips reshape bill amounts before the running balance walk; order matches `skips.ts` + `keel-store` timeline. */
   const commitmentSkips =
     input.skips?.filter((skip): skip is CommitmentSkipInput => skip.kind === "commitment") ?? [];
   const cashflow = applySkipsToEvents(baseline, commitmentSkips);

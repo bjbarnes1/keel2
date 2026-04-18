@@ -1,14 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowDown, ArrowUp, ChevronRight, Plus } from "lucide-react";
+import { ArrowLeft, ChevronRight, Plus } from "lucide-react";
 
-import type {
-  CommitmentView,
-  GoalView,
-  IncomeView,
-  ProjectionEventView,
-} from "@/lib/types";
+import type { CommitmentView, GoalView, IncomeView } from "@/lib/types";
 import { cn, formatAud, sentenceCaseFrequency } from "@/lib/utils";
+
+import { AvatarMenu } from "@/components/keel/avatar-menu";
 
 type NavItem =
   | { href: string; label: string }
@@ -143,9 +140,7 @@ export function AppShell({
         </div>
         <div className="flex items-center gap-2">
           {headerRight}
-          <div className="glass-clear flex h-8 w-8 items-center justify-center rounded-full text-sm text-muted-foreground">
-            B
-          </div>
+          <AvatarMenu />
         </div>
       </header>
 
@@ -402,76 +397,6 @@ export function GoalCard({ goal }: { goal: GoalView }) {
   );
 }
 
-export function ProjectionRow({ event }: { event: ProjectionEventView }) {
-  const isIncome = event.type === "income";
-  const projected = event.projectedAvailableMoney ?? 0;
-  const isAttention = Boolean(event.isAttention);
-  const isNextPayIncome = Boolean(event.isNextPayIncome);
-  const isSkipped = Boolean(event.isSkipped);
-  const isSpreadTarget = Boolean(event.isSkipSpreadTarget);
-  const showAmount = typeof event.displayAmount === "number" ? event.displayAmount : event.amount;
-  const projectedClassName = isAttention
-    ? "text-[color:var(--keel-attend)]"
-    : projected < 0
-      ? "text-[color:var(--keel-ink-3)]"
-      : projected < 500
-        ? "text-[color:var(--keel-ink-3)]"
-        : "text-muted-foreground";
-
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-3",
-        isSkipped ? "opacity-70" : null,
-        isAttention ? "glass-tint-attend" : isNextPayIncome ? "glass-tint-safe" : "glass-clear",
-      )}
-    >
-      <div
-        className={cn(
-          "flex h-9 w-9 items-center justify-center rounded-full",
-          isIncome ? "bg-emerald-500/10 text-emerald-500" : "bg-white/5 text-[color:var(--keel-ink-3)]",
-        )}
-      >
-        {isIncome ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate text-sm font-medium">{event.label}</p>
-          {isSkipped ? (
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
-              Skipped
-            </span>
-          ) : null}
-          {isSpreadTarget && !isSkipped ? (
-            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-500/90">
-              Catch-up
-            </span>
-          ) : null}
-        </div>
-        <p className="text-xs text-muted-foreground">{event.date}</p>
-        {isAttention && typeof event.attentionReserved === "number" ? (
-          <p className="mt-1 text-xs text-[color:var(--keel-attend)]">
-            Holding {formatAud(event.attentionReserved)} of {formatAud(event.amount)}
-          </p>
-        ) : null}
-      </div>
-      <div className="text-right">
-        <p
-          className={cn(
-            "font-mono text-sm font-semibold",
-            isIncome ? "text-emerald-500" : "text-foreground",
-            isSkipped && !isIncome ? "line-through decoration-amber-500/60" : null,
-          )}
-        >
-          {isIncome ? "+" : "-"}
-          {formatAud(showAmount)}
-        </p>
-        <p className={cn("font-mono text-xs", projectedClassName)}>{formatAud(projected)}</p>
-      </div>
-    </div>
-  );
-}
-
 export function AddCardLink({
   href,
   label,
@@ -547,3 +472,5 @@ export function ModalSheet({
     </AppShell>
   );
 }
+
+export { ProjectionRow } from "@/components/keel/projection-row";

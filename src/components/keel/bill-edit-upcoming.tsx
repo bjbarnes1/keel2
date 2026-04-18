@@ -1,11 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 
-import { revokeCommitmentSkip } from "@/app/actions/skips";
+import type { ScheduledCashflowEvent } from "@/lib/engine/skips";
+import type { CommitmentSkipInput } from "@/lib/types";
 import { formatAud } from "@/lib/utils";
 
+import { CommitmentRestoreSheet } from "./commitment-restore-sheet";
 import { CommitmentSkipSheet } from "./commitment-skip-sheet";
 
 type Occurrence = { iso: string; amount: number; activeSkipId?: string };
@@ -29,21 +30,26 @@ export function BillEditUpcoming({
   occurrences,
   goals,
   prefillSkipDate,
+  skipPreview,
 }: {
   commitmentId: string;
   commitmentName: string;
   occurrences: Occurrence[];
   goals: GoalOption[];
   prefillSkipDate?: string;
+  skipPreview: {
+    baselineOrdered: ScheduledCashflowEvent[];
+    startingAvailableMoney: number;
+    existingCommitmentSkips: CommitmentSkipInput[];
+  };
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
   const initial = useMemo(
     () => resolvePrefill(prefillSkipDate, occurrences),
     [prefillSkipDate, occurrences],
   );
   const [sheetOpen, setSheetOpen] = useState(initial.sheetOpen);
   const [sheetDate, setSheetDate] = useState<string | null>(initial.sheetDate);
+  const [restoreSkipId, setRestoreSkipId] = useState<string | null>(null);
 
   const sheetAmount = useMemo(() => {
     if (!sheetDate) {
@@ -55,13 +61,6 @@ export function BillEditUpcoming({
   function openSkip(iso: string) {
     setSheetDate(iso);
     setSheetOpen(true);
-  }
-
-  function restore(skipId: string) {
-    startTransition(async () => {
-      await revokeCommitmentSkip({ skipId });
-      router.refresh();
-    });
   }
 
   return (
@@ -86,9 +85,8 @@ export function BillEditUpcoming({
               {row.activeSkipId ? (
                 <button
                   type="button"
-                  disabled={pending}
-                  onClick={() => restore(row.activeSkipId!)}
-                  className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-medium text-[color:var(--keel-ink-2)] hover:bg-white/5 disabled:opacity-40"
+                  onClick={() => setRestoreSkipId(row.activeSkipId!)}
+                  className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-medium text-[color:var(--keel-ink-2)] hover:bg-white/5"
                 >
                   Restore
                 </button>
@@ -96,7 +94,7 @@ export function BillEditUpcoming({
                 <button
                   type="button"
                   onClick={() => openSkip(row.iso)}
-                  className="rounded-full bg-amber-600/90 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600"
+                  className="glass-tint-safe rounded-full border border-white/12 px-3 py-1.5 text-xs font-semibold text-[color:var(--keel-ink)]"
                 >
                   Skip payment
                 </button>
@@ -114,6 +112,16 @@ export function BillEditUpcoming({
         amount={sheetAmount}
         originalDateIso={sheetDate ?? occurrences[0]?.iso ?? ""}
         goals={goals}
+        baselineOrdered={skipPreview.baselineOrdered}
+        startingAvailableMoney={skipPreview.startingAvailableMoney}
+        existingCommitmentSkips={skipPreview.existingCommitmentSkips}
+      />
+
+      <CommitmentRestoreSheet
+        open={restoreSkipId != null}
+        onClose={() => setRestoreSkipId(null)}
+        skipId={restoreSkipId}
+        label={commitmentName}
       />
     </section>
   );

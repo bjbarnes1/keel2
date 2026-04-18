@@ -260,7 +260,7 @@ export function WaterlineTimeline({
             }
             stroke={
               anchor.skipped
-                ? "rgba(212, 165, 92, 0.75)"
+                ? "rgba(212, 165, 92, 0.6)"
                 : anchor.attention
                   ? "rgba(212, 165, 92, 0.55)"
                   : "rgba(255, 255, 255, 0.18)"
