@@ -48,7 +48,7 @@ async function resolveCategoryId(categoryName: string) {
 export async function createCommitmentFromCapture(input: unknown) {
   assertAiEnabledOrThrow();
   const userId = await requireAuthedUserId();
-  assertWithinAiRateLimit({ userId, limit: 20, windowMs: 60 * 60 * 1000 });
+  await assertWithinAiRateLimit({ userId, limit: 20, windowMs: 60 * 60 * 1000 });
 
   const payload = commitmentCaptureSchema.parse(input);
   const categoryId = await resolveCategoryId(payload.category);
@@ -71,7 +71,7 @@ export async function createCommitmentFromCapture(input: unknown) {
 export async function createIncomeFromCapture(input: unknown) {
   assertAiEnabledOrThrow();
   const userId = await requireAuthedUserId();
-  assertWithinAiRateLimit({ userId, limit: 20, windowMs: 60 * 60 * 1000 });
+  await assertWithinAiRateLimit({ userId, limit: 20, windowMs: 60 * 60 * 1000 });
 
   const payload = incomeCaptureSchema.parse(input);
   const nextPayDate = payload.nextPayDate ?? defaultIsoDate(14);
@@ -92,7 +92,7 @@ export async function createIncomeFromCapture(input: unknown) {
 export async function createAssetFromCapture(input: unknown) {
   assertAiEnabledOrThrow();
   const userId = await requireAuthedUserId();
-  assertWithinAiRateLimit({ userId, limit: 20, windowMs: 60 * 60 * 1000 });
+  await assertWithinAiRateLimit({ userId, limit: 20, windowMs: 60 * 60 * 1000 });
 
   const payload = assetCaptureSchema.parse(input);
 

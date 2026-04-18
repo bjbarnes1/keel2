@@ -316,6 +316,12 @@ model SpendImportBatch {
   @@index([accountId])
 }
 
+model AiRateLimit {
+  userId      String   @id
+  windowStart DateTime
+  calls       Int      @default(0)
+}
+
 model SpendTransaction {
   id            String    @id @default(cuid())
   budgetId      String

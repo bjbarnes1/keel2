@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     }
 
-    assertWithinAiRateLimit({ userId: data.user.id, limit: 20, windowMs: 60 * 60 * 1000 });
+    await assertWithinAiRateLimit({ userId: data.user.id, limit: 20, windowMs: 60 * 60 * 1000 });
 
     const body = (await request.json()) as { message?: string };
     const message = String(body.message ?? "").trim();

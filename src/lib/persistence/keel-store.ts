@@ -1426,12 +1426,17 @@ export async function acceptBudgetInvite(token: string) {
   const prisma = getPrismaClient();
   const authedUser = await getAuthedUser();
 
+  const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   const invite = await prisma.budgetInvite.findFirst({
-    where: { token, acceptedAt: null },
+    where: {
+      token,
+      acceptedAt: null,
+      createdAt: { gte: new Date(Date.now() - INVITE_TTL_MS) },
+    },
   });
 
   if (!invite) {
-    throw new Error("Invite is invalid or already used.");
+    throw new Error("Invite is invalid, expired, or already used.");
   }
 
   // Ensure the signed-in user's email matches the invite target.
@@ -1446,17 +1451,26 @@ export async function acceptBudgetInvite(token: string) {
     create: { id: authedUser.id, email },
   });
 
-  await prisma.budgetMember.create({
-    data: {
-      budgetId: invite.budgetId,
-      userId: authedUser.id,
-      role: "member",
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    const existingMembership = await tx.budgetMember.findFirst({
+      where: { budgetId: invite.budgetId, userId: authedUser.id },
+    });
+    if (existingMembership) {
+      throw new Error("You are already a member of this budget.");
+    }
 
-  await prisma.budgetInvite.update({
-    where: { id: invite.id },
-    data: { acceptedAt: new Date() },
+    await tx.budgetMember.create({
+      data: {
+        budgetId: invite.budgetId,
+        userId: authedUser.id,
+        role: "member",
+      },
+    });
+
+    await tx.budgetInvite.update({
+      where: { id: invite.id },
+      data: { acceptedAt: new Date() },
+    });
   });
 }
 
@@ -1748,6 +1762,15 @@ export async function updateCommitment(
 ) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
+    const { budget } = await getBudgetContext();
+
+    const existing = await prisma.commitment.findFirst({
+      where: { id, budgetId: budget.id, archivedAt: null },
+    });
+    if (!existing) {
+      throw new Error("Commitment not found.");
+    }
+
     await prisma.commitment.update({
       where: { id },
       data: {
