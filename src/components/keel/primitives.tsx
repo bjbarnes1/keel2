@@ -364,7 +364,8 @@ export function GoalCard({ goal }: { goal: GoalView }) {
     : 0;
 
   return (
-    <SurfaceCard>
+    <Link href={`/goals/${goal.id}`} className="block">
+      <SurfaceCard className="transition-colors hover:border-primary/40">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[15px] font-medium">{goal.name}</p>
@@ -396,7 +397,8 @@ export function GoalCard({ goal }: { goal: GoalView }) {
       ) : (
         <p className="mt-3 text-xs text-primary">{formatAud(goal.currentBalance)} saved</p>
       )}
-    </SurfaceCard>
+      </SurfaceCard>
+    </Link>
   );
 }
 

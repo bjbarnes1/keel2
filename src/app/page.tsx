@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import {
   AppShell,
+  GoalCard,
   HeroAvailableMoneyCard,
   IncomeCard,
   ProjectionRow,
@@ -45,6 +46,27 @@ export default async function HomePage() {
           <ProjectionRow key={event.id} event={event} />
         ))}
       </div>
+
+      <SectionTitle title="Goals" />
+      <div className="space-y-2">
+        {snapshot.goals.length === 0 ? (
+          <SurfaceCard className="flex items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">No goals yet—start one to set aside money each pay.</p>
+            <Link href="/goals/new" className="text-sm font-medium text-primary shrink-0">
+              Add goal
+            </Link>
+          </SurfaceCard>
+        ) : (
+          snapshot.goals.map((goal) => <GoalCard key={goal.id} goal={goal} />)
+        )}
+      </div>
+      {snapshot.goals.length > 0 ? (
+        <div className="mt-2 flex justify-end">
+          <Link href="/goals/new" className="text-sm font-medium text-primary">
+            Add another goal
+          </Link>
+        </div>
+      ) : null}
 
       <SurfaceCard className="mt-6 flex items-center justify-between gap-4">
         <div>

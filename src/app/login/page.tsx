@@ -30,6 +30,8 @@ export default function LoginPage({
 
     try {
       const supabase = createSupabaseBrowserClient();
+      // Supabase sends a magic link by default; a 6-digit code appears in the email only if the
+      // project’s "Magic link" auth email template includes {{ .Token }} (Dashboard → Auth → Email templates).
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmed,
         options: {
@@ -84,7 +86,8 @@ export default function LoginPage({
         <SurfaceCard className="space-y-3">
           <p className="text-sm font-medium">Email sign-in</p>
           <p className="text-sm text-muted-foreground">
-            We&apos;ll email you a sign-in link. No password needed.
+            We&apos;ll email you a sign-in link (and a 6-digit code too, if your Supabase email template
+            includes it—see Auth → Email templates → Magic link).
           </p>
         </SurfaceCard>
 
@@ -113,14 +116,15 @@ export default function LoginPage({
           <SurfaceCard className="border-emerald-500/30 bg-emerald-500/10">
             <p className="text-sm font-medium text-emerald-500">Check your inbox</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Click the sign-in link we sent to {email.trim()}.
+              Use the sign-in link we sent to {email.trim()}
+              {", or the 6-digit code from that same email if it appears."}
             </p>
             <button
               type="button"
               onClick={() => setMode("code")}
               className="mt-3 text-left text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
             >
-              Enter a 6-digit code instead
+              Enter 6-digit code
             </button>
           </SurfaceCard>
         ) : null}

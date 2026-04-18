@@ -37,6 +37,7 @@ export async function createWealthHoldingAction(formData: FormData) {
   });
 
   revalidatePath("/settings/wealth");
+  revalidatePath("/wealth");
   redirect("/settings/wealth");
 }
 
@@ -58,6 +59,7 @@ export async function updateWealthHoldingAction(id: string, formData: FormData) 
 export async function deleteWealthHoldingAction(id: string) {
   await deleteWealthHolding(id);
   revalidatePath("/settings/wealth");
+  revalidatePath("/wealth");
   redirect("/settings/wealth");
 }
 
