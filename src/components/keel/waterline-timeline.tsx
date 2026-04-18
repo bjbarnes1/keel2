@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 
 import { annualizeAmount } from "@/lib/engine/keel";
 import type { CommitmentFrequency, PayFrequency } from "@/lib/types";
+import { formatAud } from "@/lib/utils";
 
 type WaterlineIncome = {
   id: string;
@@ -22,6 +23,14 @@ type WaterlineCommitment = {
   nextDueDateIso: string;
   isAttention?: boolean;
 };
+
+const FILLER_TOKENS = new Set(["income", "protection", "insurance", "pay", "salary", "payment"]);
+
+function shortenIncomeName(name: string): string {
+  const words = name.trim().split(/\s+/);
+  const meaningful = words.find((word) => !FILLER_TOKENS.has(word.toLowerCase()));
+  return meaningful ?? words[0] ?? name;
+}
 
 function skipOccurrenceKey(commitmentId: string, iso: string) {
   return `${commitmentId}:${iso}`;
@@ -81,6 +90,12 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function horizonDateLabel(date: Date) {
+  return date
+    .toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "UTC" })
+    .toUpperCase();
+}
+
 export function WaterlineTimeline({
   asOfIso,
   windowStartIso,
@@ -95,6 +110,21 @@ export function WaterlineTimeline({
   /** `commitmentId:yyyy-mm-dd` for hollow skipped anchors */
   skippedOccurrenceKeys?: ReadonlySet<string>;
 }) {
+  const width = 360;
+  const height = 180;
+  const baselineY = 90;
+  const padX = 8;
+  const chartWidth = width - 2 * padX;
+
+  const rawId = useId().replace(/:/g, "");
+  const tideFillId = `tideFill-${rawId}`;
+  const tideFadeRightId = `tideFadeRight-${rawId}`;
+  const tideMaskId = `tideMask-${rawId}`;
+  const todayHaloId = `todayHalo-${rawId}`;
+
+  const xGuide1 = width / 3;
+  const xGuide2 = (2 * width) / 3;
+
   const model = useMemo(() => {
     const asOf = parseIsoDate(asOfIso);
     const windowStart = parseIsoDate(windowStartIso);
@@ -108,10 +138,19 @@ export function WaterlineTimeline({
     };
 
     const payMarkers = incomes.flatMap((income) => {
-      const markers: Array<{ x: number; label: string; opacity: number }> = [];
+      const markers: Array<{
+        x: number;
+        label: string;
+        fullLabel: string;
+        amount: number;
+        dateLabel: string;
+        dotOpacity: number;
+        textOpacity: number;
+        nameFill: string;
+        amountFill: string;
+      }> = [];
       let cursor = parseIsoDate(income.nextPayDateIso);
 
-      // Walk backwards to the first occurrence on/after windowStart.
       while (cursor < windowStart) {
         cursor = addCycle(cursor, income.frequency);
       }
@@ -125,10 +164,35 @@ export function WaterlineTimeline({
 
       while (cursor < windowEnd) {
         if (cursor >= windowStart) {
+          const localIndex = markers.length;
+          let dotOpacity = 1;
+          let textOpacity = 1;
+          let nameFill = "#d4cfbf";
+          let amountFill = "#a8ac9f";
+          if (localIndex === 1) {
+            dotOpacity = 0.5;
+            textOpacity = 0.7;
+            nameFill = "#a8ac9f";
+            amountFill = "#8a8f88";
+          } else if (localIndex >= 2) {
+            dotOpacity = 0.35;
+            textOpacity = 0.5;
+            nameFill = "#a8ac9f";
+            amountFill = "#8a8f88";
+          }
+
           markers.push({
             x: xForDate(cursor),
-            label: income.name,
-            opacity: income.isPrimary ? 1 : 0.45,
+            label: shortenIncomeName(income.name),
+            fullLabel: income.name,
+            amount: income.amount,
+            dateLabel: cursor
+              .toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "UTC" })
+              .toUpperCase(),
+            dotOpacity,
+            textOpacity,
+            nameFill,
+            amountFill,
           });
         }
         cursor = addCycle(cursor, income.frequency);
@@ -141,8 +205,15 @@ export function WaterlineTimeline({
     const maxAnnual = Math.max(1, ...annualized);
 
     const anchors = commitments.flatMap((commitment) => {
-      const depth = 18 + (annualizeAmount(commitment.amount, commitment.frequency) / maxAnnual) * 52;
-      const points: Array<{ x: number; depth: number; attention: boolean; skipped: boolean }> = [];
+      const weight = clamp(annualizeAmount(commitment.amount, commitment.frequency) / maxAnnual, 0, 1);
+      const points: Array<{
+        x: number;
+        weight: number;
+        attention: boolean;
+        skipped: boolean;
+        label: string;
+        amount: number;
+      }> = [];
 
       let due = parseIsoDate(commitment.nextDueDateIso);
       while (due < windowStart) {
@@ -155,9 +226,11 @@ export function WaterlineTimeline({
           const skipped = skippedOccurrenceKeys?.has(skipOccurrenceKey(commitment.id, iso)) ?? false;
           points.push({
             x: xForDate(due),
-            depth,
+            weight,
             attention: Boolean(commitment.isAttention),
             skipped,
+            label: commitment.name,
+            amount: commitment.amount,
           });
         }
         due = addCycle(due, commitment.frequency);
@@ -166,22 +239,26 @@ export function WaterlineTimeline({
       return points;
     });
 
-    const fortnightTicks = [0, 14, 28, 42].map((day) => {
-      const d = new Date(windowStart);
-      d.setUTCDate(d.getUTCDate() + day);
-      return xForDate(d);
-    });
-
     const todayX = xForDate(asOf);
     const elapsedX1 = 0;
     const elapsedX2 = clamp(todayX, 0, 1);
 
-    return { payMarkers, anchors, fortnightTicks, elapsedX1, elapsedX2, todayX };
+    const windowEndInclusive = new Date(windowEnd);
+    windowEndInclusive.setUTCDate(windowEndInclusive.getUTCDate() - 1);
+    const windowMid = new Date(windowStart);
+    windowMid.setUTCDate(windowMid.getUTCDate() + 21);
+
+    const horizonLabels = {
+      start: horizonDateLabel(windowStart),
+      mid: horizonDateLabel(windowMid),
+      end: horizonDateLabel(windowEndInclusive),
+    };
+
+    return { payMarkers, anchors, elapsedX1, elapsedX2, todayX, horizonLabels };
   }, [asOfIso, commitments, incomes, skippedOccurrenceKeys, windowStartIso]);
 
-  const width = 360;
-  const height = 150;
-  const baselineY = 78;
+  const elapsedMaskX = padX + model.elapsedX1 * chartWidth;
+  const elapsedMaskW = Math.max(0, (model.elapsedX2 - model.elapsedX1) * chartWidth);
 
   return (
     <svg
@@ -193,12 +270,27 @@ export function WaterlineTimeline({
       className="block"
     >
       <defs>
-        <linearGradient id="waterElapsed" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(107, 179, 145, 0.22)" />
-          <stop offset="100%" stopColor="rgba(107, 179, 145, 0.06)" />
+        <linearGradient id={tideFillId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="rgba(107, 179, 145, 0.14)" />
+          <stop offset="100%" stopColor="rgba(107, 179, 145, 0.02)" />
         </linearGradient>
-        <filter id="todayHalo" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="2.5" result="blur" />
+        <linearGradient id={tideFadeRightId} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="rgba(107, 179, 145, 1)" />
+          <stop offset="80%" stopColor="rgba(107, 179, 145, 0.6)" />
+          <stop offset="100%" stopColor="rgba(107, 179, 145, 0)" />
+        </linearGradient>
+        <mask id={tideMaskId}>
+          <rect x="0" y="0" width={width} height={height} fill="black" />
+          <rect
+            x={elapsedMaskX}
+            y={baselineY}
+            width={elapsedMaskW}
+            height={42}
+            fill={`url(#${tideFadeRightId})`}
+          />
+        </mask>
+        <filter id={todayHaloId} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -206,73 +298,136 @@ export function WaterlineTimeline({
         </filter>
       </defs>
 
-      <rect
-        x={model.elapsedX1 * width}
-        y={24}
-        width={Math.max(0, (model.elapsedX2 - model.elapsedX1) * width)}
-        height={baselineY - 24}
-        fill="url(#waterElapsed)"
+      <rect x={0} y={baselineY} width={width} height={42} fill={`url(#${tideFillId})`} mask={`url(#${tideMaskId})`} />
+
+      <line
+        x1={xGuide1}
+        y1={20}
+        x2={xGuide1}
+        y2={156}
+        stroke="rgba(255,255,255,0.06)"
+        strokeWidth={0.5}
+        strokeDasharray="2 4"
+      />
+      <line
+        x1={xGuide2}
+        y1={20}
+        x2={xGuide2}
+        y2={156}
+        stroke="rgba(255,255,255,0.06)"
+        strokeWidth={0.5}
+        strokeDasharray="2 4"
       />
 
-      {model.fortnightTicks.map((x) => (
-        <line
-          key={x}
-          x1={x * width}
-          y1={22}
-          x2={x * width}
-          y2={baselineY + 46}
-          stroke="rgba(168, 172, 159, 0.22)"
-          strokeWidth={1}
-          strokeDasharray="3 6"
-        />
-      ))}
-
-      <line x1={0} y1={baselineY} x2={width} y2={baselineY} stroke="rgba(240, 235, 220, 0.35)" strokeWidth={1} />
+      <line
+        x1={padX}
+        y1={baselineY}
+        x2={width - padX}
+        y2={baselineY}
+        stroke="rgba(240, 235, 220, 0.3)"
+        strokeWidth={0.75}
+      />
 
       {model.payMarkers.map((marker, idx) => (
-        <g key={`${marker.label}-${idx}`} transform={`translate(${marker.x * width}, ${baselineY - 18})`}>
-          <circle cx={0} cy={0} r={3.5} fill="rgba(240, 235, 220, 0.95)" opacity={marker.opacity} />
+        <g
+          key={`${marker.fullLabel}-${marker.dateLabel}-${idx}`}
+          transform={`translate(${marker.x * width}, ${baselineY})`}
+          aria-label={`${marker.fullLabel}, ${marker.dateLabel}, ${formatAud(marker.amount)}`}
+        >
+          <title>{marker.fullLabel}</title>
+          <circle cx={0} cy={0} r={4} fill="#f0ebdc" opacity={marker.dotOpacity} />
           <text
             x={0}
-            y={-10}
+            y={-12}
             textAnchor="middle"
-            fill="rgba(240, 235, 220, 0.92)"
-            opacity={marker.opacity}
+            fill={marker.nameFill}
+            opacity={marker.textOpacity}
             style={{ fontSize: 10, fontWeight: 500 }}
           >
             {marker.label}
           </text>
+          <text
+            x={0}
+            y={-24}
+            textAnchor="middle"
+            fill={marker.amountFill}
+            opacity={marker.textOpacity}
+            style={{ fontSize: 9, fontVariantNumeric: "tabular-nums" }}
+          >
+            +{formatAud(marker.amount)}
+          </text>
+          <text
+            x={0}
+            y={-36}
+            textAnchor="middle"
+            fill="#5f645e"
+            opacity={marker.textOpacity}
+            style={{ fontSize: 8, letterSpacing: "0.5px" }}
+          >
+            {marker.dateLabel}
+          </text>
         </g>
       ))}
 
-      {model.anchors.map((anchor, idx) => (
-        <g key={`anchor-${idx}`} transform={`translate(${anchor.x * width}, ${baselineY})`}>
-          <circle
-            cx={0}
-            cy={anchor.depth}
-            r={4.25}
-            fill={
-              anchor.skipped
-                ? "transparent"
-                : anchor.attention
-                  ? "rgba(212, 165, 92, 0.95)"
-                  : "rgba(240, 235, 220, 0.9)"
-            }
-            stroke={
-              anchor.skipped
-                ? "rgba(212, 165, 92, 0.6)"
-                : anchor.attention
-                  ? "rgba(212, 165, 92, 0.55)"
-                  : "rgba(255, 255, 255, 0.18)"
-            }
-            strokeWidth={anchor.skipped ? 1.35 : 0.75}
-          />
-        </g>
-      ))}
+      {model.anchors.map((anchor, idx) => {
+        const stemLength = 18 + anchor.weight * 28;
+        const dotRadius = 3 + anchor.weight * 2.5;
+        const stemAlpha = 0.22 + anchor.weight * 0.08;
+        const cy = stemLength + dotRadius;
 
-      <g transform={`translate(${model.todayX * width}, ${baselineY})`} filter="url(#todayHalo)">
-        <circle cx={0} cy={0} r={6.5} fill="rgba(240, 235, 220, 0.92)" stroke="rgba(255, 255, 255, 0.35)" strokeWidth={0.75} />
+        const fill = anchor.skipped
+          ? "transparent"
+          : anchor.attention
+            ? "rgba(212, 165, 92, 0.95)"
+            : "rgba(240, 235, 220, 0.88)";
+        const stroke = anchor.skipped
+          ? "rgba(212, 165, 92, 0.6)"
+          : anchor.attention
+            ? "rgba(212, 165, 92, 0.55)"
+            : "rgba(255, 255, 255, 0.18)";
+        const strokeW = anchor.skipped ? 1.35 : 0.75;
+
+        return (
+          <g key={`anchor-${idx}-${anchor.label}-${anchor.x}`} transform={`translate(${anchor.x * width}, ${baselineY})`}>
+            <line x1={0} y1={0} x2={0} y2={stemLength} stroke={`rgba(240, 235, 220, ${stemAlpha})`} strokeWidth={1} />
+            <circle cx={0} cy={cy} r={dotRadius} fill={fill} stroke={stroke} strokeWidth={strokeW} />
+            {anchor.label ? (
+              <text x={0} y={cy + dotRadius + 10} textAnchor="middle" fill="#a8ac9f" style={{ fontSize: 9, fontWeight: 500 }}>
+                {anchor.label}
+              </text>
+            ) : null}
+            <text
+              x={0}
+              y={cy + dotRadius + 22}
+              textAnchor="middle"
+              fill="#5f645e"
+              style={{ fontSize: 8, fontVariantNumeric: "tabular-nums" }}
+            >
+              {formatAud(anchor.amount)}
+            </text>
+          </g>
+        );
+      })}
+
+      <g transform={`translate(${model.todayX * width}, ${baselineY})`} filter={`url(#${todayHaloId})`}>
+        <circle cx={0} cy={0} r={7} fill="rgba(240, 235, 220, 0.95)" stroke="rgba(255, 255, 255, 0.4)" strokeWidth={0.75} />
       </g>
+
+      <text x={padX} y={170} fill="#5f645e" style={{ fontSize: 8, letterSpacing: "1px", fontWeight: 500 }}>
+        {model.horizonLabels.start}
+      </text>
+      <text x={width / 2} y={170} textAnchor="middle" fill="#5f645e" style={{ fontSize: 8, letterSpacing: "1px", fontWeight: 500 }}>
+        {model.horizonLabels.mid}
+      </text>
+      <text
+        x={width - padX}
+        y={170}
+        textAnchor="end"
+        fill="#5f645e"
+        style={{ fontSize: 8, letterSpacing: "1px", fontWeight: 500 }}
+      >
+        {model.horizonLabels.end}
+      </text>
     </svg>
   );
 }
