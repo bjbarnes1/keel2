@@ -111,11 +111,14 @@ model Commitment {
   frequency        String
   nextDueDate      DateTime
   isPaused         Boolean      @default(false)
+  archivedAt       DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
   versions         CommitmentVersion[]
   spendTransactions SpendTransaction[]
+
+  @@index([budgetId, archivedAt])
 }
 
 model CommitmentVersion {

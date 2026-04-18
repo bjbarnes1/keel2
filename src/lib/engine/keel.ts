@@ -58,6 +58,13 @@ export interface ProjectionEvent {
   projectedAvailableMoney: number;
 }
 
+export interface PayPeriodWindow {
+  start: Date;
+  end: Date;
+  dayIndex: number;
+  totalDays: number;
+}
+
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -94,7 +101,7 @@ function addCycle(date: Date, frequency: CommitmentFrequency | PayFrequency) {
   }
 }
 
-function subtractCycle(date: Date, frequency: CommitmentFrequency) {
+function subtractCycle(date: Date, frequency: CommitmentFrequency | PayFrequency) {
   const previous = new Date(date);
 
   switch (frequency) {
@@ -120,6 +127,87 @@ function subtractCycle(date: Date, frequency: CommitmentFrequency) {
 
 function daysBetween(start: Date, end: Date) {
   return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
+}
+
+function startOfUtcDay(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+}
+
+function compareUtcDate(left: Date, right: Date) {
+  const a = startOfUtcDay(left).getTime();
+  const b = startOfUtcDay(right).getTime();
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+export function getCurrentPayPeriod(
+  primaryIncome: EngineIncome | null,
+  asOf: Date,
+): PayPeriodWindow {
+  const asOfDay = startOfUtcDay(asOf);
+
+  if (primaryIncome) {
+    let nextPay = parseDate(primaryIncome.nextPayDate);
+    while (compareUtcDate(nextPay, asOfDay) <= 0) {
+      nextPay = addCycle(nextPay, primaryIncome.frequency);
+    }
+
+    const periodStart = subtractCycle(nextPay, primaryIncome.frequency);
+    const periodEnd = new Date(nextPay);
+    // Inclusive end date for the current pay cycle (day before next pay day).
+    periodEnd.setUTCDate(periodEnd.getUTCDate() - 1);
+
+    const totalDays = Math.max(1, daysBetween(periodStart, periodEnd) + 1);
+    const dayIndex = Math.min(totalDays, daysBetween(periodStart, asOfDay) + 1);
+
+    return { start: periodStart, end: periodEnd, dayIndex, totalDays };
+  }
+
+  // Calendar fortnight fallback anchored to asOf (UTC).
+  const epoch = Date.UTC(1970, 0, 5); // Monday
+  const ms = asOfDay.getTime() - epoch;
+  const fortnightIndex = Math.floor(ms / (14 * 86400000));
+  const start = new Date(epoch + fortnightIndex * 14 * 86400000);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 14);
+
+  const totalDays = 14;
+  const dayIndex = Math.min(totalDays, daysBetween(start, asOfDay) + 1);
+
+  return { start, end, dayIndex, totalDays };
+}
+
+export function isCommitmentInAttention(input: {
+  commitment: CommitmentReserve;
+  payPeriod: PayPeriodWindow;
+  asOf: Date;
+}): boolean {
+  const { commitment, payPeriod, asOf } = input;
+
+  if (commitment.percentFunded >= 100) {
+    return false;
+  }
+
+  const due = parseDate(commitment.nextDueDate);
+  if (compareUtcDate(due, payPeriod.start) < 0 || compareUtcDate(due, payPeriod.end) > 0) {
+    return false;
+  }
+
+  const gap = roundCurrency(commitment.amount - commitment.reserved);
+  if (gap <= 0) {
+    return false;
+  }
+
+  const payLengthDays = Math.max(1, daysBetween(payPeriod.start, payPeriod.end) + 1);
+  const perDay = roundCurrency(commitment.perPay / payLengthDays);
+
+  const attentionEnd =
+    compareUtcDate(due, payPeriod.end) < 0 ? due : payPeriod.end;
+  const remainingDays = Math.max(0, daysBetween(startOfUtcDay(asOf), attentionEnd));
+  const projectedReserve = roundCurrency(commitment.reserved + perDay * remainingDays);
+
+  return roundCurrency(commitment.amount - projectedReserve) > 0;
 }
 
 export function annualizeAmount(

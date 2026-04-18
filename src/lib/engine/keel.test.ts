@@ -7,6 +7,8 @@ import {
   calculateCommitmentReserve,
   calculatePerPayAmount,
   detectProjectedShortfall,
+  getCurrentPayPeriod,
+  isCommitmentInAttention,
   payPeriodsPerYear,
 } from "@/lib/engine/keel";
 
@@ -192,6 +194,48 @@ describe("keel engine", () => {
     );
     expect(
       projection.some((event) => event.type === "income" && event.label === "Partner"),
+    ).toBe(true);
+  });
+
+  it("computes a pay-aligned fortnightly pay period window", () => {
+    const period = getCurrentPayPeriod(income, new Date("2026-04-20T00:00:00Z"));
+
+    expect(period.start.toISOString().slice(0, 10)).toBe("2026-04-10");
+    expect(period.end.toISOString().slice(0, 10)).toBe("2026-04-23");
+    expect(period.dayIndex).toBe(11);
+    expect(period.totalDays).toBe(14);
+  });
+
+  it("falls back to calendar fortnights when no primary income exists", () => {
+    const period = getCurrentPayPeriod(null, new Date("2026-04-20T00:00:00Z"));
+
+    expect(period.totalDays).toBe(14);
+    expect(period.dayIndex).toBeGreaterThanOrEqual(1);
+    expect(period.dayIndex).toBeLessThanOrEqual(14);
+  });
+
+  it("flags attention when a commitment cannot fully fund before pay day", () => {
+    const payPeriod = getCurrentPayPeriod(income, new Date("2026-04-20T00:00:00Z"));
+    const reserve = calculateCommitmentReserve(
+      {
+        id: "insurance",
+        name: "Insurance",
+        amount: 50,
+        frequency: "weekly",
+        nextDueDate: "2026-04-22",
+        fundedByIncomeId: income.id,
+      },
+      [income],
+      income.id,
+      new Date("2026-04-20T00:00:00Z"),
+    );
+
+    expect(
+      isCommitmentInAttention({
+        commitment: reserve,
+        payPeriod,
+        asOf: new Date("2026-04-20T00:00:00Z"),
+      }),
     ).toBe(true);
   });
 });

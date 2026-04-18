@@ -13,35 +13,28 @@
 :root {
   color-scheme: dark;
 
-  /* Raw palette */
+  /* Appendix A — CSS variables (design brief) */
+  /* Surfaces */
   --keel-tide: #0e1412;
   --keel-tide-2: #141a17;
+
+  /* Text */
   --keel-ink: #f0ebdc;
   --keel-ink-2: #d4cfbf;
   --keel-ink-3: #a8ac9f;
   --keel-ink-4: #8a8f88;
   --keel-ink-5: #5f645e;
+
+  /* Accents */
   --keel-safe: #6bb391;
   --keel-safe-soft: #a8d7bd;
   --keel-safe-faint: #a8c9b6;
   --keel-attend: #d4a55c;
+
+  /* Asset identity */
   --keel-btc: #d4a55c;
   --keel-eth: #9f97e8;
   --keel-stock: #7fb5e8;
-
-  /* Semantic mapping */
-  --color-bg-primary: var(--keel-tide);
-  --color-bg-elevated: var(--keel-tide-2);
-  --color-text-primary: var(--keel-ink);
-  --color-text-secondary: var(--keel-ink-2);
-  --color-text-tertiary: var(--keel-ink-3);
-  --color-text-quaternary: var(--keel-ink-4);
-  --color-label: var(--keel-ink-5);
-  --color-accent: var(--keel-safe);
-  --color-accent-soft: var(--keel-safe-soft);
-  --color-positive: var(--keel-safe);
-  --color-attention: var(--keel-attend);
-  --color-negative: var(--keel-ink-3);
 
   /* Spacing */
   --space-1: 4px;
@@ -55,6 +48,7 @@
   --space-10: 40px;
 
   /* Radii */
+  --radius-phone: 38px;
   --radius-xl: 24px;
   --radius-lg: 20px;
   --radius-md: 18px;
@@ -62,6 +56,40 @@
   --radius-xs: 14px;
   --radius-xxs: 10px;
   --radius-pill: 999px;
+
+  /* Glass presets — apply via utility classes */
+  --glass-clear-bg: rgba(255, 255, 255, 0.035);
+  --glass-clear-border: rgba(255, 255, 255, 0.08);
+  --glass-heavy-bg: rgba(20, 26, 23, 0.55);
+  --glass-heavy-border: rgba(255, 255, 255, 0.12);
+  --glass-tint-safe-bg: rgba(107, 179, 145, 0.14);
+  --glass-tint-safe-border: rgba(107, 179, 145, 0.22);
+  --glass-tint-attend-bg: rgba(212, 165, 92, 0.12);
+  --glass-tint-attend-border: rgba(212, 165, 92, 0.2);
+  --glass-inset-highlight: inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
+  --glass-inset-highlight-heavy: inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+
+  /* Motion */
+  --ease-micro: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-snap: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-micro: 150ms;
+  --dur-state: 250ms;
+  --dur-sheet: 350ms;
+  --dur-nav: 400ms;
+
+  /* Semantic mapping (app-level) */
+  --color-bg-primary: var(--keel-tide);
+  --color-bg-elevated: var(--keel-tide-2);
+  --color-text-primary: var(--keel-ink);
+  --color-text-secondary: var(--keel-ink-2);
+  --color-text-tertiary: var(--keel-ink-3);
+  --color-text-quaternary: var(--keel-ink-4);
+  --color-label: var(--keel-ink-5);
+  --color-accent: var(--keel-safe);
+  --color-accent-soft: var(--keel-safe-soft);
+  --color-positive: var(--keel-safe);
+  --color-attention: var(--keel-attend);
+  --color-negative: var(--keel-ink-3);
 }
 
 * {
@@ -126,42 +154,59 @@ select {
     var(--color-background);
 }
 
+/* Appendix C — Glass utility classes (design brief) */
 .glass-clear {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--glass-clear-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 0.5px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
+  border: 0.5px solid var(--glass-clear-border);
+  box-shadow: var(--glass-inset-highlight);
 }
 
 .glass-heavy {
-  background: rgba(20, 26, 23, 0.55);
+  background: var(--glass-heavy-bg);
   backdrop-filter: blur(30px) saturate(180%);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
-  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border: 0.5px solid var(--glass-heavy-border);
   box-shadow:
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.1),
+    var(--glass-inset-highlight-heavy),
     0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
-.glass-tint-positive {
-  background: rgba(107, 179, 145, 0.14);
+.glass-tint-safe {
+  background: var(--glass-tint-safe-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 0.5px solid rgba(107, 179, 145, 0.22);
+  border: 0.5px solid var(--glass-tint-safe-border);
   box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
 }
 
-.glass-tint-attention {
-  background: rgba(212, 165, 92, 0.12);
+.glass-tint-attend {
+  background: var(--glass-tint-attend-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 0.5px solid rgba(212, 165, 92, 0.2);
+  border: 0.5px solid var(--glass-tint-attend-border);
 }
 
-.flat-inlay {
+.inlay-flat {
   background: rgba(0, 0, 0, 0.2);
   border-radius: var(--radius-xs);
+}
+
+.keel-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--keel-ink-2);
+  background: var(--glass-clear-bg);
+  border: 0.5px solid var(--glass-clear-border);
+  box-shadow: var(--glass-inset-highlight);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 input::placeholder,
