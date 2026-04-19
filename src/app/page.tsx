@@ -41,7 +41,7 @@ export default async function HomePage() {
       </div>
 
       <SectionTitle title="Upcoming" />
-      <div className="space-y-0">
+      <div className="space-y-2">
         {snapshot.timeline.slice(0, 4).map((event) => (
           <ProjectionRow key={event.id} event={event} />
         ))}
