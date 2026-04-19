@@ -3,6 +3,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { getPrismaClient } from "@/lib/prisma";
 import { inclusivePeriodDays, plannedAmountForPeriod } from "@/lib/spend/actual-vs-planned";
 import type { CommitmentFrequency } from "@/lib/types";
+import { roundMoney } from "@/lib/utils";
 
 import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
@@ -23,10 +24,6 @@ export type ActualVsPlannedReport = {
   rows: ActualVsPlannedRow[];
   totals: { planned: number; actual: number; variance: number };
 };
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
 
 function utcMonthRangeFromKey(monthKey: string) {
   const match = /^(\d{4})-(\d{2})$/.exec(monthKey);

@@ -374,6 +374,7 @@ export async function getDashboardSnapshot() {
 
 /** Baseline cashflow + active skips for commitment skip preview UIs (list + detail). */
 export async function getCommitmentSkipPreviewBundle(snapshot: DashboardSnapshot) {
+  noStore();
   const { budget } = await getBudgetContext();
   const activeSkips = await getActiveSkipsForBudget(budget.id);
   const asOf = new Date(`${snapshot.balanceAsOfIso}T00:00:00Z`);

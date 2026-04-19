@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getPrismaClient } from "@/lib/prisma";
+import { toIsoDate } from "@/lib/utils";
 
 import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
@@ -28,7 +29,7 @@ export async function createIncome(input: {
     const prisma = getPrismaClient();
     const { budget } = await getBudgetContext();
 
-    const effectiveFrom = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    const effectiveFrom = new Date(`${toIsoDate(new Date())}T00:00:00Z`);
     const nextPayDate = new Date(`${input.nextPayDate}T00:00:00Z`);
 
     await prisma.$transaction(async (tx) => {
@@ -135,7 +136,7 @@ export async function updateIncomeFuture(input: {
     throw new Error("Effective date must be YYYY-MM-DD.");
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = toIsoDate(new Date());
   if (input.effectiveFrom < todayIso) {
     throw new Error("Changes can only apply from today onward.");
   }

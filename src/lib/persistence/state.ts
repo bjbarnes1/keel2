@@ -6,6 +6,8 @@ import { pickIncomeVersionAt } from "@/lib/income-version";
 import { getPrismaClient } from "@/lib/prisma";
 import type { CommitmentCategory } from "@/lib/types";
 
+import { toIsoDate } from "@/lib/utils";
+
 import { getAuthedUser, getOrCreateActiveBudget } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured, isHostedProduction } from "./config";
 
@@ -132,7 +134,7 @@ export async function readPrismaState(): Promise<StoredKeelState> {
   if (!primaryIncomeId) {
     const nextPayDate = new Date();
     nextPayDate.setUTCDate(nextPayDate.getUTCDate() + 14);
-    const effectiveFrom = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    const effectiveFrom = new Date(`${toIsoDate(new Date())}T00:00:00Z`);
     const created = await prisma.$transaction(async (tx) => {
       const income = await tx.income.create({
         data: {
@@ -165,7 +167,7 @@ export async function readPrismaState(): Promise<StoredKeelState> {
 
   const asOfIso = budgetWithData.balanceAsOf
     ? budgetWithData.balanceAsOf.toISOString().slice(0, 10)
-    : new Date().toISOString().slice(0, 10);
+    : toIsoDate(new Date());
 
   return {
     user: {
@@ -178,7 +180,7 @@ export async function readPrismaState(): Promise<StoredKeelState> {
       bankBalance: Number(budgetWithData.bankBalance),
       balanceAsOf: budgetWithData.balanceAsOf
         ? budgetWithData.balanceAsOf.toISOString().slice(0, 10)
-        : new Date().toISOString().slice(0, 10),
+        : toIsoDate(new Date()),
     },
     budget: { id: budgetWithData.id, name: budgetWithData.name },
     incomes: budgetWithData.incomes.map((income) => {

@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getAnthropicClient } from "@/lib/ai/client";
 import { classifyAskIntent, extractHypotheticalCommitmentSkips } from "@/lib/ai/classify-ask";
+import { roundMoney } from "@/lib/utils";
 import { extractJsonObject } from "@/lib/ai/parse-capture";
 import { assertWithinAiRateLimit } from "@/lib/ai/rate-limit";
 import { buildTimelineForTest } from "@/lib/engine/keel";
@@ -66,10 +67,6 @@ const askResponseSchema = z.discriminatedUnion("type", [
 ]);
 
 export type AskKeelResponse = z.infer<typeof askResponseSchema>;
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
 
 export async function POST(request: Request) {
   try {
@@ -247,6 +244,7 @@ Rules:
       return NextResponse.json({ error: "You’ve hit the hourly Ask limit. Try again soon." }, { status: 429 });
     }
 
+    console.error("[ask-keel] unhandled error", error);
     const fallback: AskKeelResponse = {
       type: "freeform",
       headline: "Ask is offline right now.",

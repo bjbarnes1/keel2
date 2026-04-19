@@ -5,6 +5,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { pickCommitmentVersionAt } from "@/lib/commitment-version";
 import { getPrismaClient } from "@/lib/prisma";
 import type { CommitmentCategory } from "@/lib/types";
+import { toIsoDate } from "@/lib/utils";
 
 import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
@@ -31,7 +32,7 @@ export async function getCommitmentForEdit(id: string) {
   });
   if (!commitment) return null;
 
-  const asOfIso = new Date().toISOString().slice(0, 10);
+  const asOfIso = toIsoDate(new Date());
   const slices =
     commitment.versions?.map((v) => ({
       effectiveFrom: v.effectiveFrom,
@@ -197,7 +198,7 @@ export async function updateCommitmentFuture(
     throw new Error("Effective date must be YYYY-MM-DD.");
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = toIsoDate(new Date());
   if (input.effectiveFrom < todayIso) {
     throw new Error("Changes can only apply from today onward.");
   }

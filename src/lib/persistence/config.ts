@@ -1,6 +1,7 @@
+// Fix #18: removed brittle "johndoe:randompassword" placeholder check.
+// If DATABASE_URL is set but invalid, Prisma will fail loudly on first connection.
 export function hasConfiguredDatabase() {
-  const url = process.env.DATABASE_URL ?? "";
-  return Boolean(url) && !url.includes("johndoe:randompassword");
+  return Boolean(process.env.DATABASE_URL?.trim());
 }
 
 export function hasSupabaseAuthConfigured() {

@@ -1,6 +1,8 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// NOTE: /api/* routes bypass middleware auth. Each handler MUST independently
+// verify the session by calling createSupabaseServerClient() and checking the user.
 function isPublicPath(pathname: string) {
   if (pathname.startsWith("/_next")) return true;
   if (pathname.startsWith("/api")) return true;

@@ -19,3 +19,11 @@ export function formatAud(amount: number) {
 export function sentenceCaseFrequency(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
+
+export function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+export function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}

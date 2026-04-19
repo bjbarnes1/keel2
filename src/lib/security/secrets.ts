@@ -1,12 +1,12 @@
-import { createHash, randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
+import { createDecipheriv, createCipheriv, hkdfSync, randomBytes } from "node:crypto";
 
-function getKeyBytes() {
+// Fix #19: HKDF replaces bare SHA-256 so short passphrases get proper key stretching.
+function getKeyBytes(): Buffer | null {
   const raw = (process.env.BANK_ENCRYPTION_KEY ?? "").trim();
-  if (!raw) {
-    return null;
-  }
-  // Derive a stable 32-byte key from arbitrary input.
-  return createHash("sha256").update(raw, "utf8").digest();
+  if (!raw) return null;
+  return Buffer.from(
+    hkdfSync("sha256", Buffer.from(raw, "utf8"), "keel-bank-enc", "", 32),
+  );
 }
 
 export function encryptBankSecret(plaintext: string) {
@@ -43,8 +43,7 @@ export function decryptBankSecret(encBase64: string, ivBase64: string) {
 
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
-  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-  return plaintext;
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
 export function maskBankAccount(lastFour: string | null | undefined) {
@@ -52,4 +51,3 @@ export function maskBankAccount(lastFour: string | null | undefined) {
   const safe = lastFour.replace(/\D/g, "").slice(-4);
   return safe ? `•••• ${safe}` : "";
 }
-

@@ -1,6 +1,7 @@
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getPrismaClient } from "@/lib/prisma";
+import { toIsoDate } from "@/lib/utils";
 
 import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase } from "./config";
@@ -13,6 +14,18 @@ type WealthHoldingView = {
   value: number;
   asOf?: string;
 };
+
+// Fix #11: single formula used by getWealthSnapshot and getWealthTotalValueForBudget.
+function holdingValue(h: {
+  quantity: unknown;
+  unitPrice: unknown;
+  valueOverride: unknown;
+}): number {
+  const qty = Number(h.quantity);
+  const unit = h.unitPrice ? Number(h.unitPrice) : undefined;
+  const override = h.valueOverride ? Number(h.valueOverride) : undefined;
+  return override ?? (unit != null ? qty * unit : 0);
+}
 
 export async function getWealthSnapshot() {
   noStore();
@@ -29,24 +42,17 @@ export async function getWealthSnapshot() {
     orderBy: { updatedAt: "desc" },
   });
 
-  const mapped: WealthHoldingView[] = holdings.map((holding) => {
-    const quantity = Number(holding.quantity);
-    const unitPrice = holding.unitPrice ? Number(holding.unitPrice) : undefined;
-    const valueOverride = holding.valueOverride ? Number(holding.valueOverride) : undefined;
-    const value = valueOverride ?? (unitPrice != null ? quantity * unitPrice : 0);
-
-    return {
-      id: holding.id,
-      name: holding.name,
-      symbol: holding.symbol ?? undefined,
-      quantity: String(quantity),
-      value,
-      asOf: holding.asOf ? holding.asOf.toISOString().slice(0, 10) : undefined,
-    };
-  });
+  const mapped: WealthHoldingView[] = holdings.map((holding) => ({
+    id: holding.id,
+    name: holding.name,
+    symbol: holding.symbol ?? undefined,
+    quantity: String(Number(holding.quantity)),
+    value: holdingValue(holding),
+    asOf: holding.asOf ? holding.asOf.toISOString().slice(0, 10) : undefined,
+  }));
 
   return {
-    totalValue: mapped.reduce((sum, holding) => sum + holding.value, 0),
+    totalValue: mapped.reduce((sum, h) => sum + h.value, 0),
     holdings: mapped,
   };
 }
@@ -57,14 +63,7 @@ async function getWealthTotalValueForBudget(budgetId: string) {
     where: { budgetId },
     select: { quantity: true, unitPrice: true, valueOverride: true },
   });
-
-  return holdings.reduce((sum, holding) => {
-    const quantity = Number(holding.quantity);
-    const unitPrice = holding.unitPrice ? Number(holding.unitPrice) : undefined;
-    const valueOverride = holding.valueOverride ? Number(holding.valueOverride) : undefined;
-    const value = valueOverride ?? (unitPrice != null ? quantity * unitPrice : 0);
-    return sum + value;
-  }, 0);
+  return holdings.reduce((sum, h) => sum + holdingValue(h), 0);
 }
 
 export async function getWealthHistory(input?: { years?: number }) {
@@ -104,7 +103,7 @@ export async function getWealthHistory(input?: { years?: number }) {
 
 async function recordWealthSnapshot(budgetId: string, totalValue: number) {
   const prisma = getPrismaClient();
-  const recordedAtIso = new Date().toISOString().slice(0, 10);
+  const recordedAtIso = toIsoDate(new Date());
   const recordedAt = new Date(`${recordedAtIso}T00:00:00Z`);
   await prisma.wealthSnapshot.create({
     data: { budgetId, recordedAt, totalValue },
@@ -127,11 +126,12 @@ export async function createWealthHolding(input: {
   const prisma = getPrismaClient();
   const { budget } = await getBudgetContext();
 
-  const account =
-    (await prisma.wealthAccount.findFirst({ where: { budgetId: budget.id } })) ??
-    (await prisma.wealthAccount.create({
-      data: { budgetId: budget.id, name: "Holdings", type: "OTHER", currency: "AUD" },
-    }));
+  // Fix #20: upsert is safe under concurrent requests thanks to the unique index on (budgetId, name).
+  const account = await prisma.wealthAccount.upsert({
+    where: { budgetId_name: { budgetId: budget.id, name: "Holdings" } },
+    create: { budgetId: budget.id, name: "Holdings", type: "OTHER", currency: "AUD" },
+    update: {},
+  });
 
   await prisma.wealthHolding.create({
     data: {

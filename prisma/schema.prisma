@@ -245,6 +245,7 @@ model WealthAccount {
 
   holdings WealthHolding[]
 
+  @@unique([budgetId, name])
   @@index([budgetId])
 }
 

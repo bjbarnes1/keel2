@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getPrismaClient } from "@/lib/prisma";
+import { toIsoDate } from "@/lib/utils";
 
 import { getAuthedUser, getBudgetContext } from "./auth";
 import { hasConfiguredDatabase } from "./config";
@@ -22,7 +23,7 @@ export async function updateBankBalance(amount: number) {
 
   const state = await readState();
   state.user.bankBalance = amount;
-  state.user.balanceAsOf = new Date().toISOString().slice(0, 10);
+  state.user.balanceAsOf = toIsoDate(new Date());
   await writeState(state);
 }
 
