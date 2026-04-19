@@ -1,9 +1,29 @@
 "use client";
 
 import { ArrowDown, ArrowUp } from "lucide-react";
+import Link from "next/link";
 
 import type { ProjectionEventView } from "@/lib/types";
 import { cn, formatAud } from "@/lib/utils";
+
+function projectionEventDetailHref(event: ProjectionEventView): string | undefined {
+  if (event.type === "income") {
+    if (!event.id.startsWith("income-")) {
+      return undefined;
+    }
+    const iso = event.isoDate;
+    if (iso && event.id.endsWith(`-${iso}`)) {
+      const incomeId = event.id.slice("income-".length, -(iso.length + 1));
+      return incomeId ? `/settings/incomes/${incomeId}/edit` : undefined;
+    }
+    const match = event.id.match(/^income-(.+)-(\d{4}-\d{2}-\d{2})$/);
+    return match?.[1] ? `/settings/incomes/${match[1]}/edit` : undefined;
+  }
+  if (event.type === "bill" && event.commitmentId) {
+    return `/commitments/${event.commitmentId}`;
+  }
+  return undefined;
+}
 
 export function ProjectionRow({
   event,
@@ -30,6 +50,8 @@ export function ProjectionRow({
 
   const interactiveSkipped =
     !isIncome && isSkipped && typeof event.skipId === "string" && Boolean(onSkippedBillActivate);
+
+  const detailHref = !interactiveSkipped ? projectionEventDetailHref(event) : undefined;
 
   const inner = (
     <>
@@ -90,6 +112,17 @@ export function ProjectionRow({
       <button type="button" className={cn(rowClass, "w-full")} onClick={onSkippedBillActivate}>
         {inner}
       </button>
+    );
+  }
+
+  if (detailHref) {
+    return (
+      <Link
+        href={detailHref}
+        className={cn(rowClass, "block w-full no-underline text-inherit transition-opacity hover:opacity-90")}
+      >
+        {inner}
+      </Link>
     );
   }
 
