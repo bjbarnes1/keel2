@@ -9,7 +9,7 @@ import { toIsoDate } from "@/lib/utils";
 
 import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
-import { readState, writeState, type StoredCommitment } from "./state";
+import { narrowCommitmentFrequency, readState, writeState, type StoredCommitment } from "./state";
 
 export async function getCommitmentForEdit(id: string) {
   noStore();
@@ -54,7 +54,7 @@ export async function getCommitmentForEdit(id: string) {
     id: commitment.id,
     name: picked?.name ?? commitment.name,
     amount: picked ? picked.amount : Number(commitment.amount),
-    frequency: (picked?.frequency ?? commitment.frequency) as StoredCommitment["frequency"],
+    frequency: narrowCommitmentFrequency(picked?.frequency ?? commitment.frequency),
     nextDueDate: (picked ? picked.nextDueDate : commitment.nextDueDate)
       .toISOString()
       .slice(0, 10),

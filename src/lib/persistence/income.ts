@@ -7,7 +7,7 @@ import { toIsoDate } from "@/lib/utils";
 
 import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
-import { readState, writeState, type StoredIncome } from "./state";
+import { narrowIncomeFrequency, readState, writeState, type StoredIncome } from "./state";
 
 export async function getIncomeSnapshot() {
   noStore();
@@ -106,7 +106,7 @@ export async function getIncomeForEdit(id: string) {
     id: income.id,
     name: income.name,
     amount: Number(income.amount),
-    frequency: income.frequency as StoredIncome["frequency"],
+    frequency: narrowIncomeFrequency(income.frequency),
     nextPayDate: income.nextPayDate.toISOString().slice(0, 10),
     isPrimary: income.isPrimary,
   };
@@ -237,35 +237,27 @@ export async function deleteIncome(incomeId: string) {
     const prisma = getPrismaClient();
     const { budget } = await getBudgetContext();
 
-    const incomes = await prisma.income.findMany({
-      where: { budgetId: budget.id },
-      orderBy: { createdAt: "asc" },
+    // Fix #23: two targeted queries instead of fetching all incomes.
+    const income = await prisma.income.findFirst({
+      where: { id: incomeId, budgetId: budget.id },
     });
+    if (!income) throw new Error("Income not found.");
 
-    if (!incomes.some((i) => i.id === incomeId)) {
-      throw new Error("Income not found.");
-    }
-
-    const remaining = incomes.filter((income) => income.id !== incomeId);
-    if (remaining.length === 0) {
-      throw new Error("You must have at least one income.");
-    }
+    const remainingCount = await prisma.income.count({
+      where: { budgetId: budget.id, id: { not: incomeId } },
+    });
+    if (remainingCount === 0) throw new Error("You must have at least one income.");
 
     await prisma.income.delete({ where: { id: incomeId } });
 
-    const deletedWasPrimary = incomes.some(
-      (income) => income.id === incomeId && income.isPrimary,
-    );
-
-    if (deletedWasPrimary) {
-      await prisma.income.updateMany({
+    if (income.isPrimary) {
+      const next = await prisma.income.findFirst({
         where: { budgetId: budget.id },
-        data: { isPrimary: false },
+        orderBy: { createdAt: "asc" },
       });
-      await prisma.income.update({
-        where: { id: remaining[0]!.id },
-        data: { isPrimary: true },
-      });
+      if (next) {
+        await prisma.income.update({ where: { id: next.id }, data: { isPrimary: true } });
+      }
     }
 
     return;

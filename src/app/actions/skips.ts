@@ -231,16 +231,17 @@ export async function revokeGoalSkip(input: unknown) {
   const { budget } = await getBudgetContext();
   const prisma = getPrismaClient();
 
-  const row = await prisma.goalSkip.findFirst({
-    where: { id: payload.skipId, budgetId: budget.id, revokedAt: null },
-  });
-  if (!row) {
-    throw new Error("Skip not found or already revoked.");
-  }
+  // Fix #24: wrap in a transaction so any future compensating writes remain atomic.
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.goalSkip.findFirst({
+      where: { id: payload.skipId, budgetId: budget.id, revokedAt: null },
+    });
+    if (!row) throw new Error("Skip not found or already revoked.");
 
-  await prisma.goalSkip.update({
-    where: { id: row.id },
-    data: { revokedAt: new Date() },
+    await tx.goalSkip.update({
+      where: { id: row.id },
+      data: { revokedAt: new Date() },
+    });
   });
 
   revalidateSkipPaths();

@@ -47,6 +47,24 @@ export type StoredCommitment = {
   archivedAt?: string | null;
 };
 
+// Fix #21: narrowing helpers avoid silent `as` casts when Prisma returns String fields.
+export function narrowIncomeFrequency(raw: string): StoredIncome["frequency"] {
+  if (raw === "weekly" || raw === "fortnightly" || raw === "monthly") return raw;
+  return "fortnightly";
+}
+
+export function narrowCommitmentFrequency(raw: string): StoredCommitment["frequency"] {
+  if (
+    raw === "weekly" ||
+    raw === "fortnightly" ||
+    raw === "monthly" ||
+    raw === "quarterly" ||
+    raw === "annual"
+  )
+    return raw;
+  return "monthly";
+}
+
 export type StoredGoal = {
   id: string;
   name: string;
@@ -198,7 +216,7 @@ export async function readPrismaState(): Promise<StoredKeelState> {
         id: income.id,
         name: picked?.name ?? income.name,
         amount: picked ? picked.amount : Number(income.amount),
-        frequency: (picked?.frequency ?? income.frequency) as StoredIncome["frequency"],
+        frequency: narrowIncomeFrequency(picked?.frequency ?? income.frequency),
         nextPayDate: (picked ? picked.nextPayDate : income.nextPayDate)
           .toISOString()
           .slice(0, 10),
@@ -226,7 +244,7 @@ export async function readPrismaState(): Promise<StoredKeelState> {
         id: commitment.id,
         name: picked?.name ?? commitment.name,
         amount: picked ? picked.amount : Number(commitment.amount),
-        frequency: (picked?.frequency ?? commitment.frequency) as StoredCommitment["frequency"],
+        frequency: narrowCommitmentFrequency(picked?.frequency ?? commitment.frequency),
         nextDueDate: (picked ? picked.nextDueDate : commitment.nextDueDate)
           .toISOString()
           .slice(0, 10),
