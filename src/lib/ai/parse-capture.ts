@@ -1,6 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
+import { getAnthropicClient } from "@/lib/ai/client";
 import { calculatePerPayAmount } from "@/lib/engine/keel";
 
 export const commitmentCaptureSchema = z.object({
@@ -282,13 +282,11 @@ export async function parseCommitmentCapture(sentence: string) {
     throw new Error("A description is required.");
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!apiKey) {
+  const client = getAnthropicClient();
+  if (!client) {
     return normalizeCommitmentCapture(fallbackCommitmentParse(trimmed));
   }
 
-  const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 450,
@@ -359,12 +357,11 @@ export async function parseIncomeCapture(sentence: string) {
     throw new Error("A description is required.");
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  const client = getAnthropicClient();
+  if (!client) {
     return normalizeIncomeCapture(fallbackIncomeParse(trimmed));
   }
 
-  const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 400,
@@ -433,12 +430,11 @@ export async function parseAssetCapture(sentence: string) {
     throw new Error("A description is required.");
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  const client = getAnthropicClient();
+  if (!client) {
     return normalizeAssetCapture(fallbackAssetParse(trimmed));
   }
 
-  const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 450,

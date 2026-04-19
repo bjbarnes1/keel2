@@ -1,6 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
+import { getAnthropicClient } from "@/lib/ai/client";
 import { extractJsonObject } from "@/lib/ai/parse-capture";
 
 const classificationSchema = z.object({
@@ -15,13 +15,12 @@ export async function classifyCaptureSentence(sentence: string): Promise<Capture
     return "unknown";
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  const client = getAnthropicClient();
+  if (!client) {
     // Without a key, keep the surface deterministic and conservative.
     return "unknown";
   }
 
-  const client = new Anthropic({ apiKey });
   const response = await client.messages.create({
     model: "claude-3-5-haiku-20241022",
     max_tokens: 120,

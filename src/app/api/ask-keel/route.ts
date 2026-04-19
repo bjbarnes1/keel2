@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
+import { getAnthropicClient } from "@/lib/ai/client";
 import { classifyAskIntent, extractHypotheticalCommitmentSkips } from "@/lib/ai/classify-ask";
 import { extractJsonObject } from "@/lib/ai/parse-capture";
 import { assertWithinAiRateLimit } from "@/lib/ai/rate-limit";
@@ -101,8 +101,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: fallback });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
+    const client = getAnthropicClient();
+    if (!client) {
       const fallback: AskKeelResponse = {
         type: "freeform",
         headline: "Ask is offline right now.",
@@ -111,7 +111,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: fallback });
     }
 
-    const client = new Anthropic({ apiKey });
     const intent = await classifyAskIntent(client, message);
 
     if (intent.kind === "out_of_scope") {
