@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import type { ProjectionEvent } from "@/lib/engine/keel";
 import {
+  loadProjectionChunkInputSchema,
+  type LoadProjectionChunkInput,
+} from "@/lib/engine/projection-chunk-schema";
+import {
+  buildProjectionChunkFromState,
   createCommitment,
   createIncome,
   createBudgetInvite,
@@ -15,6 +21,7 @@ import {
   deleteIncome,
   deleteSubcategory,
   acceptBudgetInvite,
+  getProjectionEngineInput,
   setPrimaryIncome,
   updateBankBalance,
   updateCommitmentFuture,
@@ -263,4 +270,32 @@ export async function deleteSubcategoryAction(formData: FormData) {
   await deleteSubcategory(subcategoryId);
   revalidatePath("/settings/categories");
   redirect("/settings/categories");
+}
+
+// --- Projection chunk loader -------------------------------------------------
+
+/**
+ * Loads a window of projection events for on-demand timeline chunks.
+ *
+ * Reads the current budget's engine inputs (incomes, commitments, goals, active skips),
+ * computes the available-money floor at `asOf`, then builds a projection for
+ * [startDateIso, startDateIso + horizonDays]. Running balances on the returned events
+ * already reflect every event between `asOf` and `startDateIso`.
+ *
+ * Authentication: inherits from `getProjectionEngineInput` -> `readState`, which throws if
+ * no authed user (DB mode) or falls back to the demo store (non-DB mode). Never
+ * silently returns empty arrays on failure.
+ */
+export async function loadProjectionChunk(
+  input: LoadProjectionChunkInput,
+): Promise<ProjectionEvent[]> {
+  const payload = loadProjectionChunkInputSchema.parse(input);
+  const { state, activeSkips } = await getProjectionEngineInput();
+
+  return buildProjectionChunkFromState({
+    state,
+    activeSkips,
+    startDateIso: payload.startDateIso,
+    horizonDays: payload.horizonDays,
+  });
 }

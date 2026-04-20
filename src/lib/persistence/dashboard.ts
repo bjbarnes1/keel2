@@ -438,3 +438,62 @@ export async function getProjectionEngineInput() {
   const activeSkips = await getActiveSkipsForBudget(state.budget.id);
   return { state, activeSkips };
 }
+
+/**
+ * Pure helper — computes a projection chunk from engine state and active skips.
+ * Separated from the server action so unit tests can exercise chunking without Prisma/Supabase.
+ */
+export function buildProjectionChunkFromState(input: {
+  state: StoredKeelState;
+  activeSkips: ActiveSkipsBundle;
+  /** Optional override for "now"; defaults to the state's balanceAsOf. */
+  asOf?: Date;
+  startDateIso: string;
+  horizonDays: number;
+}) {
+  const asOf = input.asOf ?? new Date(`${input.state.user.balanceAsOf}T00:00:00Z`);
+  const startDate = new Date(`${input.startDateIso}T00:00:00Z`);
+
+  const primaryIncome =
+    input.state.incomes.find((income) => income.id === input.state.primaryIncomeId) ?? null;
+
+  const goalsAdjusted = input.state.goals.map((goal) =>
+    applyGoalSkipsToGoal(
+      {
+        id: goal.id,
+        name: goal.name,
+        contributionPerPay: goal.contributionPerPay,
+        fundedByIncomeId: goal.fundedByIncomeId,
+        currentBalance: goal.currentBalance,
+        targetAmount: goal.targetAmount,
+        targetDate: goal.targetDate,
+      },
+      input.activeSkips.goalSkips.filter((skip) => skip.goalId === goal.id),
+      { payFrequency: primaryIncome?.frequency },
+    ),
+  );
+
+  const availableMoneyResult = calculateAvailableMoney({
+    bankBalance: input.state.user.bankBalance,
+    incomes: input.state.incomes,
+    primaryIncomeId: input.state.primaryIncomeId,
+    commitments: input.state.commitments,
+    goals: goalsAdjusted,
+    asOf,
+  });
+
+  const skipInputs: SkipInput[] = [
+    ...input.activeSkips.commitmentSkips,
+    ...input.activeSkips.goalSkips,
+  ];
+
+  return buildProjectionTimeline({
+    availableMoney: availableMoneyResult.availableMoney,
+    asOf,
+    startDate,
+    horizonDays: input.horizonDays,
+    incomes: input.state.incomes,
+    commitments: input.state.commitments,
+    skips: skipInputs,
+  });
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   annualizeAmount,
+  availableMoneyAt,
   buildProjectionTimeline,
   calculateAvailableMoney,
   calculateCommitmentReserve,
@@ -10,6 +11,7 @@ import {
   getCurrentPayPeriod,
   isCommitmentInAttention,
   payPeriodsPerYear,
+  type ProjectionEvent,
 } from "@/lib/engine/keel";
 
 const income = {
@@ -212,6 +214,245 @@ describe("keel engine", () => {
     expect(period.totalDays).toBe(14);
     expect(period.dayIndex).toBeGreaterThanOrEqual(1);
     expect(period.dayIndex).toBeLessThanOrEqual(14);
+  });
+
+  // --- buildProjectionTimeline: startDate parameterization -------------------
+  // The startDate parameter lets us load arbitrary chunks of the timeline (e.g., "give
+  // me weeks 4-10 from today"). Running balances on returned events must already reflect
+  // every event between asOf and startDate, so the first returned event's
+  // projectedAvailableMoney is NOT the initial balance.
+
+  // Regression guard: omitting startDate must produce the same events (and same running
+  // balances) as the pre-refactor call shape.
+  it("matches legacy behavior when startDate is omitted", () => {
+    const legacy = buildProjectionTimeline({
+      availableMoney: 1000,
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      horizonDays: 45,
+      incomes: [income],
+      commitments: [
+        {
+          id: "rent",
+          name: "Rent",
+          amount: 1200,
+          frequency: "monthly",
+          nextDueDate: "2026-05-01",
+          fundedByIncomeId: income.id,
+        },
+      ],
+    });
+
+    const parameterized = buildProjectionTimeline({
+      availableMoney: 1000,
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      startDate: new Date("2026-04-20T00:00:00Z"),
+      horizonDays: 45,
+      incomes: [income],
+      commitments: [
+        {
+          id: "rent",
+          name: "Rent",
+          amount: 1200,
+          frequency: "monthly",
+          nextDueDate: "2026-05-01",
+          fundedByIncomeId: income.id,
+        },
+      ],
+    });
+
+    expect(parameterized).toEqual(legacy);
+  });
+
+  // Loading a future chunk: startDate = asOf + 28 days, horizonDays = 28. Returned events
+  // must fall inside [asOf+28, asOf+56], and the first event's running balance must
+  // reflect the events from the first 28 days (i.e., NOT the initial balance).
+  it("returns only events within the requested future chunk and preserves running balance", () => {
+    const asOf = new Date("2026-04-20T00:00:00Z");
+    const startDate = new Date("2026-05-18T00:00:00Z"); // asOf + 28 days
+
+    const full = buildProjectionTimeline({
+      availableMoney: 1000,
+      asOf,
+      horizonDays: 60,
+      incomes: [income],
+      commitments: [
+        {
+          id: "rent",
+          name: "Rent",
+          amount: 1200,
+          frequency: "monthly",
+          nextDueDate: "2026-05-01",
+          fundedByIncomeId: income.id,
+        },
+      ],
+    });
+
+    const chunk = buildProjectionTimeline({
+      availableMoney: 1000,
+      asOf,
+      startDate,
+      horizonDays: 28,
+      incomes: [income],
+      commitments: [
+        {
+          id: "rent",
+          name: "Rent",
+          amount: 1200,
+          frequency: "monthly",
+          nextDueDate: "2026-05-01",
+          fundedByIncomeId: income.id,
+        },
+      ],
+    });
+
+    for (const event of chunk) {
+      expect(event.date >= "2026-05-18").toBe(true);
+      expect(event.date <= "2026-06-15").toBe(true);
+    }
+
+    const lookup = new Map(full.map((event) => [event.id, event.projectedAvailableMoney]));
+    for (const event of chunk) {
+      expect(event.projectedAvailableMoney).toBe(lookup.get(event.id));
+    }
+
+    if (chunk[0]) {
+      expect(chunk[0].projectedAvailableMoney).not.toBe(1000);
+    }
+  });
+
+  // Loading a past chunk: startDate < asOf. No events exist before asOf (commitments are
+  // anchored via nextDueDate), but the call should not crash and returned events should
+  // have correct running balances computed from initialAvailableMoney going forward.
+  it("tolerates startDate before asOf and returns forward-window events with correct balances", () => {
+    const asOf = new Date("2026-04-20T00:00:00Z");
+    const startDate = new Date("2026-04-06T00:00:00Z"); // asOf - 14 days
+
+    const chunk = buildProjectionTimeline({
+      availableMoney: 1000,
+      asOf,
+      startDate,
+      horizonDays: 28,
+      incomes: [income],
+      commitments: [],
+    });
+
+    for (const event of chunk) {
+      expect(event.date >= "2026-04-06").toBe(true);
+      expect(event.date <= "2026-05-04").toBe(true);
+    }
+
+    expect(chunk[0]?.projectedAvailableMoney).toBe(
+      chunk[0]?.type === "income" ? 1000 + chunk[0].amount : 1000,
+    );
+  });
+
+  // Empty inputs & zero horizon — defensive guards.
+  it("returns an empty array for empty income/commitment lists", () => {
+    const chunk = buildProjectionTimeline({
+      availableMoney: 500,
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      horizonDays: 42,
+      incomes: [],
+      commitments: [],
+    });
+    expect(chunk).toEqual([]);
+  });
+
+  it("returns an empty array when horizonDays is 0", () => {
+    const chunk = buildProjectionTimeline({
+      availableMoney: 500,
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      horizonDays: 0,
+      incomes: [income],
+      commitments: [],
+    });
+    expect(chunk).toEqual([]);
+  });
+
+  // --- availableMoneyAt ------------------------------------------------------
+
+  function makeEvents(
+    entries: Array<{ date: string; balance: number }>,
+  ): ProjectionEvent[] {
+    return entries.map((entry, index) => ({
+      id: `event-${index}`,
+      date: entry.date,
+      label: `Event ${index}`,
+      amount: 100,
+      type: "income",
+      projectedAvailableMoney: entry.balance,
+    }));
+  }
+
+  // Before any event — returns the starting balance (nothing has happened yet).
+  it("availableMoneyAt: returns starting balance when target is before all events", () => {
+    const events = makeEvents([
+      { date: "2026-05-01", balance: 1100 },
+      { date: "2026-05-15", balance: 1300 },
+    ]);
+    expect(availableMoneyAt("2026-04-20", events, 1000)).toBe(1000);
+  });
+
+  // Exact match — inclusive; returns the event's own projected balance.
+  it("availableMoneyAt: returns the event's balance when target equals its date", () => {
+    const events = makeEvents([
+      { date: "2026-05-01", balance: 1100 },
+      { date: "2026-05-15", balance: 1300 },
+    ]);
+    expect(availableMoneyAt("2026-05-01", events, 1000)).toBe(1100);
+  });
+
+  // After all events — returns the last event's balance.
+  it("availableMoneyAt: returns the last event's balance when target is after all events", () => {
+    const events = makeEvents([
+      { date: "2026-05-01", balance: 1100 },
+      { date: "2026-05-15", balance: 1300 },
+    ]);
+    expect(availableMoneyAt("2026-06-01", events, 1000)).toBe(1300);
+  });
+
+  // Between events — step function, not interpolation. Returns the earlier event's balance.
+  it("availableMoneyAt: returns the earlier event's balance when target is between two events", () => {
+    const events = makeEvents([
+      { date: "2026-05-01", balance: 1100 },
+      { date: "2026-05-15", balance: 1300 },
+    ]);
+    expect(availableMoneyAt("2026-05-07", events, 1000)).toBe(1100);
+  });
+
+  // Empty events — fall back to starting balance.
+  it("availableMoneyAt: returns starting balance for an empty events array", () => {
+    expect(availableMoneyAt("2026-05-01", [], 2500)).toBe(2500);
+  });
+
+  // Accepts Date instances too.
+  it("availableMoneyAt: accepts Date input (not just ISO string)", () => {
+    const events = makeEvents([
+      { date: "2026-05-01", balance: 1100 },
+      { date: "2026-05-15", balance: 1300 },
+    ]);
+    expect(availableMoneyAt(new Date("2026-05-10T12:34:56Z"), events, 1000)).toBe(1100);
+  });
+
+  // Gesture-frame budget: 1000 lookups against a 100-event sorted array must complete
+  // comfortably under 100ms on any machine that would run the dev server.
+  it("availableMoneyAt: runs 1000 lookups over 100 events well under 100ms", () => {
+    const events: ProjectionEvent[] = Array.from({ length: 100 }, (_, index) => ({
+      id: `perf-${index}`,
+      date: new Date(Date.UTC(2026, 0, 1) + index * 86_400_000).toISOString().slice(0, 10),
+      label: `Perf ${index}`,
+      amount: 100,
+      type: "income",
+      projectedAvailableMoney: 1000 + index,
+    }));
+
+    const target = new Date("2026-03-01T00:00:00Z");
+    const start = performance.now();
+    for (let i = 0; i < 1000; i += 1) {
+      availableMoneyAt(target, events, 1000);
+    }
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(100);
   });
 
   it("flags attention when a commitment cannot fully fund before pay day", () => {

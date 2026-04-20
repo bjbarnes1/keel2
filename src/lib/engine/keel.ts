@@ -439,17 +439,42 @@ export function listCommitmentBillOccurrences(input: {
   }).filter((event) => event.type === "bill");
 }
 
+/**
+ * Builds the projected-cashflow timeline.
+ *
+ * `asOf` is the anchor for "now" — the starting available-money floor. `startDate`
+ * (optional, defaults to `asOf`) is the lower bound of returned events. When
+ * `startDate > asOf` the running balance is walked from `availableMoney` through
+ * every event between `asOf` and `startDate` so the first returned event reflects
+ * the correct balance (required for chunked loading of week 4+ windows).
+ */
 export function buildProjectionTimeline(input: {
   availableMoney: number;
   asOf: Date;
-  horizonDays: number;
+  /** Lower bound for returned events. Defaults to `asOf`. */
+  startDate?: Date;
+  /** Size of the returned window in days, measured from `startDate`. Defaults to 42. */
+  horizonDays?: number;
   incomes: EngineIncome[];
   commitments: EngineCommitment[];
   skips?: SkipInput[];
 }) {
+  const horizonDays = input.horizonDays ?? 42;
+  const startDate = input.startDate ?? input.asOf;
+
+  // Window end (inclusive) = startDate + horizonDays. Generation horizon must cover
+  // the window end even when startDate > asOf.
+  const rangeEndMs = startDate.getTime() + horizonDays * 86_400_000;
+  const asOfEndMs = input.asOf.getTime() + horizonDays * 86_400_000;
+  const generationEndMs = Math.max(asOfEndMs, rangeEndMs);
+  const generationHorizonDays = Math.max(
+    0,
+    Math.ceil((generationEndMs - input.asOf.getTime()) / 86_400_000),
+  );
+
   const baseline = collectScheduledProjectionEvents({
     asOf: input.asOf,
-    horizonDays: input.horizonDays,
+    horizonDays: generationHorizonDays,
     incomes: input.incomes,
     commitments: input.commitments,
   });
@@ -463,19 +488,56 @@ export function buildProjectionTimeline(input: {
     cashflow.filter((event) => event.type === "bill").map((event) => [event.id, event.amount]),
   );
 
-  let runningAvailableMoney = input.availableMoney;
+  const startIso = toIsoDate(startOfUtcDay(startDate));
+  const endIso = toIsoDate(startOfUtcDay(new Date(rangeEndMs)));
 
-  return baseline.map((event) => {
+  let runningAvailableMoney = input.availableMoney;
+  const out: ProjectionEvent[] = [];
+
+  for (const event of baseline) {
     runningAvailableMoney =
       event.type === "income"
         ? roundCurrency(runningAvailableMoney + event.amount)
         : roundCurrency(runningAvailableMoney - (cashflowBillAmountById.get(event.id) ?? 0));
 
-    return {
-      ...event,
-      projectedAvailableMoney: roundCurrency(runningAvailableMoney),
-    } satisfies ProjectionEvent;
-  });
+    if (event.date >= startIso && event.date <= endIso) {
+      out.push({
+        ...event,
+        projectedAvailableMoney: roundCurrency(runningAvailableMoney),
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Returns the projected available money as of `target`.
+ *
+ * `events` must be sorted ascending by `date` (this is the shape emitted by
+ * `buildProjectionTimeline`). The function walks until it passes `target`, then
+ * returns the last event's `projectedAvailableMoney` (step function, inclusive
+ * of `target`). Designed for gesture-frame lookups — O(n) worst case with an
+ * early break as soon as we cross `target`.
+ */
+export function availableMoneyAt(
+  target: Date | string,
+  events: ProjectionEvent[],
+  startingAvailableMoney: number,
+): number {
+  const targetIso =
+    typeof target === "string" ? target : toIsoDate(startOfUtcDay(target));
+
+  let last: ProjectionEvent | null = null;
+  for (const event of events) {
+    if (event.date <= targetIso) {
+      last = event;
+    } else {
+      break;
+    }
+  }
+
+  return last?.projectedAvailableMoney ?? startingAvailableMoney;
 }
 
 /** Pure integration-style helper for tests (no Prisma). */

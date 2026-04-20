@@ -66,4 +66,5 @@ export {
   getDashboardSnapshot,
   getCommitmentSkipPreviewBundle,
   getProjectionEngineInput,
+  buildProjectionChunkFromState,
 } from "./dashboard";
