@@ -1,3 +1,13 @@
+/**
+ * Sentence classifier for the Capture flow (“Rent is $500 weekly…”).
+ *
+ * Routes free text into commitment vs income vs wealth asset buckets before the heavier
+ * parsers run. Returns `unknown` when the model is unavailable or the sentence is not
+ * clearly financial — callers should fall back to manual forms.
+ *
+ * @module lib/ai/classify-capture
+ */
+
 import { z } from "zod";
 
 import { getAnthropicClient } from "@/lib/ai/client";

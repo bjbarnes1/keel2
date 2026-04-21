@@ -1,3 +1,9 @@
+/**
+ * Manual commitment form posting to `createCommitmentAction` (Server Action).
+ *
+ * @module app/commitments/new/manual/page
+ */
+
 import type { ReactNode } from "react";
 
 import { createCommitmentAction } from "@/app/actions/keel";

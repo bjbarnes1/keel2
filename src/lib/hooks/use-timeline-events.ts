@@ -13,6 +13,8 @@
  * `planFetch`, `mergeEvents`, `makeRangeKey`) so the React hook itself is a thin effect
  * layer. Tests target the pure pieces directly.
  *
+ * @module lib/hooks/use-timeline-events
+ *
  * Public contract (consumer-facing):
  *   - `events` — the full loaded window, sorted ascending by date.
  *   - `eventsInViewport` — filtered to [focalDate - 7d, focalDate + 7d].

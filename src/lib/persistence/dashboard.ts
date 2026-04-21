@@ -1,3 +1,18 @@
+/**
+ * Dashboard aggregation: builds `DashboardSnapshot` for the home + timeline surfaces.
+ *
+ * Responsibilities:
+ * - Loads budget-scoped entities (incomes, commitments, goals, skips) either from
+ *   Prisma or the JSON demo store.
+ * - Runs pure engine functions (`calculateAvailableMoney`, `buildProjectionTimeline`)
+ *   to produce `availableMoney`, `timeline`, and multi-horizon forecasts.
+ * - Joins spend rollups (`spendTransaction` sums) for “actual vs planned” insights.
+ *
+ * `unstable_noStore` is applied on hot paths so Next never caches personalized numbers.
+ *
+ * @module lib/persistence/dashboard
+ */
+
 import { unstable_noStore as noStore } from "next/cache";
 
 import {
@@ -32,6 +47,10 @@ import { formatShortDate, readState, type StoredKeelState } from "./state";
 
 type ProjectionEvent = ReturnType<typeof buildProjectionTimeline>[number];
 
+/**
+ * Loads commitments and aggregates spend (last 365 UTC days, negative amounts only) by `commitmentId`.
+ * Used for “actual vs planned” on the dashboard when Prisma + auth are configured.
+ */
 async function fetchSpendAttributionRollups(input: { budgetId: string }) {
   const prisma = getPrismaClient();
 
@@ -81,7 +100,12 @@ async function fetchSpendAttributionRollups(input: { budgetId: string }) {
   return { annualSpendActualToDate, spendByCommitment };
 }
 
-// Fix #5: build timeline once for the longest horizon (365d), then filter for shorter spans.
+/**
+ * Samples projected available money along a horizon for compact sparkline arrays.
+ *
+ * Builds once from the longest engine run (see call sites) then reuses the same event
+ * stream for 30/90/365-day windows — avoids triple `buildProjectionTimeline` work.
+ */
 function sampleProjectionSparkline(
   asOf: Date,
   startingAvailableMoney: number,
@@ -119,12 +143,19 @@ function sampleProjectionSparkline(
   return sampled;
 }
 
+/**
+ * Inclusive horizon end as `YYYY-MM-DD` in UTC, `horizonDays` after `asOf`’s calendar day.
+ */
 function horizonCutoffIso(asOf: Date, horizonDays: number) {
   const cutoff = new Date(asOf);
   cutoff.setUTCDate(cutoff.getUTCDate() + horizonDays);
   return cutoff.toISOString().slice(0, 10);
 }
 
+/**
+ * Builds one {@link ForecastHorizon} slice: min/end projected balance, event counts, and a downsampled sparkline.
+ * @param allEvents Full projection stream (typically 365 days); filtered by {@link horizonCutoffIso} internally.
+ */
 function summarizeForecast(
   asOf: Date,
   allEvents: ProjectionEvent[],
@@ -161,6 +192,11 @@ function summarizeForecast(
   };
 }
 
+/**
+ * Pure assembly of {@link DashboardSnapshot} from stored state, spend rollups, and active skips.
+ * Runs {@link calculateAvailableMoney} and a single 365-day {@link buildProjectionTimeline}, then derives
+ * UI timeline (42d), forecasts (31/92/365d), and attention/skip annotations. Does not touch the database.
+ */
 function toDashboardSnapshot(
   state: StoredKeelState,
   spendRollups: {
@@ -355,6 +391,10 @@ function toDashboardSnapshot(
   };
 }
 
+/**
+ * Loads the current budget state, optional spend rollups, active skips, and returns {@link toDashboardSnapshot}.
+ * Calls `unstable_noStore` so Next does not cache per-user numbers.
+ */
 export async function getDashboardSnapshot() {
   noStore();
   const state = await readState();
@@ -372,7 +412,10 @@ export async function getDashboardSnapshot() {
   return toDashboardSnapshot(state, spendRollups, activeSkips);
 }
 
-/** Baseline cashflow + active skips for commitment skip preview UIs (list + detail). */
+/**
+ * Data for commitment skip preview UIs: scheduled bill events (no skips applied), starting available money,
+ * and persisted commitment skips. Re-fetches budget context and active skips; uses `snapshot` for balances/incomes/commitments.
+ */
 export async function getCommitmentSkipPreviewBundle(snapshot: DashboardSnapshot) {
   noStore();
   const { budget } = await getBudgetContext();
@@ -431,7 +474,10 @@ export async function getCommitmentSkipPreviewBundle(snapshot: DashboardSnapshot
   };
 }
 
-/** Auth-bound engine inputs for Ask Keel scenario math (no side effects). */
+/**
+ * Returns persisted {@link StoredKeelState} and {@link ActiveSkipsBundle} for the signed-in budget.
+ * Intended for server paths that need raw engine inputs (e.g. Ask Keel). Uses `noStore`.
+ */
 export async function getProjectionEngineInput() {
   noStore();
   const state = await readState();
@@ -440,8 +486,13 @@ export async function getProjectionEngineInput() {
 }
 
 /**
- * Pure helper — computes a projection chunk from engine state and active skips.
- * Separated from the server action so unit tests can exercise chunking without Prisma/Supabase.
+ * Pure helper: runs {@link calculateAvailableMoney} with goal-skip adjustments, then {@link buildProjectionTimeline}
+ * for `[startDateIso, startDateIso + horizonDays)`. Safe for unit tests without DB.
+ *
+ * @param input.state Serialized Keel state (balances, incomes, commitments, goals).
+ * @param input.activeSkips Commitment and goal skips applied inside the projection.
+ * @param input.startDateIso Chunk start (`YYYY-MM-DD` UTC).
+ * @param input.horizonDays Length of the chunk in days from the start date.
  */
 export function buildProjectionChunkFromState(input: {
   state: StoredKeelState;

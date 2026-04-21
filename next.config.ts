@@ -1,3 +1,12 @@
+/**
+ * Next.js build/runtime configuration.
+ *
+ * Historical URL paths (`/bills`, `/incomes`, …) redirect to the current IA so
+ * bookmarks and marketing links keep working after the Commitments / Settings rename.
+ *
+ * @module next.config
+ */
+
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {

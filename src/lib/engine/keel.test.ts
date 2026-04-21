@@ -1,3 +1,5 @@
+/** Vitest: cashflow engine (`keel.ts`) — reserves, timelines, `availableMoneyAt`. */
+
 import { describe, expect, it } from "vitest";
 
 import {

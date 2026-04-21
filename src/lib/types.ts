@@ -1,3 +1,19 @@
+/**
+ * Domain and view-model types shared across the app.
+ *
+ * These are intentionally **not** Prisma-generated types: they describe the shapes
+ * the UI and pure engine code consume after persistence mapping. Financial fields
+ * are plain `number` (AUD, same currency throughout). Dates in views are split into:
+ * - human `string` labels (`nextPayDate`) for display
+ * - optional ISO `YYYY-MM-DD` fields (`nextPayDateIso`) for sorting / scheduling
+ *
+ * Projection rows (`ProjectionEventView`) carry both presentation flags (skip tinting,
+ * attention state) and engine-aligned amounts; see `src/lib/engine/keel.ts` for how
+ * balances are computed.
+ *
+ * @module lib/types
+ */
+
 export type PayFrequency = "weekly" | "fortnightly" | "monthly";
 
 export type CommitmentFrequency =

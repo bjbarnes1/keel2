@@ -1,3 +1,5 @@
+/** Vitest: Zod + `buildProjectionChunkFromState` (server action glue, no live DB). */
+
 import { describe, expect, it } from "vitest";
 
 import { loadProjectionChunkInputSchema } from "@/lib/engine/projection-chunk-schema";

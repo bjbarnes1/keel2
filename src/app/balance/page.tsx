@@ -1,3 +1,9 @@
+/**
+ * Bank balance update sheet target (`updateBankBalanceAction`).
+ *
+ * @module app/balance/page
+ */
+
 import Link from "next/link";
 
 import { updateBankBalanceAction } from "@/app/actions/keel";

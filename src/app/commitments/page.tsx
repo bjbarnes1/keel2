@@ -1,3 +1,9 @@
+/**
+ * Commitments index: server-loads snapshot + skip preview bundle, renders browse client.
+ *
+ * @module app/commitments/page
+ */
+
 import { annualizeAmount } from "@/lib/engine/keel";
 import {
   getCommitmentSkipPreviewBundle,

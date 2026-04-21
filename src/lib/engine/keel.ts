@@ -1,3 +1,23 @@
+/**
+ * Core cashflow engine: scheduling, reserves, available money, and projection timelines.
+ *
+ * **Pure domain layer** — no I/O, no React. Persistence maps DB rows into the small
+ * `EngineIncome` / `EngineCommitment` / `EngineGoal` shapes consumed here.
+ *
+ * Major concepts:
+ * - *Available money* — bank balance minus goal envelopes and per-commitment reserves
+ *   computed against the primary pay cycle (`calculateAvailableMoney`).
+ * - *Projection timeline* — deterministic forward simulation of pay + bill events with
+ *   running balances; commitment skips mutate bill *cashflow* amounts via `skips.ts`
+ *   before the walk (`buildProjectionTimeline`).
+ * - *Chunked windows* — optional `startDate` + `horizonDays` let the Timeline load later
+ *   weeks without resetting balances to zero (warm-up walk from `asOf`).
+ *
+ * All calendar math uses UTC midnight (`T00:00:00Z`) to avoid TZ drift across clients.
+ *
+ * @module lib/engine/keel
+ */
+
 import type { CommitmentFrequency, CommitmentSkipInput, PayFrequency, SkipInput } from "@/lib/types";
 
 import {
@@ -151,6 +171,14 @@ function compareUtcDate(left: Date, right: Date) {
   return 0;
 }
 
+// --- Pay cycle window --------------------------------------------------------
+
+/**
+ * Locates the current pay period around the user’s primary income schedule.
+ *
+ * Used by dashboard copy and some horizon labels; not authoritative for engine dates
+ * (those come from `nextPayDate` on each income row).
+ */
 export function getCurrentPayPeriod(
   primaryIncome: EngineIncome | null,
   asOf: Date,
@@ -317,6 +345,15 @@ export function calculateCommitmentReserve(
   };
 }
 
+// --- Available money (reserves + goals) ------------------------------------
+
+/**
+ * Computes discretionary cash after setting aside money for upcoming bills and goals.
+ *
+ * Each commitment gets a `CommitmentReserve` (reserved amount + % funded) based on
+ * how many pay days remain before the next due date. Goals subtract `contributionPerPay`
+ * for each pay event until the target is met (simplified model — see implementation).
+ */
 export function calculateAvailableMoney(input: {
   bankBalance: number;
   incomes: EngineIncome[];
@@ -364,6 +401,15 @@ export function calculateAvailableMoney(input: {
   };
 }
 
+// --- Scheduled events (income + bills) ---------------------------------------
+
+/**
+ * Expands recurring incomes/commitments into discrete dated cashflow events up to
+ * `asOf + horizonDays`.
+ *
+ * This is the *unskipped* baseline; `buildProjectionTimeline` layers skip adjustments
+ * on top before computing balances.
+ */
 export function collectScheduledProjectionEvents(input: {
   asOf: Date;
   horizonDays: number;

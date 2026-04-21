@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Header avatar control: sign-out + navigation via Supabase browser client + portal menu.
+ *
+ * @module components/keel/avatar-menu
+ */
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";

@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Archive commitment confirmation (`archiveCommitmentAction`).
+ *
+ * @module components/keel/commitment-archive-sheet
+ */
+
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 

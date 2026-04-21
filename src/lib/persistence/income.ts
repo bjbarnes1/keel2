@@ -1,3 +1,13 @@
+/**
+ * Income CRUD and pay-date versioning.
+ *
+ * The Prisma implementation stores time-varying fields on `IncomeVersion` so historical
+ * projections can be recomputed accurately. The demo-store path keeps parallel arrays
+ * on the JSON document.
+ *
+ * @module lib/persistence/income
+ */
+
 import { randomUUID } from "node:crypto";
 
 import { unstable_noStore as noStore } from "next/cache";

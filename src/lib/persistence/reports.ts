@@ -1,3 +1,12 @@
+/**
+ * Read models for analytics-style pages (actual vs planned spend by category).
+ *
+ * Combines scheduled commitment amounts (engine helpers in `lib/spend/actual-vs-planned`)
+ * with summed spend transactions for a selected period.
+ *
+ * @module lib/persistence/reports
+ */
+
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getPrismaClient } from "@/lib/prisma";

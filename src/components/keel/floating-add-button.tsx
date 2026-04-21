@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * FAB-style add button used on browse surfaces.
+ *
+ * @module components/keel/floating-add-button
+ */
+
 import Link from "next/link";
 
 type FloatingAddButtonProps = {

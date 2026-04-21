@@ -1,5 +1,14 @@
 "use server";
 
+/**
+ * Server Actions for spend CSV import, account creation, and reconciliation updates.
+ *
+ * Bridges `lib/spend/*` parsers with `lib/persistence/spend` writers. Mapping JSON
+ * embedded in forms is trusted only after `prepareSpendCsvPreview` validation on the client.
+ *
+ * @module app/actions/keel-spend
+ */
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 

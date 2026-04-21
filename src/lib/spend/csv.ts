@@ -1,3 +1,13 @@
+/**
+ * Bank CSV parsing: header detection, column mapping, row normalization.
+ *
+ * Pure functions plus small helpers for Australian bank export quirks (debit/credit split
+ * columns, signed amount columns, date formats). Used by `prepareSpendCsvPreview` and
+ * `commitSpendCsvImport`.
+ *
+ * @module lib/spend/csv
+ */
+
 export type SpendCsvMapping = {
   dateColumn: string;
   /** Single signed amount column (negative = spend). */

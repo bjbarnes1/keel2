@@ -1,3 +1,14 @@
+/**
+ * Ask Keel intent routing + structured extraction.
+ *
+ * - **Routing:** `classifyAskIntent` uses Haiku with a JSON-only system prompt; malformed `kind` falls back to `"answer"`.
+ * - **Extraction:** `extractHypotheticalCommitmentSkips` maps chat to `CommitmentSkipInput[]`, intersecting with an allow-list of commitment IDs.
+ *
+ * **Guardrails:** validate every model payload (Zod / safeParse). Never trust raw JSON for IDs or dates.
+ *
+ * @module lib/ai/classify-ask
+ */
+
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
@@ -13,7 +24,11 @@ export type AskIntentClassification = {
 };
 
 /**
- * Lightweight intent routing for Ask Keel (cashflow vs hypothetical skip scenarios).
+ * Routes a single user message into Ask Keel behavior: normal answer, hypothetical skip scenario, or out-of-scope.
+ *
+ * @param client Configured Anthropic client (caller supplies credentials).
+ * @param message Raw user text from the chat surface.
+ * @returns `{ kind, rationale? }`. If JSON is missing/invalid `kind`, returns `{ kind: "answer" }`.
  */
 export async function classifyAskIntent(
   client: Anthropic,
@@ -48,8 +63,10 @@ Examples:
   return { kind: "answer" };
 }
 
+/** Strict `YYYY-MM-DD` for skip original dates (matches engine expectations). */
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+/** Shape of one model-emitted hypothetical commitment skip before allow-list filtering. */
 const hypotheticalSkipSchema = z.object({
   kind: z.literal("commitment"),
   commitmentId: z.string().min(1),
@@ -60,7 +77,11 @@ const hypotheticalSkipSchema = z.object({
 
 /**
  * Best-effort extraction of hypothetical commitment skips from natural language.
- * Only returns skips whose `commitmentId` is in `allowedCommitmentIds`.
+ *
+ * Drops any row that fails Zod, references an ID not in `allowedCommitmentIds`, or uses `SPREAD` without `spreadOverN`.
+ * Returns `[]` when the allow-list is empty (nothing to map onto).
+ *
+ * @param allowedCommitmentIds Budget-scoped commitment IDs the model is allowed to cite (injected into the system prompt).
  */
 export async function extractHypotheticalCommitmentSkips(
   client: Anthropic,

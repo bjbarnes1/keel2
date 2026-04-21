@@ -1,3 +1,5 @@
+/** Vitest: timeline events reducer, merge, and fetch planning logic. */
+
 import { describe, expect, it } from "vitest";
 
 import type { ProjectionEvent } from "@/lib/engine/keel";

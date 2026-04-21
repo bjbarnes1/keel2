@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Goal skip creation sheet (`createGoalSkip` Server Action + engine preview).
+ *
+ * @module components/keel/goal-skip-sheet
+ */
+
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 

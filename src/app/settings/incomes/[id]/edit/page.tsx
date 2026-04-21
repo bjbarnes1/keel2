@@ -1,3 +1,9 @@
+/**
+ * Versioned income edit (`updateIncomeFutureAction` — effective-dated changes).
+ *
+ * @module app/settings/incomes/[id]/edit/page
+ */
+
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 

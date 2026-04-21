@@ -1,3 +1,9 @@
+/**
+ * Profile placeholder surface.
+ *
+ * @module app/profile/page
+ */
+
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 
 export default function ProfilePage() {

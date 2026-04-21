@@ -1,6 +1,20 @@
+/**
+ * Authentication and budget tenancy helpers.
+ *
+ * `getAuthedUser` is the choke point for Server Actions / persistence: it reads the
+ * Supabase JWT via `createSupabaseServerClient()` and throws if absent.
+ *
+ * `getBudgetContext` resolves the caller’s active `Budget` row (creating a household
+ * on first login) and verifies membership — all multi-tenant queries should hang off
+ * the returned `budget.id`.
+ *
+ * @module lib/persistence/auth
+ */
+
 import { getPrismaClient } from "@/lib/prisma";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+/** @throws If Supabase returns an error or there is no authenticated user. */
 export async function getAuthedUser() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
@@ -9,6 +23,11 @@ export async function getAuthedUser() {
   return data.user;
 }
 
+/**
+ * Ensures a `User` row exists and returns their first (or newly-created) budget.
+ *
+ * Side effects: `upsert` on `User`, possible `budget.create` with owner membership.
+ */
 export async function getOrCreateActiveBudget(input: {
   userId: string;
   email: string;
@@ -42,6 +61,12 @@ export async function getOrCreateActiveBudget(input: {
   return budget;
 }
 
+/**
+ * Full request context for persistence functions: authenticated user + budget + membership.
+ *
+ * @throws If the user record exists but has no `BudgetMember` row for the resolved budget
+ *         (shouldn’t happen after `getOrCreateActiveBudget`, but guarded anyway).
+ */
 export async function getBudgetContext() {
   const prisma = getPrismaClient();
   const authedUser = await getAuthedUser();

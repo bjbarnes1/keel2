@@ -1,3 +1,12 @@
+/**
+ * Supabase OAuth / magic-link callback: exchanges `code` or verifies OTP, sets cookies,
+ * redirects to `next` (default `/`).
+ *
+ * Route Handler — runs on the server only; must remain reachable without prior session.
+ *
+ * @module app/auth/callback/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";

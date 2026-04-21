@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Capture page panel: calls `/api/capture` + Server Actions to persist parsed entities.
+ *
+ * @module components/keel/capture-keel-panel
+ */
+
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";

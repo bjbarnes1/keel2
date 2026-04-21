@@ -1,3 +1,9 @@
+/**
+ * Static help / feedback placeholder.
+ *
+ * @module app/help/page
+ */
+
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 
 export default function HelpPage() {

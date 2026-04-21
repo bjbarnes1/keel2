@@ -1,3 +1,17 @@
+/**
+ * JSON file–backed persistence for local development without Postgres.
+ *
+ * Stores a single `StoredKeelState` document under `.keel/state.json` (path resolved
+ * relative to the process cwd). Versioned income/commitment rows use effective dating
+ * via `pickIncomeVersionAt` / `pickCommitmentVersionAt` so edits behave like the Prisma
+ * “append-only versions” model.
+ *
+ * **Not for production:** concurrent writes are last-write-wins; no RLS. When
+ * `hasConfiguredDatabase()` is true, callers should use Prisma modules instead.
+ *
+ * @module lib/persistence/state
+ */
+
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 

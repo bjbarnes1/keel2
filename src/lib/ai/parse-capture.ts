@@ -1,8 +1,32 @@
+/**
+ * Natural-language → structured finance objects for Capture + Ask flows.
+ *
+ * Responsibilities:
+ * - Define Zod schemas for commitments, incomes, and wealth assets (`*CaptureSchema`).
+ * - Call Anthropic with narrowly scoped system prompts; require JSON-only responses.
+ * - Normalize messy model output (`extractJsonObject`, repair passes) before validation.
+ * - Compute `perPay` using engine helpers so UI and engine agree on cadence math.
+ *
+ * **Security:** this module never receives raw credentials; only user-typed descriptions.
+ * Rate limiting is enforced in route handlers via `assertWithinAiRateLimit`.
+ *
+ * @module lib/ai/parse-capture
+ */
+
 import { z } from "zod";
 
 import { getAnthropicClient } from "@/lib/ai/client";
 import { calculatePerPayAmount } from "@/lib/engine/keel";
 
+// --- Zod wire schemas (validated shapes for Server Actions / forms) ------------
+
+/**
+ * Parsed bill / recurring commitment from Capture or Ask flows.
+ *
+ * - `amount`: currency per **billing cycle** (not annualized).
+ * - `perPay`: money to set aside each primary pay period (fortnightly assumption when auto).
+ * - `perPayAuto`: when true, `perPay` was derived; when false, user/model fixed it explicitly.
+ */
 export const commitmentCaptureSchema = z.object({
   name: z.string().min(1),
   amount: z.number().finite().nonnegative(),
@@ -18,6 +42,7 @@ export const commitmentCaptureSchema = z.object({
 
 export type CommitmentCapturePayload = z.infer<typeof commitmentCaptureSchema>;
 
+/** Pay-cycle income: amount per pay; `nextPayDate` nullable when unknown. */
 export const incomeCaptureSchema = z.object({
   name: z.string().min(1),
   amount: z.number().finite().nonnegative(),
@@ -31,6 +56,10 @@ export const incomeCaptureSchema = z.object({
 
 export type IncomeCapturePayload = z.infer<typeof incomeCaptureSchema>;
 
+/**
+ * Manual wealth holding row. Either `unitPrice × quantity` or `valueOverride` conveys total value.
+ * `asOf` optional valuation date for snapshots.
+ */
 export const assetCaptureSchema = z.object({
   name: z.string().min(1),
   assetType: z.string().min(1),
@@ -47,6 +76,7 @@ export const assetCaptureSchema = z.object({
 
 export type AssetCapturePayload = z.infer<typeof assetCaptureSchema>;
 
+/** Allowed commitment cadence literals after normalization. */
 const validCommitmentFrequencies = new Set<CommitmentCapturePayload["frequency"]>([
   "weekly",
   "fortnightly",
@@ -57,6 +87,7 @@ const validCommitmentFrequencies = new Set<CommitmentCapturePayload["frequency"]
 
 const validIncomeFrequencies = new Set<IncomeCapturePayload["frequency"]>(["weekly", "fortnightly", "monthly"]);
 
+/** Maps free-form / lowercase category hints to canonical dashboard category labels. */
 const categoryMap = new Map<string, string>([
   ["housing", "Housing"],
   ["insurance", "Insurance"],
@@ -69,6 +100,10 @@ const categoryMap = new Map<string, string>([
   ["other", "Other"],
 ]);
 
+/**
+ * Deterministic regex fixtures when `ANTHROPIC_API_KEY` is unset — keeps demos/tests stable.
+ * Not a general parser; `fallbackCommitmentParse` uses this before naive dollar extraction.
+ */
 const billExamples = [
   {
     test: /car insurance/i,
@@ -105,6 +140,12 @@ const billExamples = [
   },
 ];
 
+// --- Response repair (model output → JSON.parse) --------------------------------
+
+/**
+ * Pulls the first `{ ... }` block from model text, stripping ```json fences if present.
+ * @throws If no object-shaped JSON substring exists (model echoed prose or invalid).
+ */
 export function extractJsonObject(text: string) {
   const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fencedMatch?.[1] ?? text;
@@ -118,6 +159,10 @@ export function extractJsonObject(text: string) {
   return candidate.slice(start, end + 1);
 }
 
+/**
+ * Coerces model output to a finite number: accepts number or strings like `"$1,234.50"`.
+ * @throws If the value cannot be interpreted as money.
+ */
 export function parseMoneyNumber(value: unknown) {
   if (typeof value === "number") {
     return value;
@@ -134,6 +179,10 @@ export function parseMoneyNumber(value: unknown) {
   throw new Error("Unable to parse money amount.");
 }
 
+/**
+ * Maps English frequency phrases to engine enums (`"per term"` → quarterly).
+ * @throws On unrecognized input (forces explicit repair upstream).
+ */
 export function normalizeFrequency(value: unknown): CommitmentCapturePayload["frequency"] {
   if (typeof value !== "string") {
     throw new Error("Frequency must be a string.");
@@ -154,6 +203,9 @@ export function normalizeFrequency(value: unknown): CommitmentCapturePayload["fr
   throw new Error(`Unsupported frequency: ${value}`);
 }
 
+/**
+ * Income cadence normalizer; **defaults to `fortnightly`** when ambiguous (Australian primary case).
+ */
 export function normalizeIncomeFrequency(value: unknown): IncomeCapturePayload["frequency"] {
   if (typeof value !== "string") {
     throw new Error("Income frequency must be a string.");
@@ -171,6 +223,7 @@ export function normalizeIncomeFrequency(value: unknown): IncomeCapturePayload["
   return "fortnightly";
 }
 
+/** Collapses unknown categories to `"Other"` — never throws. */
 export function normalizeCategory(value: unknown): CommitmentCapturePayload["category"] {
   if (typeof value !== "string") {
     return "Other";
@@ -181,6 +234,11 @@ export function normalizeCategory(value: unknown): CommitmentCapturePayload["cat
   return categoryMap.get(normalized) ?? "Other";
 }
 
+/**
+ * Produces `YYYY-MM-DD` or `null`. Accepts ISO dates or parseable date strings.
+ * Invalid dates return `null` (soft) except empty string after trim → `null`.
+ * @throws If value is non-null and not a string (strict object hygiene from Zod repair).
+ */
 export function normalizeDate(value: unknown): string | null {
   if (value == null) {
     return null;
@@ -212,6 +270,9 @@ export function normalizeDate(value: unknown): string | null {
   ].join("-");
 }
 
+// --- No-LLM fallbacks (missing API key or offline) ------------------------------
+
+/** Heuristic commitment parse: known examples, then dollar + keyword guessing. */
 function fallbackCommitmentParse(description: string) {
   const matchedExample = billExamples.find((example) => example.test.test(description));
 
@@ -249,6 +310,10 @@ function fallbackCommitmentParse(description: string) {
   };
 }
 
+/**
+ * Strict object → `CommitmentCapturePayload` via Zod. Fills `perPay` with engine math when omitted.
+ * @throws ZodError or parse errors from nested normalizers.
+ */
 export function normalizeCommitmentCapture(raw: unknown): CommitmentCapturePayload {
   if (!raw || typeof raw !== "object") {
     throw new Error("AI response did not contain an object.");
@@ -275,6 +340,12 @@ export function normalizeCommitmentCapture(raw: unknown): CommitmentCapturePaylo
   });
 }
 
+/**
+ * LLM extraction for a bill sentence (Sonnet). Falls back to `fallbackCommitmentParse` without API key.
+ *
+ * Side effects: network call to Anthropic when configured.
+ * @throws Empty input, JSON repair failures, or validation errors from `normalizeCommitmentCapture`.
+ */
 export async function parseCommitmentCapture(sentence: string) {
   const trimmed = sentence.trim();
 
@@ -318,6 +389,14 @@ Rules:
   return normalizeCommitmentCapture(parsed);
 }
 
+// ---------------------------------------------------------------------------
+// Income capture (LLM + fallback)
+// ---------------------------------------------------------------------------
+
+/**
+ * Heuristic income parse when Anthropic is unavailable (dev/demo).
+ * Pulls the first money token for amount and infers weekly/monthly/fortnightly from keywords.
+ */
 function fallbackIncomeParse(description: string) {
   const amountMatch = description.match(/\$?\s*([\d,.]+)/);
   const amount = amountMatch ? Number.parseFloat(amountMatch[1].replaceAll(",", "")) : 0;
@@ -335,6 +414,10 @@ function fallbackIncomeParse(description: string) {
   };
 }
 
+/**
+ * Validates and coerces arbitrary JSON into {@link IncomeCapturePayload}.
+ * @throws When `raw` is not an object or Zod rejects a field.
+ */
 export function normalizeIncomeCapture(raw: unknown): IncomeCapturePayload {
   if (!raw || typeof raw !== "object") {
     throw new Error("AI response did not contain an object.");
@@ -351,6 +434,10 @@ export function normalizeIncomeCapture(raw: unknown): IncomeCapturePayload {
   });
 }
 
+/**
+ * Parses a natural-language income description via Claude, or {@link fallbackIncomeParse} if no client.
+ * @param sentence User text; must be non-empty after trim.
+ */
 export async function parseIncomeCapture(sentence: string) {
   const trimmed = sentence.trim();
   if (!trimmed) {
@@ -388,6 +475,14 @@ Rules:
   return normalizeIncomeCapture(parsed);
 }
 
+// ---------------------------------------------------------------------------
+// Asset / investment capture (LLM + fallback)
+// ---------------------------------------------------------------------------
+
+/**
+ * Heuristic asset parse when Anthropic is unavailable.
+ * If a 3–5 letter token looks like a ticker, treats value as holding size; otherwise value is unit price with quantity 1.
+ */
 function fallbackAssetParse(description: string) {
   const amountMatch = description.match(/\$?\s*([\d,.]+)/);
   const value = amountMatch ? Number.parseFloat(amountMatch[1].replaceAll(",", "")) : 0;
@@ -406,6 +501,10 @@ function fallbackAssetParse(description: string) {
   };
 }
 
+/**
+ * Validates and coerces arbitrary JSON into {@link AssetCapturePayload}.
+ * @throws When `raw` is not an object or Zod rejects a field.
+ */
 export function normalizeAssetCapture(raw: unknown): AssetCapturePayload {
   if (!raw || typeof raw !== "object") {
     throw new Error("AI response did not contain an object.");
@@ -424,6 +523,10 @@ export function normalizeAssetCapture(raw: unknown): AssetCapturePayload {
   });
 }
 
+/**
+ * Parses a natural-language held-asset description via Claude, or {@link fallbackAssetParse} if no client.
+ * @param sentence User text; must be non-empty after trim.
+ */
 export async function parseAssetCapture(sentence: string) {
   const trimmed = sentence.trim();
   if (!trimmed) {

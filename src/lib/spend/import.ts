@@ -1,3 +1,9 @@
+/**
+ * Orchestrates CSV preview: parse raw text, infer or validate column mapping, surface issues.
+ *
+ * @module lib/spend/import
+ */
+
 import {
   type SpendCsvMapping,
   buildSpendRows,

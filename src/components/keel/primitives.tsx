@@ -1,3 +1,15 @@
+/**
+ * Shared layout and presentational primitives for Keel screens.
+ *
+ * Contains `AppShell` (header + tab bar), cards, dashboard sections, and small atoms
+ * used across routes. Mostly Server Component–friendly; individual exports may be
+ * client-only when they embed interactive children.
+ *
+ * **Styling:** composes Tailwind with `cn()` and CSS variables from `globals.css`.
+ *
+ * @module components/keel/primitives
+ */
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowLeft, ChevronRight, Plus } from "lucide-react";

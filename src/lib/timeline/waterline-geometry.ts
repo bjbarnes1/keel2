@@ -4,6 +4,8 @@
  * Everything in this file is a pure function of its inputs so it can be unit
  * tested without React, SVG, or a browser. The chart component imports from
  * here and stays focused on rendering, gestures, and effects.
+ *
+ * @module lib/timeline/waterline-geometry
  */
 
 import type { ProjectionEvent } from "@/lib/engine/keel";

@@ -1,3 +1,16 @@
+/**
+ * Ask Keel HTTP API: streaming-free JSON responses for the Ask panel.
+ *
+ * Route Handler (Node runtime by default): authenticates via Supabase session, rate limits,
+ * then runs intent classification + either direct LLM answer or scenario projection using
+ * `buildTimelineForTest` / skip overlays. Response shape validated by `askResponseSchema`.
+ *
+ * **Security:** must stay in sync with middleware exemption — never assume edge middleware
+ * authenticated this request.
+ *
+ * @module app/api/ask-keel/route
+ */
+
 import { NextResponse } from "next/server";
 import { z } from "zod";
 

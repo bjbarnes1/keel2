@@ -1,3 +1,9 @@
+/**
+ * Voice/text capture entry: wraps `CaptureKeelPanel` for quick bill/income/asset intake.
+ *
+ * @module app/capture/page
+ */
+
 import Link from "next/link";
 import { Suspense } from "react";
 

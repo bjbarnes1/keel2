@@ -1,3 +1,9 @@
+/**
+ * Settings index — navigation cards into household, incomes, categories, wealth.
+ *
+ * @module app/settings/page
+ */
+
 import Link from "next/link";
 
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";

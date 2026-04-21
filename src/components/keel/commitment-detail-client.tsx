@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Commitment detail interactive shell: sheets for skip/edit/archive, upcoming list.
+ *
+ * @module components/keel/commitment-detail-client
+ */
+
 import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";

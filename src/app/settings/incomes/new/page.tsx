@@ -1,3 +1,9 @@
+/**
+ * Create income form (`createIncomeAction`).
+ *
+ * @module app/settings/incomes/new/page
+ */
+
 import type { ReactNode } from "react";
 
 import { createIncomeAction } from "@/app/actions/keel";

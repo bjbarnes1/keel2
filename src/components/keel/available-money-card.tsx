@@ -10,6 +10,8 @@
  *     the value is honest.
  *   - 200ms cubic-bezier(0.32, 0.72, 0, 1) — matches --ease-snap in globals.
  *   - `prefers-reduced-motion` collapses to an instant swap.
+ *
+ * @module components/keel/available-money-card
  */
 
 import { useEffect, useRef, useState } from "react";

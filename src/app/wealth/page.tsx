@@ -1,3 +1,9 @@
+/**
+ * Tab-bar wealth overview (requires DB — shows fallback copy otherwise).
+ *
+ * @module app/wealth/page
+ */
+
 import Link from "next/link";
 
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";

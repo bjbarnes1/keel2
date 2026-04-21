@@ -15,6 +15,8 @@
  *       * focal dot slide: 280ms, cubic-bezier(0.34, 1.56, 0.64, 1) (slight overshoot).
  *       * pulse ring: 2s ease-in-out loop, pauses during active gesture.
  *       * Reduced-motion: instant transitions, no pulse, no momentum.
+ *
+ * @module components/keel/waterline-chart
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";

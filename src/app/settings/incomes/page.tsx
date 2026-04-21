@@ -1,3 +1,9 @@
+/**
+ * Incomes list: set primary, delete, deep-link to edit.
+ *
+ * @module app/settings/incomes/page
+ */
+
 import Link from "next/link";
 
 import {

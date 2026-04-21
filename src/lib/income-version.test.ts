@@ -1,3 +1,5 @@
+/** Vitest: income effective-range selection. */
+
 import { describe, expect, it } from "vitest";
 
 import { pickIncomeVersionAt } from "./income-version";

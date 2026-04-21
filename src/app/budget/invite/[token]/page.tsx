@@ -1,3 +1,11 @@
+/**
+ * Public-ish invite acceptance route: POSTs `acceptBudgetInviteAction` with token.
+ *
+ * Server Component wrapper around a minimal form; token is path param.
+ *
+ * @module app/budget/invite/[token]/page
+ */
+
 import { acceptBudgetInviteAction } from "@/app/actions/keel";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import { SubmitButton } from "@/components/keel/submit-button";

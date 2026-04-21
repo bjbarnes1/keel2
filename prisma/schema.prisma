@@ -1,3 +1,7 @@
+// Keel2 Postgres schema (Supabase-hosted). Multi-tenant via Budget + BudgetMember;
+// all domain tables carry `budgetId` (or inherit through relations) for isolation.
+// Spend + wealth modules extend the core commitments/incomes model.
+
 generator client {
   provider = "prisma-client-js"
 }

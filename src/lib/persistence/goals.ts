@@ -1,3 +1,11 @@
+/**
+ * Savings goal persistence (contributions, targets, optional funding income link).
+ *
+ * Smaller surface area than commitments/incomes — mostly CRUD for the goals UI.
+ *
+ * @module lib/persistence/goals
+ */
+
 import { randomUUID } from "node:crypto";
 
 import { unstable_noStore as noStore } from "next/cache";

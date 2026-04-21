@@ -1,3 +1,10 @@
+/**
+ * Timeline route shell: loads dashboard snapshot server-side for empty-state gating
+ * and attention metadata, then mounts `TimelineView` (client) for the Waterline UX.
+ *
+ * @module app/timeline/page
+ */
+
 import { AppShell } from "@/components/keel/primitives";
 import { TimelineView } from "@/components/keel/timeline-view";
 import { getDashboardSnapshot } from "@/lib/persistence/keel-store";

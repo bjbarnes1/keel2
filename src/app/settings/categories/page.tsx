@@ -1,3 +1,9 @@
+/**
+ * Category CRUD via Server Actions on `keel` module.
+ *
+ * @module app/settings/categories/page
+ */
+
 import {
   createCategoryAction,
   createSubcategoryAction,

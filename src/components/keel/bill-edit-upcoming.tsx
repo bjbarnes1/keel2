@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Upcoming bill list inside commitment edit context (skip-aware display).
+ *
+ * @module components/keel/bill-edit-upcoming
+ */
+
 import { useMemo, useState } from "react";
 
 import type { ScheduledCashflowEvent } from "@/lib/engine/skips";

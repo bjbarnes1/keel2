@@ -1,5 +1,11 @@
 "use server";
 
+/**
+ * Server Actions for wealth holdings CRUD (manual portfolio tracking).
+ *
+ * @module app/actions/keel-wealth
+ */
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 

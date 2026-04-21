@@ -1,3 +1,12 @@
+/**
+ * Effective-dating helper for commitment version rows (mirrors income versioning).
+ *
+ * Given an array of historical versions each with `[effectiveFrom, effectiveTo)`,
+ * picks the row that should apply on `asOfIso` for projection recomputation.
+ *
+ * @module lib/commitment-version
+ */
+
 import { isRangeActiveOn, type VersionRange } from "@/lib/income-version";
 
 export type CommitmentVersionSlice = VersionRange & {

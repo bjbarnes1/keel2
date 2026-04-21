@@ -1,3 +1,9 @@
+/**
+ * Add wealth holding (`createWealthHoldingAction`).
+ *
+ * @module app/settings/wealth/new/page
+ */
+
 import type { ReactNode } from "react";
 
 import { createWealthHoldingAction } from "@/app/actions/keel-wealth";

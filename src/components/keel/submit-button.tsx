@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Form submit control wired to `react-dom` `useFormStatus` pending state.
+ *
+ * @module components/keel/submit-button
+ */
+
 import { Loader2 } from "lucide-react";
 import { useFormStatus } from "react-dom";
 

@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Mobile-style swipe-to-reveal row actions (commitments list).
+ *
+ * @module components/keel/swipe-action-row
+ */
+
 import { useCallback, useRef, useState } from "react";
 
 const ACTION_WIDTH = 80;

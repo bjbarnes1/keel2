@@ -1,3 +1,9 @@
+/**
+ * Tag imported transactions with categories / commitments.
+ *
+ * @module app/spend/reconcile/page
+ */
+
 import { ReconcileRow } from "@/components/keel/reconcile-row";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import {

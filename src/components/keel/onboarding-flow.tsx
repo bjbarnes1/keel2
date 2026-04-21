@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Multi-step onboarding wizard for first-run users (client-only state machine).
+ *
+ * @module components/keel/onboarding-flow
+ */
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 

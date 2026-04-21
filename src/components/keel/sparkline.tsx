@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Tiny SVG sparkline for forecast cards (normalizes Y to viewBox height).
+ *
+ * @module components/keel/sparkline
+ */
+
 import { cn } from "@/lib/utils";
 
 function normalize(values: number[]) {

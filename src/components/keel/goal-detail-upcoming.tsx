@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Goal contributions / skip state for goal detail page.
+ *
+ * @module components/keel/goal-detail-upcoming
+ */
+
 import { useMemo, useState } from "react";
 
 import type { EngineGoal } from "@/lib/engine/keel";

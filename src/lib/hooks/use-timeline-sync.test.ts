@@ -1,3 +1,5 @@
+/** Vitest: `applyFocalUpdate` pure state transitions for chart/legend sync. */
+
 import { describe, expect, it } from "vitest";
 
 import { applyFocalUpdate, type SyncState } from "@/lib/hooks/use-timeline-sync";

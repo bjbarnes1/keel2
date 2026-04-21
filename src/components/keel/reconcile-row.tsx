@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * One spend transaction row in the reconciliation queue (classification form).
+ *
+ * @module components/keel/reconcile-row
+ */
+
 import { useMemo, useState } from "react";
 
 import { updateSpendTransactionAction } from "@/app/actions/keel-spend";

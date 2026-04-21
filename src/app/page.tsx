@@ -1,3 +1,12 @@
+/**
+ * Home dashboard: Server Component that loads `getDashboardSnapshot()` and renders
+ * available money, upcoming projection rows, and goal cards inside `AppShell`.
+ *
+ * `force-dynamic` — figures are user-specific and must not be statically cached.
+ *
+ * @module app/page
+ */
+
 import Link from "next/link";
 
 import {

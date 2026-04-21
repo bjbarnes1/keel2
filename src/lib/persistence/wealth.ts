@@ -1,3 +1,12 @@
+/**
+ * Wealth module: investment holdings, optional manual pricing overrides, snapshots.
+ *
+ * `holdingValue` centralizes how market value is derived (override vs qty × unit price)
+ * so list + totals endpoints cannot drift.
+ *
+ * @module lib/persistence/wealth
+ */
+
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getPrismaClient } from "@/lib/prisma";

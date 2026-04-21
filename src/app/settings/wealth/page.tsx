@@ -1,3 +1,9 @@
+/**
+ * Settings → wealth: snapshot + history for manual holdings.
+ *
+ * @module app/settings/wealth/page
+ */
+
 import { AppShell } from "@/components/keel/primitives";
 import { WealthOverview } from "@/components/keel/wealth-overview";
 import { getWealthHistory, getWealthSnapshot } from "@/lib/persistence/keel-store";

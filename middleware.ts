@@ -1,8 +1,20 @@
+/**
+ * Next.js middleware (edge): Supabase cookie session refresh + route protection.
+ *
+ * Architecture:
+ * - Creates a request-scoped Supabase SSR client so `getUser()` sees up-to-date JWT state.
+ * - Unauthenticated visitors to private pages are redirected to `/login?next=…`.
+ * - `/api/*` is treated as public at this layer; each API route must independently
+ *   verify the session via `createSupabaseServerClient()` so clients get JSON errors
+ *   instead of HTML redirects.
+ *
+ * @module middleware
+ */
+
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// NOTE: /api/* routes bypass middleware auth. Each handler MUST independently
-// verify the session by calling createSupabaseServerClient() and checking the user.
+/** Paths that never require a Supabase user (static internals, auth flows, programmatic APIs). */
 function isPublicPath(pathname: string) {
   if (pathname.startsWith("/_next")) return true;
   if (pathname.startsWith("/api")) return true;

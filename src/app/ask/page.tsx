@@ -1,3 +1,9 @@
+/**
+ * Ask Keel surface — thin Server Component wrapping the client `AskKeelPanel`.
+ *
+ * @module app/ask/page
+ */
+
 import Link from "next/link";
 
 import { AskKeelPanel } from "@/components/keel/ask-keel-panel";

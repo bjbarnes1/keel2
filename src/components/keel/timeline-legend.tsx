@@ -16,6 +16,8 @@
  *   - Currently-focal row gets a momentary sea-green glow (CSS, 1s) when the
  *     chart just set the focal date, telling the user "that's the event at
  *     the Now line right now".
+ *
+ * @module components/keel/timeline-legend
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";

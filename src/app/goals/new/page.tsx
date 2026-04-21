@@ -1,3 +1,9 @@
+/**
+ * Create goal form — posts via `createGoalAction`.
+ *
+ * @module app/goals/new/page
+ */
+
 import type { ReactNode } from "react";
 
 import { createGoalAction } from "@/app/actions/keel";

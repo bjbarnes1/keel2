@@ -8,6 +8,8 @@
  *
  * On desktop / browsers without Vibration API support every function is a
  * safe no-op.
+ *
+ * @module lib/haptics
  */
 
 /** Minimum spacing between successive haptics. */

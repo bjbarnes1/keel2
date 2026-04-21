@@ -1,3 +1,13 @@
+/**
+ * Parses a free-text bill description into structured fields via `parseBillDescription`.
+ *
+ * **Auth note:** this handler currently does not verify a Supabase session — it relies on
+ * same-origin browser policy and is intended for quick manual intake. If exposed to
+ * untrusted networks, add `createSupabaseServerClient` + `getUser` parity with `/api/capture`.
+ *
+ * @module app/api/parse-bill/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { parseBillDescription } from "@/lib/ai/parse-bill";

@@ -1,3 +1,5 @@
+/** Vitest: pure Waterline geometry helpers. */
+
 import { describe, expect, it } from "vitest";
 
 import type { ProjectionEvent } from "@/lib/engine/keel";

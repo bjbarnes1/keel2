@@ -1,3 +1,12 @@
+/**
+ * Capture classify + parse API (JSON in/out).
+ *
+ * Authenticates with Supabase, rate limits (`assertWithinAiRateLimit`), respects
+ * `KEEL_AI_ENABLED`. Returns structured payloads for commitments, incomes, or assets.
+ *
+ * @module app/api/capture/route
+ */
+
 import { NextResponse } from "next/server";
 
 import { classifyCaptureSentence } from "@/lib/ai/classify-capture";

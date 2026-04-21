@@ -3,6 +3,8 @@
 /**
  * useTimelineSync
  *
+ * @module lib/hooks/use-timeline-sync
+ *
  * Shared `focalDate` state for the Timeline chart and the event legend so either side
  * can drive the other without a feedback loop. The hook tags each update with its
  * `source` ("chart" | "legend" | null) so consumers can decide whether to react.

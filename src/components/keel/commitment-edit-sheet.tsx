@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Bottom sheet for editing a commitment (`updateCommitmentAction`, per-pay preview).
+ *
+ * @module components/keel/commitment-edit-sheet
+ */
+
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 

@@ -1,5 +1,14 @@
 "use client";
 
+/**
+ * Single projection event row (home + timeline lists): amount, balance hint, skip affordances.
+ *
+ * Client Component: may render as `Link` to commitment/income edit routes when not in
+ * interactive skip-restore mode.
+ *
+ * @module components/keel/projection-row
+ */
+
 import { ArrowDown, ArrowUp } from "lucide-react";
 import Link from "next/link";
 

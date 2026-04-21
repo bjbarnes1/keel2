@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Main commitments browse experience: grouping, swipe actions, skip entry points.
+ *
+ * @module components/keel/commitments-browse-client
+ */
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";

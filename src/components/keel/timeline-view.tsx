@@ -12,6 +12,8 @@
  * No data fetching or state lives in the child components — they are pure
  * visual surfaces. If the foundation hooks' contract changes, this file is
  * the single place to reconcile.
+ *
+ * @module components/keel/timeline-view
  */
 
 import { useMemo, useState } from "react";
