@@ -3,6 +3,8 @@
 /**
  * Bottom sheet for editing a commitment (`updateCommitmentAction`, per-pay preview).
  *
+ * Primary fields: name, amount, next due. Advanced: frequency, funding, category, preview.
+ *
  * @module components/keel/commitment-edit-sheet
  */
 
@@ -15,6 +17,7 @@ import type { CommitmentFrequency, IncomeView } from "@/lib/types";
 import { cn, formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
 import { GlassSheet } from "@/components/keel/glass-sheet";
+import { RecordEditDisclosure } from "@/components/keel/record-edit-sheet";
 import { SurfaceCard } from "@/components/keel/primitives";
 
 type CategoryOption = {
@@ -104,22 +107,6 @@ export function CommitmentEditSheet({
     <GlassSheet open={open && Boolean(commitmentId)} onClose={onClose} title="Edit commitment">
       <form className="space-y-4 pb-2" onSubmit={onSubmit}>
         <label className="block space-y-2">
-          <span className="text-sm text-[color:var(--keel-ink-3)]">Funded from</span>
-          <select
-            name="fundedByIncomeId"
-            value={fundedByIncomeId}
-            onChange={(ev) => setFundedByIncomeId(ev.target.value)}
-            className="w-full rounded-[var(--radius-md)] border border-white/12 bg-black/25 px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none"
-          >
-            {incomes.map((income) => (
-              <option key={income.id} value={income.id}>
-                {income.name} · {sentenceCaseFrequency(income.frequency)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block space-y-2">
           <span className="text-sm text-[color:var(--keel-ink-3)]">Name</span>
           <input
             name="name"
@@ -142,22 +129,6 @@ export function CommitmentEditSheet({
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm text-[color:var(--keel-ink-3)]">Frequency</span>
-          <select
-            name="frequency"
-            value={frequency}
-            onChange={(ev) => setFrequency(ev.target.value as CommitmentFrequency)}
-            className="w-full rounded-[var(--radius-md)] border border-white/12 bg-black/25 px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none"
-          >
-            <option value="weekly">Weekly</option>
-            <option value="fortnightly">Fortnightly</option>
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
-            <option value="annual">Annual</option>
-          </select>
-        </label>
-
-        <label className="block space-y-2">
           <span className="text-sm text-[color:var(--keel-ink-3)]">Next due</span>
           <input
             name="nextDueDate"
@@ -168,49 +139,84 @@ export function CommitmentEditSheet({
           />
         </label>
 
-        <label className="block space-y-2">
-          <span className="text-sm text-[color:var(--keel-ink-3)]">Category</span>
-          <select
-            name="categoryId"
-            value={categoryId}
-            onChange={(ev) => setCategoryId(ev.target.value)}
-            className="w-full rounded-[var(--radius-md)] border border-white/12 bg-black/25 px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none"
-          >
-            {categories.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <input type="hidden" name="frequency" value={frequency} />
 
-        {subcategories.length > 0 ? (
+        <RecordEditDisclosure summary="More options">
           <label className="block space-y-2">
-            <span className="text-sm text-[color:var(--keel-ink-3)]">Subcategory</span>
+            <span className="text-sm text-[color:var(--keel-ink-3)]">Frequency</span>
             <select
-              name="subcategoryId"
-              defaultValue={commitment.subcategoryId ?? ""}
+              value={frequency}
+              onChange={(ev) => setFrequency(ev.target.value as CommitmentFrequency)}
               className="w-full rounded-[var(--radius-md)] border border-white/12 bg-black/25 px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none"
             >
-              <option value="">None</option>
-              {subcategories.map((sub) => (
-                <option key={sub.id} value={sub.id}>
-                  {sub.name}
+              <option value="weekly">Weekly</option>
+              <option value="fortnightly">Fortnightly</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="annual">Annual</option>
+            </select>
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-sm text-[color:var(--keel-ink-3)]">Funded from</span>
+            <select
+              name="fundedByIncomeId"
+              value={fundedByIncomeId}
+              onChange={(ev) => setFundedByIncomeId(ev.target.value)}
+              className="w-full rounded-[var(--radius-md)] border border-white/12 bg-black/25 px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none"
+            >
+              {incomes.map((income) => (
+                <option key={income.id} value={income.id}>
+                  {income.name} · {sentenceCaseFrequency(income.frequency)}
                 </option>
               ))}
             </select>
           </label>
-        ) : (
-          <input type="hidden" name="subcategoryId" value={commitment.subcategoryId ?? ""} />
-        )}
 
-        <SurfaceCard className="glass-tint-safe !p-3">
-          <p className="text-xs text-[color:var(--keel-ink-3)]">Per-pay reservation (preview)</p>
-          <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[color:var(--keel-ink)]">
-            {formatAud(previewPerPay)}
-            <span className="ml-1 font-sans text-xs font-normal text-[color:var(--keel-ink-3)]">/pay</span>
-          </p>
-        </SurfaceCard>
+          <label className="block space-y-2">
+            <span className="text-sm text-[color:var(--keel-ink-3)]">Category</span>
+            <select
+              name="categoryId"
+              value={categoryId}
+              onChange={(ev) => setCategoryId(ev.target.value)}
+              className="w-full rounded-[var(--radius-md)] border border-white/12 bg-black/25 px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none"
+            >
+              {categories.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {subcategories.length > 0 ? (
+            <label className="block space-y-2">
+              <span className="text-sm text-[color:var(--keel-ink-3)]">Subcategory</span>
+              <select
+                name="subcategoryId"
+                defaultValue={commitment.subcategoryId ?? ""}
+                className="w-full rounded-[var(--radius-md)] border border-white/12 bg-black/25 px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none"
+              >
+                <option value="">None</option>
+                {subcategories.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {sub.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <input type="hidden" name="subcategoryId" value={commitment.subcategoryId ?? ""} />
+          )}
+
+          <SurfaceCard className="glass-tint-safe !p-3">
+            <p className="text-xs text-[color:var(--keel-ink-3)]">Per-pay reservation (preview)</p>
+            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[color:var(--keel-ink)]">
+              {formatAud(previewPerPay)}
+              <span className="ml-1 font-sans text-xs font-normal text-[color:var(--keel-ink-3)]">/pay</span>
+            </p>
+          </SurfaceCard>
+        </RecordEditDisclosure>
 
         {error ? <p className="text-sm text-[color:var(--keel-attend)]">{error}</p> : null}
 

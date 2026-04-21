@@ -42,9 +42,8 @@ export async function createWealthHoldingAction(formData: FormData) {
     asOf: parseOptionalIsoDate(formData.get("asOf")),
   });
 
-  revalidatePath("/settings/wealth");
   revalidatePath("/wealth");
-  redirect("/settings/wealth");
+  redirect("/wealth");
 }
 
 export async function updateWealthHoldingAction(id: string, formData: FormData) {
@@ -58,14 +57,13 @@ export async function updateWealthHoldingAction(id: string, formData: FormData) 
     asOf: parseOptionalIsoDate(formData.get("asOf")),
   });
 
-  revalidatePath("/settings/wealth");
-  redirect("/settings/wealth");
+  revalidatePath("/wealth");
+  redirect("/wealth");
 }
 
 export async function deleteWealthHoldingAction(id: string) {
   await deleteWealthHolding(id);
-  revalidatePath("/settings/wealth");
   revalidatePath("/wealth");
-  redirect("/settings/wealth");
+  redirect("/wealth");
 }
 

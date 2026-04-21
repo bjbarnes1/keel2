@@ -83,7 +83,7 @@ export default async function HomePage() {
           <p className="mt-1 text-xs text-muted-foreground">{snapshot.alert}</p>
         </div>
         <Link href="/balance" className="text-sm font-medium text-primary">
-          Update
+          Update balance
         </Link>
       </SurfaceCard>
 

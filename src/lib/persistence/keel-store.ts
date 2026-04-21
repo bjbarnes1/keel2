@@ -31,7 +31,7 @@ export {
   getIncomeForEdit,
   updateIncomeFuture,
   setPrimaryIncome,
-  deleteIncome,
+  archiveIncome,
 } from "./income";
 export {
   getCommitmentForEdit,

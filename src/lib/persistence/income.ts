@@ -45,7 +45,7 @@ export async function createIncome(input: {
     await prisma.$transaction(async (tx) => {
       if (input.isPrimary) {
         await tx.income.updateMany({
-          where: { budgetId: budget.id },
+          where: { budgetId: budget.id, archivedAt: null },
           data: { isPrimary: false },
         });
       }
@@ -102,13 +102,25 @@ export async function createIncome(input: {
 export async function getIncomeForEdit(id: string) {
   noStore();
 
-  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) return null;
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    const state = await readState();
+    const income = state.incomes.find((row) => row.id === id && !row.archivedAt);
+    if (!income) return null;
+    return {
+      id: income.id,
+      name: income.name,
+      amount: income.amount,
+      frequency: narrowIncomeFrequency(income.frequency),
+      nextPayDate: income.nextPayDate,
+      isPrimary: Boolean(income.isPrimary),
+    };
+  }
 
   const prisma = getPrismaClient();
   const { budget } = await getBudgetContext();
 
   const income = await prisma.income.findFirst({
-    where: { id, budgetId: budget.id },
+    where: { id, budgetId: budget.id, archivedAt: null },
   });
   if (!income) return null;
 
@@ -130,15 +142,23 @@ export async function updateIncomeFuture(input: {
   nextPayDate: string;
   effectiveFrom: string;
 }) {
-  if (!hasConfiguredDatabase()) {
-    throw new Error("Income versioning requires a database.");
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    const state = await readState();
+    const income = state.incomes.find((row) => row.id === input.incomeId && !row.archivedAt);
+    if (!income) throw new Error("Income not found.");
+    income.name = input.name.trim();
+    income.amount = input.amount;
+    income.frequency = input.frequency;
+    income.nextPayDate = input.nextPayDate;
+    await writeState(state);
+    return;
   }
 
   const prisma = getPrismaClient();
   const { budget } = await getBudgetContext();
 
   const income = await prisma.income.findFirst({
-    where: { id: input.incomeId, budgetId: budget.id },
+    where: { id: input.incomeId, budgetId: budget.id, archivedAt: null },
   });
   if (!income) throw new Error("Income not found.");
 
@@ -199,13 +219,13 @@ export async function setPrimaryIncome(incomeId: string) {
     const { budget } = await getBudgetContext();
 
     const target = await prisma.income.findFirst({
-      where: { id: incomeId, budgetId: budget.id },
+      where: { id: incomeId, budgetId: budget.id, archivedAt: null },
       select: { id: true },
     });
     if (!target) throw new Error("Income not found.");
 
     await prisma.income.updateMany({
-      where: { budgetId: budget.id },
+      where: { budgetId: budget.id, archivedAt: null },
       data: { isPrimary: false },
     });
     await prisma.income.update({
@@ -242,45 +262,70 @@ export async function setPrimaryIncome(incomeId: string) {
   await writeState(state);
 }
 
-export async function deleteIncome(incomeId: string) {
+/** Soft-archives an income (hidden from active math; funding links move to another pay source). */
+export async function archiveIncome(incomeId: string) {
   if (hasConfiguredDatabase()) {
     const prisma = getPrismaClient();
     const { budget } = await getBudgetContext();
 
-    // Fix #23: two targeted queries instead of fetching all incomes.
     const income = await prisma.income.findFirst({
-      where: { id: incomeId, budgetId: budget.id },
+      where: { id: incomeId, budgetId: budget.id, archivedAt: null },
     });
     if (!income) throw new Error("Income not found.");
 
     const remainingCount = await prisma.income.count({
-      where: { budgetId: budget.id, id: { not: incomeId } },
+      where: { budgetId: budget.id, id: { not: incomeId }, archivedAt: null },
     });
-    if (remainingCount === 0) throw new Error("You must have at least one income.");
+    if (remainingCount === 0) throw new Error("You must have at least one active income.");
 
-    await prisma.income.delete({ where: { id: incomeId } });
+    const archivedAt = new Date();
+    const replacement = await prisma.income.findFirst({
+      where: { budgetId: budget.id, id: { not: incomeId }, archivedAt: null },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!replacement) throw new Error("You must have at least one active income.");
 
-    if (income.isPrimary) {
-      const next = await prisma.income.findFirst({
-        where: { budgetId: budget.id },
-        orderBy: { createdAt: "asc" },
+    await prisma.$transaction(async (tx) => {
+      await tx.income.update({
+        where: { id: incomeId },
+        data: { archivedAt },
       });
-      if (next) {
-        await prisma.income.update({ where: { id: next.id }, data: { isPrimary: true } });
+
+      if (income.isPrimary) {
+        await tx.income.updateMany({
+          where: { budgetId: budget.id, archivedAt: null },
+          data: { isPrimary: false },
+        });
+        await tx.income.update({
+          where: { id: replacement.id },
+          data: { isPrimary: true },
+        });
       }
-    }
+
+      await tx.commitment.updateMany({
+        where: { budgetId: budget.id, fundedByIncomeId: incomeId },
+        data: { fundedByIncomeId: replacement.id },
+      });
+      await tx.goal.updateMany({
+        where: { budgetId: budget.id, fundedByIncomeId: incomeId },
+        data: { fundedByIncomeId: replacement.id },
+      });
+    });
 
     return;
   }
 
   const state = await readState();
-  state.incomes = state.incomes.filter((income) => income.id !== incomeId);
-  if (state.incomes.length === 0) {
-    throw new Error("You must have at least one income.");
-  }
+  const row = state.incomes.find((i) => i.id === incomeId);
+  if (!row || row.archivedAt) throw new Error("Income not found.");
+
+  const activeOthers = state.incomes.filter((i) => i.id !== incomeId && !i.archivedAt);
+  if (activeOthers.length === 0) throw new Error("You must have at least one active income.");
+
+  row.archivedAt = new Date().toISOString();
 
   if (state.primaryIncomeId === incomeId) {
-    state.primaryIncomeId = state.incomes[0]!.id;
+    state.primaryIncomeId = activeOthers[0]!.id;
   }
 
   for (const commitment of state.commitments) {

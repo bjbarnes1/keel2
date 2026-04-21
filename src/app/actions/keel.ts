@@ -35,7 +35,7 @@ import {
   createGoal,
   deleteCommitment,
   deleteCategory,
-  deleteIncome,
+  archiveIncome,
   deleteSubcategory,
   acceptBudgetInvite,
   getProjectionEngineInput,
@@ -219,13 +219,13 @@ export async function setPrimaryIncomeAction(formData: FormData) {
   redirect("/settings/incomes");
 }
 
-export async function deleteIncomeAction(formData: FormData) {
+export async function archiveIncomeAction(formData: FormData) {
   const incomeId = String(formData.get("incomeId") ?? "").trim();
   if (!incomeId) {
     throw new Error("Income id is required.");
   }
 
-  await deleteIncome(incomeId);
+  await archiveIncome(incomeId);
   revalidatePath("/");
   revalidatePath("/commitments");
   revalidatePath("/bills");

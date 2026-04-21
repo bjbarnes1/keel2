@@ -118,6 +118,5 @@ export async function createAssetFromCapture(input: unknown) {
 
   revalidatePath("/timeline");
   revalidatePath("/");
-  revalidatePath("/settings/wealth");
   revalidatePath("/wealth");
 }

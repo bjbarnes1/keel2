@@ -57,7 +57,7 @@ export async function createGoal(input: {
     const { budget } = await getBudgetContext();
 
     const incomes = await prisma.income.findMany({
-      where: { budgetId: budget.id },
+      where: { budgetId: budget.id, archivedAt: null },
       orderBy: { createdAt: "asc" },
     });
     if (incomes.length === 0) {

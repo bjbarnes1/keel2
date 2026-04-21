@@ -37,6 +37,7 @@ export function CaptureKeelPanel() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<CaptureApiResponse | null>(null);
+  const [preferForm, setPreferForm] = useState(false);
 
   const canSubmit = useMemo(() => sentence.trim().length > 0 && !pending, [sentence, pending]);
 
@@ -93,51 +94,127 @@ export function CaptureKeelPanel() {
         </Link>
       </div>
 
-      <label className="block">
-        <span className="sr-only">Tell Keel what you want to add</span>
-        <textarea
-          value={sentence}
-          onChange={(e) => setSentence(e.target.value)}
-          placeholder="Tell Keel what you want to add"
-          rows={3}
-          className="glass-clear w-full resize-none rounded-[var(--radius-lg)] px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none placeholder:text-[color:var(--keel-ink-4)]"
-        />
-      </label>
-
-      <button
-        type="button"
-        disabled={!canSubmit}
-        onClick={() => void runCapture(sentence)}
-        className={cn(
-          "mt-3 w-full rounded-[var(--radius-pill)] px-4 py-3 text-sm font-semibold transition-opacity",
-          canSubmit ? "glass-tint-safe text-[color:var(--keel-ink)]" : "glass-clear opacity-40",
-        )}
+      <div
+        className="mb-4 inline-flex w-full rounded-[var(--radius-pill)] p-0.5 glass-clear"
+        role="tablist"
+        aria-label="Capture mode"
       >
-        Capture
-      </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!preferForm}
+          onClick={() => setPreferForm(false)}
+          className={cn(
+            "flex-1 rounded-[calc(var(--radius-pill)-2px)] px-3 py-2 text-xs font-medium transition-colors",
+            !preferForm
+              ? "glass-tint-safe text-[color:var(--keel-ink)]"
+              : "text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]",
+          )}
+        >
+          Describe it
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={preferForm}
+          onClick={() => setPreferForm(true)}
+          className={cn(
+            "flex-1 rounded-[calc(var(--radius-pill)-2px)] px-3 py-2 text-xs font-medium transition-colors",
+            preferForm
+              ? "glass-tint-safe text-[color:var(--keel-ink)]"
+              : "text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]",
+          )}
+        >
+          Prefer a form
+        </button>
+      </div>
 
-      {error ? <p className="mt-3 text-sm text-[color:var(--keel-attend)]">{error}</p> : null}
-
-      {preview?.kind === "unknown" ? (
-        <div className="glass-clear mt-5 rounded-[var(--radius-lg)] p-4 text-sm leading-6 text-[color:var(--keel-ink-3)]">
-          I can help with commitments, income, and assets — try &apos;my electricity is $240 a quarter&apos;
+      {preferForm ? (
+        <div className="glass-clear rounded-[var(--radius-lg)] p-4 text-sm leading-6 text-[color:var(--keel-ink-2)]">
+          <p className="text-[color:var(--keel-ink)]">Structured forms</p>
+          <p className="mt-2 text-[color:var(--keel-ink-3)]">
+            Conversational capture is the default—switch back anytime. Forms are here when you want fields
+            instead of a sentence.
+          </p>
+          <ul className="mt-4 space-y-2">
+            {(!forcedKind || forcedKind === "commitment") && (
+              <li>
+                <Link
+                  href="/commitments/new/manual"
+                  className="font-medium text-[color:var(--keel-safe-soft)] hover:underline"
+                >
+                  Add commitment (form)
+                </Link>
+              </li>
+            )}
+            {(!forcedKind || forcedKind === "income") && (
+              <li>
+                <Link
+                  href="/settings/incomes/new"
+                  className="font-medium text-[color:var(--keel-safe-soft)] hover:underline"
+                >
+                  Add income (form)
+                </Link>
+              </li>
+            )}
+            {(!forcedKind || forcedKind === "asset") && (
+              <li>
+                <Link href="/wealth/new" className="font-medium text-[color:var(--keel-safe-soft)] hover:underline">
+                  Add holding (form)
+                </Link>
+              </li>
+            )}
+          </ul>
         </div>
-      ) : null}
+      ) : (
+        <>
+          <label className="block">
+            <span className="sr-only">Tell Keel what you want to add</span>
+            <textarea
+              value={sentence}
+              onChange={(e) => setSentence(e.target.value)}
+              placeholder="Tell Keel what you want to add"
+              rows={3}
+              className="glass-clear w-full resize-none rounded-[var(--radius-lg)] px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none placeholder:text-[color:var(--keel-ink-4)]"
+            />
+          </label>
 
-      {preview && preview.kind !== "unknown" ? (
-        <PreviewCard
-          preview={preview}
-          onReset={() => {
-            setSentence(draftSentence);
-            setPreview(null);
-          }}
-          onCommitted={() => {
-            setSentence("");
-            setPreview(null);
-            setDraftSentence("");
-          }}
-        />
-      ) : null}
+          <button
+            type="button"
+            disabled={!canSubmit}
+            onClick={() => void runCapture(sentence)}
+            className={cn(
+              "mt-3 w-full rounded-[var(--radius-pill)] px-4 py-3 text-sm font-semibold transition-opacity",
+              canSubmit ? "glass-tint-safe text-[color:var(--keel-ink)]" : "glass-clear opacity-40",
+            )}
+          >
+            Capture
+          </button>
+
+          {error ? <p className="mt-3 text-sm text-[color:var(--keel-attend)]">{error}</p> : null}
+
+          {preview?.kind === "unknown" ? (
+            <div className="glass-clear mt-5 rounded-[var(--radius-lg)] p-4 text-sm leading-6 text-[color:var(--keel-ink-3)]">
+              I can help with commitments, income, and assets — try &apos;my electricity is $240 a quarter&apos;
+            </div>
+          ) : null}
+
+          {preview && preview.kind !== "unknown" ? (
+            <PreviewCard
+              preview={preview}
+              onReset={() => {
+                setSentence(draftSentence);
+                setPreview(null);
+              }}
+              onCommitted={() => {
+                setSentence("");
+                setPreview(null);
+                setDraftSentence("");
+              }}
+            />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

@@ -728,6 +728,18 @@ export default config;
 
 ---
 
+## Surface density: Home upcoming vs Timeline legend
+
+The **same scheduled events** may render with **different density** on Home and on Timeline by design:
+
+- **Home** uses richer **upcoming payment cards** (e.g. inline running balance, direction cues). Home is the calm “today + next few beats” surface; a bit more detail per row is appropriate.
+- **Timeline** uses **denser legend rows** so users can scan many events along the waterline without vertical sprawl.
+
+Do not force pixel-identical row chrome across both surfaces. Do keep **voice, tokens, and typography scale** aligned so it still feels like one product.
+
+---
+
 ## Changelog
 
+- **v1.1** — Apr 2026. Documented deliberate **Home vs Timeline** row density (richer upcoming cards on Home; denser legend on Timeline).
 - **v1.0** — Apr 2026. Initial brief produced alongside the Keel2 redesign mockup set. Covers Home, Timeline, Wealth, Goals, Ask Keel, Conversational capture, Commitment/Wealth/Goal detail, Take Some Off, Onboarding. Dark mode only. Light mode deferred.

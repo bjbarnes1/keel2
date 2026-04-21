@@ -1,25 +1,25 @@
 /**
- * Incomes list: set primary, delete, deep-link to edit.
+ * Incomes list: set primary, archive via kebab, edit via sheet (shared record pattern).
  *
  * @module app/settings/incomes/page
  */
 
 import Link from "next/link";
 
-import {
-  AppShell,
-  SurfaceCard,
-} from "@/components/keel/primitives";
-import {
-  deleteIncomeAction,
-  setPrimaryIncomeAction,
-} from "@/app/actions/keel";
-import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
-import { formatAud, sentenceCaseFrequency } from "@/lib/utils";
+import { AppShell, SurfaceCard } from "@/components/keel/primitives";
+import { SettingsIncomesClient } from "@/components/keel/settings-incomes-client";
+import { getDashboardSnapshot, getIncomeForEdit } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsIncomesPage() {
+export default async function SettingsIncomesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string }>;
+}) {
+  const q = await searchParams;
+  const initialEditId = q.edit?.trim() || undefined;
+
   const snapshot = await getDashboardSnapshot();
 
   const ordered = snapshot.incomes
@@ -30,6 +30,18 @@ export default async function SettingsIncomesPage() {
       return left.name.localeCompare(right.name);
     });
 
+  const rows = ordered.map((income) => ({
+    id: income.id,
+    name: income.name,
+    amount: income.amount,
+    frequency: income.frequency,
+    nextPayDate: income.nextPayDate,
+  }));
+
+  const editPayloads = (
+    await Promise.all(ordered.map((row) => getIncomeForEdit(row.id)))
+  ).filter((row): row is NonNullable<typeof row> => row != null);
+
   return (
     <AppShell title="Incomes" currentPath="/settings" backHref="/settings">
       <div className="space-y-3">
@@ -37,9 +49,8 @@ export default async function SettingsIncomesPage() {
           <div>
             <p className="text-sm font-medium">Your pay sources</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Commitments and goals can be allocated to a specific income so per-pay
-              amounts match the right cadence. Edits apply from a date you choose—past
-              periods stay as they were.
+              Commitments and goals can be allocated to a specific income so per-pay amounts match
+              the right cadence. Edits apply from a date you choose—past periods stay as they were.
             </p>
           </div>
           <Link
@@ -50,62 +61,12 @@ export default async function SettingsIncomesPage() {
           </Link>
         </SurfaceCard>
 
-        {ordered.map((income) => {
-          const isPrimary = income.id === snapshot.primaryIncomeId;
-
-          return (
-            <SurfaceCard key={income.id} className="space-y-3">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium">{income.name}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {sentenceCaseFrequency(income.frequency)} · Next pay{" "}
-                    {income.nextPayDate}
-                  </p>
-                </div>
-                <p className="font-mono text-sm font-semibold">
-                  {formatAud(income.amount)}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href={`/settings/incomes/${income.id}/edit`}
-                  className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-primary"
-                >
-                  Edit (future)
-                </Link>
-                {isPrimary ? (
-                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                    Primary
-                  </span>
-                ) : (
-                  <form action={setPrimaryIncomeAction}>
-                    <input type="hidden" name="incomeId" value={income.id} />
-                    <button
-                      type="submit"
-                      className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                    >
-                      Set primary
-                    </button>
-                  </form>
-                )}
-
-                {ordered.length > 1 ? (
-                  <form action={deleteIncomeAction}>
-                    <input type="hidden" name="incomeId" value={income.id} />
-                    <button
-                      type="submit"
-                      className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-500"
-                    >
-                      Delete
-                    </button>
-                  </form>
-                ) : null}
-              </div>
-            </SurfaceCard>
-          );
-        })}
+        <SettingsIncomesClient
+          incomes={rows}
+          primaryIncomeId={snapshot.primaryIncomeId}
+          editPayloads={editPayloads}
+          initialEditId={initialEditId}
+        />
       </div>
     </AppShell>
   );

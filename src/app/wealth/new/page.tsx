@@ -1,7 +1,7 @@
 /**
  * Add wealth holding (`createWealthHoldingAction`).
  *
- * @module app/settings/wealth/new/page
+ * @module app/wealth/new/page
  */
 
 import type { ReactNode } from "react";
@@ -10,9 +10,9 @@ import { createWealthHoldingAction } from "@/app/actions/keel-wealth";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import { SubmitButton } from "@/components/keel/submit-button";
 
-export default function SettingsNewWealthPage() {
+export default function WealthNewHoldingPage() {
   return (
-    <AppShell title="Add holding" currentPath="/settings" backHref="/settings/wealth">
+    <AppShell title="Add holding" currentPath="/wealth" backHref="/wealth">
       <form action={createWealthHoldingAction} className="space-y-4">
         <Field label="Asset type">
           <select

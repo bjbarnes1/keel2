@@ -24,4 +24,4 @@ Reference file: [`src/components/keel/primitives.tsx`](../src/components/keel/pr
 
 ## New reference primitives (this PR)
 
-- `GlassSheet`, `SwipeActionRow`, `CategoryGroupHeader`, `FloatingAddButton` — see `src/components/keel/`.
+- `GlassSheet`, `RecordEditDisclosure` (shared edit-sheet disclosure), `CategoryGroupHeader`, `FloatingAddButton` — see `src/components/keel/`. Commitment rows use a **kebab menu** instead of swipe actions.

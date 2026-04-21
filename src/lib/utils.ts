@@ -42,3 +42,25 @@ export function roundMoney(value: number) {
 export function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
+
+const DISPLAY_SHORT = new Intl.DateTimeFormat("en-AU", {
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
+
+const DISPLAY_LONG = new Intl.DateTimeFormat("en-AU", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+
+/**
+ * Human-readable dates for UI copy (`23 Apr`, `Monday 23 April`).
+ * Pass ISO `YYYY-MM-DD` calendar dates (UTC midnight).
+ */
+export function formatDisplayDate(isoDate: string, format: "short" | "long" = "short") {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  return format === "long" ? DISPLAY_LONG.format(d) : DISPLAY_SHORT.format(d);
+}
