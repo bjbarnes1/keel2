@@ -11,13 +11,11 @@ import Link from "next/link";
 
 import {
   AppShell,
-  GoalCard,
   HeroAvailableMoneyCard,
-  IncomeCard,
-  ProjectionRow,
-  SectionTitle,
   SurfaceCard,
 } from "@/components/keel/primitives";
+import { HomeUpcomingRows } from "@/components/keel/home-upcoming-rows";
+import { GoalRow } from "@/components/keel/goal-row";
 import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
@@ -34,48 +32,26 @@ export default async function HomePage() {
         goalContributions={snapshot.totalGoalContributions}
       />
 
-      <div className="mt-4">
-        <div className="space-y-2">
-          {snapshot.incomes
-            .slice()
-            .sort((left, right) => {
-              if (left.id === snapshot.primaryIncomeId) return -1;
-              if (right.id === snapshot.primaryIncomeId) return 1;
-              return left.name.localeCompare(right.name);
-            })
-            .map((income) => (
-              <IncomeCard key={income.id} income={income} />
-            ))}
-        </div>
+      <HomeUpcomingRows incomes={snapshot.incomes} timeline={snapshot.timeline} />
+
+      <div className="mt-4 flex items-center justify-between px-3 pb-2">
+        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[color:var(--keel-ink-5)]">
+          Goals
+        </p>
+        <Link href="/goals/new" className="text-xs font-medium text-[color:var(--keel-ink-3)]">
+          Add goal
+        </Link>
       </div>
 
-      <SectionTitle title="Upcoming" />
-      <div className="space-y-2">
-        {snapshot.timeline.slice(0, 4).map((event) => (
-          <ProjectionRow key={event.id} event={event} />
-        ))}
-      </div>
-
-      <SectionTitle title="Goals" />
-      <div className="space-y-2">
+      <SurfaceCard className="!p-0 overflow-hidden">
         {snapshot.goals.length === 0 ? (
-          <SurfaceCard className="flex items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">No goals yet—start one to set aside money each pay.</p>
-            <Link href="/goals/new" className="text-sm font-medium text-primary shrink-0">
-              Add goal
-            </Link>
-          </SurfaceCard>
+          <div className="px-3 py-3 text-sm text-[color:var(--keel-ink-3)]">
+            Add a goal to track your savings progress.
+          </div>
         ) : (
-          snapshot.goals.map((goal) => <GoalCard key={goal.id} goal={goal} />)
+          snapshot.goals.map((goal) => <GoalRow key={goal.id} goal={goal} />)
         )}
-      </div>
-      {snapshot.goals.length > 0 ? (
-        <div className="mt-2 flex justify-end">
-          <Link href="/goals/new" className="text-sm font-medium text-primary">
-            Add another goal
-          </Link>
-        </div>
-      ) : null}
+      </SurfaceCard>
 
       <SurfaceCard className="mt-6 flex items-center justify-between gap-4">
         <div>

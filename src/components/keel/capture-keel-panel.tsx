@@ -150,7 +150,7 @@ export function CaptureKeelPanel() {
             {(!forcedKind || forcedKind === "income") && (
               <li>
                 <Link
-                  href="/settings/incomes/new"
+                  href="/incomes/new"
                   className="font-medium text-[color:var(--keel-safe-soft)] hover:underline"
                 >
                   Add income (form)

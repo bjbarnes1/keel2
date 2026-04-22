@@ -16,7 +16,7 @@ import { z } from "zod";
 
 import { getAnthropicClient } from "@/lib/ai/client";
 import { classifyAskIntent, extractHypotheticalCommitmentSkips } from "@/lib/ai/classify-ask";
-import { roundMoney } from "@/lib/utils";
+import { formatDisplayDate, roundMoney } from "@/lib/utils";
 import { extractJsonObject } from "@/lib/ai/parse-capture";
 import { assertWithinAiRateLimit } from "@/lib/ai/rate-limit";
 import { buildTimelineForTest } from "@/lib/engine/keel";
@@ -60,7 +60,7 @@ const askResponseSchema = z.discriminatedUnion("type", [
           kind: z.literal("commitment"),
           commitmentId: z.string(),
           originalDateIso: z.string(),
-          strategy: z.enum(["MAKE_UP_NEXT", "SPREAD", "MOVE_ON"]),
+          strategy: z.enum(["MAKE_UP_NEXT", "SPREAD", "MOVE_ON", "STANDALONE"]),
           spreadOverN: z.number().optional(),
         }),
       )
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
       for (const skip of hypothetical) {
         const label = nameById.get(skip.commitmentId) ?? "Bill";
         chips.push({
-          text: `Open skip · ${label} · ${skip.originalDateIso}`,
+          text: `Open skip · ${label} · ${formatDisplayDate(skip.originalDateIso, "short-day")}`,
           action: `skip_commitment:${skip.commitmentId}:${skip.originalDateIso}`,
         });
       }

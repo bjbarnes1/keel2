@@ -176,8 +176,8 @@ export async function createIncomeAction(formData: FormData) {
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
-  revalidatePath("/settings/incomes");
-  redirect("/settings/incomes");
+  revalidatePath("/incomes");
+  redirect("/incomes");
 }
 
 export async function updateIncomeFutureAction(formData: FormData) {
@@ -199,8 +199,8 @@ export async function updateIncomeFutureAction(formData: FormData) {
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
-  revalidatePath("/settings/incomes");
-  redirect("/settings/incomes");
+  revalidatePath("/incomes");
+  redirect("/incomes");
 }
 
 export async function setPrimaryIncomeAction(formData: FormData) {
@@ -215,8 +215,8 @@ export async function setPrimaryIncomeAction(formData: FormData) {
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
-  revalidatePath("/settings/incomes");
-  redirect("/settings/incomes");
+  revalidatePath("/incomes");
+  redirect("/incomes");
 }
 
 export async function archiveIncomeAction(formData: FormData) {
@@ -231,8 +231,8 @@ export async function archiveIncomeAction(formData: FormData) {
   revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
-  revalidatePath("/settings/incomes");
-  redirect("/settings/incomes");
+  revalidatePath("/incomes");
+  redirect("/incomes");
 }
 
 export async function createBudgetInviteAction(formData: FormData) {

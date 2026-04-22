@@ -134,6 +134,40 @@ describe("keel engine", () => {
     expect(detectProjectedShortfall(projection)?.label).toBe("Rent");
   });
 
+  it("processes same-day income before commitments", () => {
+    const projection = buildProjectionTimeline({
+      availableMoney: 500,
+      asOf: new Date("2026-04-22T00:00:00Z"),
+      horizonDays: 3,
+      incomes: [
+        {
+          id: "inc1",
+          name: "Salary",
+          amount: 5000,
+          frequency: "fortnightly",
+          nextPayDate: "2026-04-23",
+        },
+      ],
+      commitments: [
+        {
+          id: "com1",
+          name: "Rent",
+          amount: 3000,
+          frequency: "fortnightly",
+          nextDueDate: "2026-04-23",
+          fundedByIncomeId: "inc1",
+        },
+      ],
+    });
+
+    const sameDay = projection.filter((e) => e.date === "2026-04-23");
+    expect(sameDay).toHaveLength(2);
+
+    // After 23 Apr both events process: 500 + 5000 - 3000 = 2500 (income must come first).
+    expect(sameDay[0]?.type).toBe("income");
+    expect(sameDay[sameDay.length - 1]?.projectedAvailableMoney).toBe(2500);
+  });
+
   it("uses the linked income cadence for per-pay amounts", () => {
     const weeklyBill = calculateCommitmentReserve(
       {

@@ -23,7 +23,7 @@ export default function SettingsPage() {
           </SurfaceCard>
         </Link>
 
-        <Link href="/settings/incomes" className="block">
+        <Link href="/incomes" className="block">
           <SurfaceCard className="flex items-center justify-between gap-4 transition-colors hover:border-white/14">
             <div>
               <p className="text-sm font-medium">Incomes</p>

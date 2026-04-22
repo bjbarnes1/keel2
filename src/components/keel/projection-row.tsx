@@ -23,10 +23,10 @@ function projectionEventDetailHref(event: ProjectionEventView): string | undefin
     const iso = event.isoDate;
     if (iso && event.id.endsWith(`-${iso}`)) {
       const incomeId = event.id.slice("income-".length, -(iso.length + 1));
-      return incomeId ? `/settings/incomes/${incomeId}/edit` : undefined;
+      return incomeId ? `/incomes/${incomeId}` : undefined;
     }
     const match = event.id.match(/^income-(.+)-(\d{4}-\d{2}-\d{2})$/);
-    return match?.[1] ? `/settings/incomes/${match[1]}/edit` : undefined;
+    return match?.[1] ? `/incomes/${match[1]}` : undefined;
   }
   if (event.type === "bill" && event.commitmentId) {
     return `/commitments/${event.commitmentId}`;

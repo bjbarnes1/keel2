@@ -56,11 +56,23 @@ const DISPLAY_LONG = new Intl.DateTimeFormat("en-AU", {
   timeZone: "UTC",
 });
 
+const DISPLAY_SHORT_DAY = new Intl.DateTimeFormat("en-AU", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
+
 /**
  * Human-readable dates for UI copy (`23 Apr`, `Monday 23 April`).
  * Pass ISO `YYYY-MM-DD` calendar dates (UTC midnight).
  */
-export function formatDisplayDate(isoDate: string, format: "short" | "long" = "short") {
+export function formatDisplayDate(
+  isoDate: string,
+  format: "short" | "long" | "short-day" = "short",
+) {
   const d = new Date(`${isoDate}T00:00:00Z`);
-  return format === "long" ? DISPLAY_LONG.format(d) : DISPLAY_SHORT.format(d);
+  if (format === "long") return DISPLAY_LONG.format(d);
+  if (format === "short-day") return DISPLAY_SHORT_DAY.format(d);
+  return DISPLAY_SHORT.format(d);
 }

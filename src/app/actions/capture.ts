@@ -96,7 +96,7 @@ export async function createIncomeFromCapture(input: unknown) {
 
   revalidatePath("/timeline");
   revalidatePath("/");
-  revalidatePath("/settings/incomes");
+  revalidatePath("/incomes");
 }
 
 export async function createAssetFromCapture(input: unknown) {

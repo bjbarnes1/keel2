@@ -12,7 +12,7 @@ import { useMemo, useState, useTransition } from "react";
 import { createCommitmentSkip } from "@/app/actions/skips";
 import { previewSkipImpact, type ScheduledCashflowEvent } from "@/lib/engine/skips";
 import type { CommitmentSkipInput, CommitmentSkipStrategy } from "@/lib/types";
-import { cn, formatAud } from "@/lib/utils";
+import { cn, formatAud, formatDisplayDate } from "@/lib/utils";
 
 import { GlassSheet } from "@/components/keel/glass-sheet";
 
@@ -23,6 +23,11 @@ const strategies: Array<{
   title: string;
   body: string;
 }> = [
+  {
+    id: "STANDALONE",
+    title: "Just skip",
+    body: "Skip this payment with no downstream effect. No future payments change.",
+  },
   {
     id: "MAKE_UP_NEXT",
     title: "Make up next",
@@ -66,7 +71,7 @@ export function CommitmentSkipSheet({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [strategy, setStrategy] = useState<CommitmentSkipStrategy>("MAKE_UP_NEXT");
+  const [strategy, setStrategy] = useState<CommitmentSkipStrategy>("STANDALONE");
   const [spreadOverN, setSpreadOverN] = useState(2);
   const [goalId, setGoalId] = useState(goals[0]?.id ?? "");
 
@@ -81,6 +86,8 @@ export function CommitmentSkipSheet({
     }),
     [commitmentId, goalId, originalDateIso, spreadOverN, strategy],
   );
+
+  const selectedGoalName = useMemo(() => goals.find((g) => g.id === goalId)?.name ?? null, [goalId, goals]);
 
   const preview = useMemo(() => {
     try {
@@ -115,13 +122,15 @@ export function CommitmentSkipSheet({
   }
 
   const previewCopy =
-    strategy === "MAKE_UP_NEXT"
-      ? "The next due date absorbs this payment. End-of-window available money shifts by the amount below."
-      : strategy === "SPREAD"
-        ? `Split across the next ${spreadOverN} due dates (when they exist). Delta reflects combined timing.`
-        : goalId
-          ? "This row drops out of the schedule; the amount is redirected in bookkeeping to your goal."
-          : "Pick a goal to preview redirect impact.";
+    strategy === "STANDALONE"
+      ? "This payment cancelled. No effect on future payments."
+      : strategy === "MAKE_UP_NEXT"
+        ? `Your next ${commitmentName} payment becomes ${formatAud(amount * 2)}.`
+        : strategy === "SPREAD"
+          ? `Each of the next ${spreadOverN} payments gains ${formatAud(amount / Math.max(1, spreadOverN))}.`
+          : goalId
+            ? `${formatAud(amount)} goes to ${selectedGoalName ?? "your goal"}’s balance.`
+            : "Pick a goal to preview redirect impact.";
 
   const sheetOpen = open && Boolean(commitmentId) && Boolean(originalDateIso);
 
@@ -155,7 +164,7 @@ export function CommitmentSkipSheet({
     >
       <div>
         <p className="text-lg font-semibold text-[color:var(--keel-ink)]">{commitmentName}</p>
-        <p className="mt-1 text-xs text-[color:var(--keel-ink-3)]">{originalDateIso}</p>
+        <p className="mt-1 text-xs text-[color:var(--keel-ink-3)]">{formatDisplayDate(originalDateIso, "long")}</p>
       </div>
 
       <div className="mt-5">

@@ -92,7 +92,6 @@ export function CommitmentDetailClient({
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const initialSkip = useMemo(
@@ -102,8 +101,6 @@ export function CommitmentDetailClient({
   const [sheetOpen, setSheetOpen] = useState(initialSkip.sheetOpen);
   const [sheetDate, setSheetDate] = useState<string | null>(initialSkip.sheetDate);
   const [restoreSkipId, setRestoreSkipId] = useState<string | null>(null);
-
-  const nextPayment = occurrences[0];
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -192,64 +189,6 @@ export function CommitmentDetailClient({
             of {formatAud(display.amount)}
           </span>
         </p>
-
-        {nextPayment ? (
-          <div className="mt-4 border-t border-white/10 pt-4">
-            {skipConfirmOpen ? (
-              <div className="rounded-[var(--radius-md)] glass-clear p-3">
-                <p className="text-sm leading-6 text-[color:var(--keel-ink-2)]">
-                  Skip payment on{" "}
-                  <span className="font-medium text-[color:var(--keel-ink)]">
-                    {formatDisplayDate(nextPayment.iso, "long")}
-                  </span>
-                  ? Keel will adjust your projections.
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    className="flex-1 rounded-[var(--radius-md)] border border-white/15 py-2.5 text-sm font-medium text-[color:var(--keel-ink-2)]"
-                    onClick={() => setSkipConfirmOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex-1 rounded-[var(--radius-md)] border border-white/12 py-2.5 text-sm font-semibold text-[color:var(--keel-ink)]",
-                      "glass-tint-attend",
-                    )}
-                    onClick={() => {
-                      setSheetDate(nextPayment.iso);
-                      setSheetOpen(true);
-                      setSkipConfirmOpen(false);
-                    }}
-                  >
-                    Confirm skip
-                  </button>
-                </div>
-              </div>
-            ) : nextPayment.activeSkipId ? (
-              <button
-                type="button"
-                onClick={() => setRestoreSkipId(nextPayment.activeSkipId!)}
-                className="rounded-[var(--radius-pill)] border border-white/12 bg-white/6 px-4 py-2 text-sm font-medium text-[color:var(--keel-ink-3)] transition-colors hover:bg-white/10"
-              >
-                Skipped · Tap to reinstate
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setSkipConfirmOpen(true)}
-                className={cn(
-                  "w-full rounded-[var(--radius-md)] border border-white/12 py-3 text-sm font-semibold text-[color:var(--keel-ink)]",
-                  "glass-tint-attend",
-                )}
-              >
-                Skip next payment
-              </button>
-            )}
-          </div>
-        ) : null}
       </SurfaceCard>
 
       <SurfaceCard className="mb-4 !p-4">
@@ -258,6 +197,85 @@ export function CommitmentDetailClient({
         </p>
         <p className="mt-2 text-sm leading-6 text-[color:var(--keel-ink-2)]">{keelNoticed}</p>
       </SurfaceCard>
+
+      <section className="mb-6">
+        <div className="px-1 pb-2">
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[color:var(--keel-ink-5)]">
+            Upcoming
+          </p>
+        </div>
+
+        <div className="glass-clear overflow-hidden rounded-[var(--radius-md)] border border-white/10">
+          {occurrences.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-[color:var(--keel-ink-3)]">No upcoming payments.</div>
+          ) : (
+            occurrences
+              .slice(0, (() => {
+                switch (display.frequency) {
+                  case "weekly":
+                    return 10;
+                  case "fortnightly":
+                    return 10;
+                  case "monthly":
+                    return 6;
+                  case "quarterly":
+                    return 4;
+                  case "annual":
+                    return 3;
+                  default:
+                    return 6;
+                }
+              })())
+              .map((row, index) => {
+                const faded = index >= 6 ? "opacity-75" : index >= 3 ? "opacity-90" : null;
+                return (
+                  <div
+                    key={row.iso}
+                    className={cn(
+                      "grid grid-cols-[80px_1fr_auto] items-center gap-3 border-b border-white/[0.04] px-3 py-3 last:border-b-0",
+                      faded,
+                    )}
+                  >
+                    <p className="text-[12px] tabular-nums text-[color:var(--keel-ink-3)]">
+                      {formatDisplayDate(row.iso, "short-day")}
+                    </p>
+                    <p
+                      className={cn(
+                        "truncate font-mono text-[14px] tabular-nums text-[color:var(--keel-ink)]",
+                        row.activeSkipId ? "text-[color:var(--keel-ink-4)] line-through" : null,
+                      )}
+                    >
+                      {formatAud(row.amount)}
+                    </p>
+                    {row.activeSkipId ? (
+                      <button
+                        type="button"
+                        onClick={() => setRestoreSkipId(row.activeSkipId!)}
+                        className={cn(
+                          "rounded-full border border-white/12 px-3 py-1.5 text-[11px] font-semibold text-[color:var(--keel-ink)]",
+                          "glass-tint-attend",
+                        )}
+                      >
+                        Unskip
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSheetDate(row.iso);
+                          setSheetOpen(true);
+                        }}
+                        className="rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-[color:var(--keel-ink-3)] hover:bg-white/[0.06]"
+                      >
+                        Skip
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+          )}
+        </div>
+      </section>
 
       <section className="mb-6">
         <h2 className="text-sm font-semibold text-[color:var(--keel-ink)]">Recent spend</h2>
@@ -292,7 +310,6 @@ export function CommitmentDetailClient({
         onClose={() => {
           setSheetOpen(false);
           setSheetDate(null);
-          setSkipConfirmOpen(false);
           if (prefillSkipDate) {
             router.replace(`/commitments/${commitmentId}`);
           }

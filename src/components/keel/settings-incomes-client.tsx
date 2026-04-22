@@ -30,6 +30,7 @@ type Props = {
   primaryIncomeId: string;
   editPayloads: IncomeEditFields[];
   initialEditId?: string;
+  basePath?: string;
 };
 
 export function SettingsIncomesClient({
@@ -37,6 +38,7 @@ export function SettingsIncomesClient({
   primaryIncomeId,
   editPayloads,
   initialEditId,
+  basePath = "/settings/incomes",
 }: Props) {
   const router = useRouter();
   const [menuId, setMenuId] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function SettingsIncomesClient({
 
   function closeEditSheet() {
     setEditIncomeId(null);
-    router.replace("/settings/incomes");
+    router.replace(basePath);
   }
 
   return (

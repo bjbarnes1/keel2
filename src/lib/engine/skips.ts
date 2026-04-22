@@ -113,6 +113,11 @@ export function applySkipsToEvents(
     const skippedEvent = working[index]!;
     const skippedAmount = skippedEvent.amount;
 
+    if (skip.strategy === "STANDALONE") {
+      working.splice(index, 1);
+      continue;
+    }
+
     if (skip.strategy === "MOVE_ON") {
       working.splice(index, 1);
       continue;

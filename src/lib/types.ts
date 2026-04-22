@@ -69,7 +69,7 @@ export interface GoalView {
   projectedCompletionIso?: string;
 }
 
-export type CommitmentSkipStrategy = "MAKE_UP_NEXT" | "SPREAD" | "MOVE_ON";
+export type CommitmentSkipStrategy = "MAKE_UP_NEXT" | "SPREAD" | "MOVE_ON" | "STANDALONE";
 export type GoalSkipStrategy = "EXTEND_DATE" | "REBALANCE";
 
 /** JSON-serializable; optional `skipId` when sourced from persisted rows. */

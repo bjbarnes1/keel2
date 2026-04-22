@@ -65,6 +65,22 @@ describe("parseBillEventCommitmentId", () => {
 });
 
 describe("applySkipsToEvents", () => {
+  it("STANDALONE removes skipped bill with no redistribution", () => {
+    const events = baselineEvents();
+    const out = applySkipsToEvents(events, [
+      {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "STANDALONE",
+      },
+    ]);
+    const byId = new Map(out.map((event) => [event.id, event]));
+    expect(byId.has(billEventId(baseCommitment.id, "2026-04-18"))).toBe(false);
+    expect(byId.get(billEventId(baseCommitment.id, "2026-05-02"))?.amount).toBe(500);
+    expect(byId.get(billEventId(baseCommitment.id, "2026-05-16"))?.amount).toBe(500);
+  });
+
   it("MAKE_UP_NEXT removes skipped row and adds amount to next bill", () => {
     const events = baselineEvents();
     const out = applySkipsToEvents(events, [
@@ -91,6 +107,85 @@ describe("applySkipsToEvents", () => {
       },
     ]);
     expect(out.some((event) => event.id === billEventId(baseCommitment.id, "2026-04-18"))).toBe(false);
+  });
+
+  it("applies STANDALONE on multiple commitments independently", () => {
+    const c2 = { ...baseCommitment, id: "c2", name: "Phone" };
+    const events = [
+      ...baselineEvents(),
+      {
+        id: billEventId(c2.id, "2026-04-18"),
+        date: "2026-04-18",
+        label: c2.name,
+        amount: 60,
+        type: "bill" as const,
+      },
+      {
+        id: billEventId(c2.id, "2026-05-02"),
+        date: "2026-05-02",
+        label: c2.name,
+        amount: 60,
+        type: "bill" as const,
+      },
+    ].sort((a, b) => a.date.localeCompare(b.date));
+
+    const out = applySkipsToEvents(events, [
+      {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "STANDALONE",
+      },
+      {
+        kind: "commitment",
+        commitmentId: c2.id,
+        originalDateIso: "2026-04-18",
+        strategy: "STANDALONE",
+      },
+    ]);
+
+    expect(out.some((e) => e.id === billEventId(baseCommitment.id, "2026-04-18"))).toBe(false);
+    expect(out.some((e) => e.id === billEventId(c2.id, "2026-04-18"))).toBe(false);
+    expect(out.find((e) => e.id === billEventId(c2.id, "2026-05-02"))?.amount).toBe(60);
+  });
+
+  it("STANDALONE and MAKE_UP_NEXT can coexist for different commitments", () => {
+    const c2 = { ...baseCommitment, id: "c3", name: "Gym" };
+    const events = [
+      ...baselineEvents(),
+      {
+        id: billEventId(c2.id, "2026-04-18"),
+        date: "2026-04-18",
+        label: c2.name,
+        amount: 40,
+        type: "bill" as const,
+      },
+      {
+        id: billEventId(c2.id, "2026-05-02"),
+        date: "2026-05-02",
+        label: c2.name,
+        amount: 40,
+        type: "bill" as const,
+      },
+    ].sort((a, b) => a.date.localeCompare(b.date));
+
+    const out = applySkipsToEvents(events, [
+      {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "STANDALONE",
+      },
+      {
+        kind: "commitment",
+        commitmentId: c2.id,
+        originalDateIso: "2026-04-18",
+        strategy: "MAKE_UP_NEXT",
+      },
+    ]);
+
+    expect(out.some((e) => e.id === billEventId(baseCommitment.id, "2026-04-18"))).toBe(false);
+    expect(out.find((e) => e.id === billEventId(c2.id, "2026-05-02"))?.amount).toBe(80);
   });
 
   it("SPREAD distributes across next N bills", () => {
@@ -200,6 +295,21 @@ describe("previewSkipImpact", () => {
     expect(preview.endAvailableMoneyDelta).toBe(500);
   });
 
+  it("reports the skipped amount delta for STANDALONE", () => {
+    const ordered = baselineEvents().sort((a, b) => a.date.localeCompare(b.date));
+    const preview = previewSkipImpact({
+      baselineOrdered: ordered,
+      startingAvailableMoney: 1000,
+      skip: {
+        kind: "commitment",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "STANDALONE",
+      },
+    });
+    expect(preview.endAvailableMoneyDelta).toBe(500);
+  });
+
   it("stacks hypothetical skip on existing commitment skips", () => {
     const ordered = baselineEvents().sort((a, b) => a.date.localeCompare(b.date));
     const existing = [
@@ -281,6 +391,20 @@ describe("commitmentSkipDisplayIndex", () => {
     ]);
     expect(idx.get(billEventId(baseCommitment.id, "2026-04-18"))?.isSkipped).toBe(true);
     expect(idx.get(billEventId(baseCommitment.id, "2026-05-02"))?.isSpreadTarget).toBe(true);
+  });
+
+  it("marks STANDALONE as skipped with no spread targets", () => {
+    const baseline = baselineEvents();
+    const idx = commitmentSkipDisplayIndex(baseline, [
+      {
+        skipId: "s2",
+        commitmentId: baseCommitment.id,
+        originalDateIso: "2026-04-18",
+        strategy: "STANDALONE",
+      },
+    ]);
+    expect(idx.get(billEventId(baseCommitment.id, "2026-04-18"))?.isSkipped).toBe(true);
+    expect(idx.get(billEventId(baseCommitment.id, "2026-05-02"))?.isSpreadTarget).toBeFalsy();
   });
 });
 
@@ -388,6 +512,38 @@ describe("buildTimelineForTest", () => {
           commitmentId: baseCommitment.id,
           originalDateIso: "2026-04-18",
           strategy: "MOVE_ON",
+        },
+      ],
+    });
+    const endBase = base[base.length - 1]!.projectedAvailableMoney;
+    const endSkip = withSkip[withSkip.length - 1]!.projectedAvailableMoney;
+    expect(endSkip).toBeGreaterThanOrEqual(endBase);
+  });
+
+  it("STANDALONE skip improves end balance vs baseline in fixture", () => {
+    const base = buildTimelineForTest({
+      asOfIso: "2026-04-10",
+      bankBalance: 5000,
+      incomes: [baseIncome],
+      primaryIncomeId: baseIncome.id,
+      commitments: [baseCommitment],
+      goals: [],
+      horizonDays: 42,
+    });
+    const withSkip = buildTimelineForTest({
+      asOfIso: "2026-04-10",
+      bankBalance: 5000,
+      incomes: [baseIncome],
+      primaryIncomeId: baseIncome.id,
+      commitments: [baseCommitment],
+      goals: [],
+      horizonDays: 42,
+      skips: [
+        {
+          kind: "commitment",
+          commitmentId: baseCommitment.id,
+          originalDateIso: "2026-04-18",
+          strategy: "STANDALONE",
         },
       ],
     });

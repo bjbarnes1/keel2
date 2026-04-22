@@ -33,7 +33,7 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const commitmentSkipCreateSchema = z.object({
   commitmentId: z.string().min(1),
   originalDateIso: isoDate,
-  strategy: z.enum(["MAKE_UP_NEXT", "SPREAD", "MOVE_ON"]),
+  strategy: z.enum(["MAKE_UP_NEXT", "SPREAD", "MOVE_ON", "STANDALONE"]),
   spreadOverN: z.number().int().min(1).max(24).optional(),
   redirectTo: z.string().optional(),
   notes: z.string().max(2000).optional(),

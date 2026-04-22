@@ -1,7 +1,7 @@
 /**
  * Legacy full-screen income edit — redirects to list + sheet (`?edit=`).
  *
- * @module app/settings/incomes/[id]/edit/page
+ * @module app/incomes/[id]/edit/page
  */
 
 import { redirect } from "next/navigation";
@@ -16,3 +16,4 @@ export default async function LegacyIncomeEditPage({
   const { id } = await params;
   redirect(`/incomes?edit=${encodeURIComponent(id)}`);
 }
+

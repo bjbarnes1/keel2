@@ -10,6 +10,13 @@ datasource db {
   provider = "postgresql"
 }
 
+enum CommitmentSkipStrategy {
+  MAKE_UP_NEXT
+  SPREAD
+  MOVE_ON
+  STANDALONE
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -202,7 +209,7 @@ model CommitmentSkip {
   budgetId        String
   commitmentId    String
   originalDate    DateTime  @db.Date
-  strategy        String
+  strategy        CommitmentSkipStrategy
   spreadOverN     Int?
   redirectTo      String?
   skippedAmount   Decimal?
