@@ -1,3 +1,5 @@
+/** Vitest: memo → commitment suggestion heuristic. */
+
 import { describe, expect, it } from "vitest";
 
 import { suggestCommitments } from "./suggest-commitment";

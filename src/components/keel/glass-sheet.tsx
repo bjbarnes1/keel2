@@ -3,6 +3,8 @@
 /**
  * GlassSheet — full-viewport bottom sheet with Keel glass chrome.
  *
+ * @module components/keel/glass-sheet
+ *
  * Props:
  * - open: controlled visibility
  * - onClose: called on backdrop tap, Escape, grabber

@@ -1,3 +1,17 @@
+/**
+ * Tailwind CSS v4 still supports a JS config for theme extension.
+ *
+ * The canonical design tokens for surfaces/text live in `src/app/globals.css`
+ * as CSS variables (`--keel-*`, `--radius-*`, glass presets). This file mirrors
+ * a subset as Tailwind **color names** (`text-ink-3`, `bg-tide`, …) for utility
+ * ergonomics where classes read better than arbitrary values.
+ *
+ * Prefer semantic tokens from globals when building new UI; use these aliases when
+ * composing with standard Tailwind patterns.
+ *
+ * @module tailwind.config
+ */
+
 import type { Config } from "tailwindcss";
 
 const config: Config = {

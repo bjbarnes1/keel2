@@ -1,3 +1,13 @@
+/**
+ * Budget-level operations: bank balance updates, member listing, invite flow.
+ *
+ * When `DATABASE_URL` is absent, mutating paths throw or no-op per function — the app
+ * falls back to JSON `state.ts` persistence for demos. Production traffic should always
+ * hit the Prisma branches.
+ *
+ * @module lib/persistence/budget
+ */
+
 import { randomUUID } from "node:crypto";
 
 import { unstable_noStore as noStore } from "next/cache";

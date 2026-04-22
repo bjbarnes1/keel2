@@ -1,3 +1,23 @@
+/**
+ * Core cashflow engine: scheduling, reserves, available money, and projection timelines.
+ *
+ * **Pure domain layer** — no I/O, no React. Persistence maps DB rows into the small
+ * `EngineIncome` / `EngineCommitment` / `EngineGoal` shapes consumed here.
+ *
+ * Major concepts:
+ * - *Available money* — bank balance minus goal envelopes and per-commitment reserves
+ *   computed against the primary pay cycle (`calculateAvailableMoney`).
+ * - *Projection timeline* — deterministic forward simulation of pay + bill events with
+ *   running balances; commitment skips mutate bill *cashflow* amounts via `skips.ts`
+ *   before the walk (`buildProjectionTimeline`).
+ * - *Chunked windows* — optional `startDate` + `horizonDays` let the Timeline load later
+ *   weeks without resetting balances to zero (warm-up walk from `asOf`).
+ *
+ * All calendar math uses UTC midnight (`T00:00:00Z`) to avoid TZ drift across clients.
+ *
+ * @module lib/engine/keel
+ */
+
 import type { CommitmentFrequency, CommitmentSkipInput, PayFrequency, SkipInput } from "@/lib/types";
 
 import {
@@ -151,6 +171,14 @@ function compareUtcDate(left: Date, right: Date) {
   return 0;
 }
 
+// --- Pay cycle window --------------------------------------------------------
+
+/**
+ * Locates the current pay period around the user’s primary income schedule.
+ *
+ * Used by dashboard copy and some horizon labels; not authoritative for engine dates
+ * (those come from `nextPayDate` on each income row).
+ */
 export function getCurrentPayPeriod(
   primaryIncome: EngineIncome | null,
   asOf: Date,
@@ -317,6 +345,15 @@ export function calculateCommitmentReserve(
   };
 }
 
+// --- Available money (reserves + goals) ------------------------------------
+
+/**
+ * Computes discretionary cash after setting aside money for upcoming bills and goals.
+ *
+ * Each commitment gets a `CommitmentReserve` (reserved amount + % funded) based on
+ * how many pay days remain before the next due date. Goals subtract `contributionPerPay`
+ * for each pay event until the target is met (simplified model — see implementation).
+ */
 export function calculateAvailableMoney(input: {
   bankBalance: number;
   incomes: EngineIncome[];
@@ -364,6 +401,15 @@ export function calculateAvailableMoney(input: {
   };
 }
 
+// --- Scheduled events (income + bills) ---------------------------------------
+
+/**
+ * Expands recurring incomes/commitments into discrete dated cashflow events up to
+ * `asOf + horizonDays`.
+ *
+ * This is the *unskipped* baseline; `buildProjectionTimeline` layers skip adjustments
+ * on top before computing balances.
+ */
 export function collectScheduledProjectionEvents(input: {
   asOf: Date;
   horizonDays: number;
@@ -439,17 +485,42 @@ export function listCommitmentBillOccurrences(input: {
   }).filter((event) => event.type === "bill");
 }
 
+/**
+ * Builds the projected-cashflow timeline.
+ *
+ * `asOf` is the anchor for "now" — the starting available-money floor. `startDate`
+ * (optional, defaults to `asOf`) is the lower bound of returned events. When
+ * `startDate > asOf` the running balance is walked from `availableMoney` through
+ * every event between `asOf` and `startDate` so the first returned event reflects
+ * the correct balance (required for chunked loading of week 4+ windows).
+ */
 export function buildProjectionTimeline(input: {
   availableMoney: number;
   asOf: Date;
-  horizonDays: number;
+  /** Lower bound for returned events. Defaults to `asOf`. */
+  startDate?: Date;
+  /** Size of the returned window in days, measured from `startDate`. Defaults to 42. */
+  horizonDays?: number;
   incomes: EngineIncome[];
   commitments: EngineCommitment[];
   skips?: SkipInput[];
 }) {
+  const horizonDays = input.horizonDays ?? 42;
+  const startDate = input.startDate ?? input.asOf;
+
+  // Window end (inclusive) = startDate + horizonDays. Generation horizon must cover
+  // the window end even when startDate > asOf.
+  const rangeEndMs = startDate.getTime() + horizonDays * 86_400_000;
+  const asOfEndMs = input.asOf.getTime() + horizonDays * 86_400_000;
+  const generationEndMs = Math.max(asOfEndMs, rangeEndMs);
+  const generationHorizonDays = Math.max(
+    0,
+    Math.ceil((generationEndMs - input.asOf.getTime()) / 86_400_000),
+  );
+
   const baseline = collectScheduledProjectionEvents({
     asOf: input.asOf,
-    horizonDays: input.horizonDays,
+    horizonDays: generationHorizonDays,
     incomes: input.incomes,
     commitments: input.commitments,
   });
@@ -463,19 +534,56 @@ export function buildProjectionTimeline(input: {
     cashflow.filter((event) => event.type === "bill").map((event) => [event.id, event.amount]),
   );
 
-  let runningAvailableMoney = input.availableMoney;
+  const startIso = toIsoDate(startOfUtcDay(startDate));
+  const endIso = toIsoDate(startOfUtcDay(new Date(rangeEndMs)));
 
-  return baseline.map((event) => {
+  let runningAvailableMoney = input.availableMoney;
+  const out: ProjectionEvent[] = [];
+
+  for (const event of baseline) {
     runningAvailableMoney =
       event.type === "income"
         ? roundCurrency(runningAvailableMoney + event.amount)
         : roundCurrency(runningAvailableMoney - (cashflowBillAmountById.get(event.id) ?? 0));
 
-    return {
-      ...event,
-      projectedAvailableMoney: roundCurrency(runningAvailableMoney),
-    } satisfies ProjectionEvent;
-  });
+    if (event.date >= startIso && event.date <= endIso) {
+      out.push({
+        ...event,
+        projectedAvailableMoney: roundCurrency(runningAvailableMoney),
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Returns the projected available money as of `target`.
+ *
+ * `events` must be sorted ascending by `date` (this is the shape emitted by
+ * `buildProjectionTimeline`). The function walks until it passes `target`, then
+ * returns the last event's `projectedAvailableMoney` (step function, inclusive
+ * of `target`). Designed for gesture-frame lookups — O(n) worst case with an
+ * early break as soon as we cross `target`.
+ */
+export function availableMoneyAt(
+  target: Date | string,
+  events: ProjectionEvent[],
+  startingAvailableMoney: number,
+): number {
+  const targetIso =
+    typeof target === "string" ? target : toIsoDate(startOfUtcDay(target));
+
+  let last: ProjectionEvent | null = null;
+  for (const event of events) {
+    if (event.date <= targetIso) {
+      last = event;
+    } else {
+      break;
+    }
+  }
+
+  return last?.projectedAvailableMoney ?? startingAvailableMoney;
 }
 
 /** Pure integration-style helper for tests (no Prisma). */

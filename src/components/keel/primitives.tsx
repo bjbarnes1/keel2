@@ -1,8 +1,20 @@
+/**
+ * Shared layout and presentational primitives for Keel screens.
+ *
+ * Contains `AppShell` (header + tab bar), cards, dashboard sections, and small atoms
+ * used across routes. Mostly Server Component–friendly; individual exports may be
+ * client-only when they embed interactive children.
+ *
+ * **Styling:** composes Tailwind with `cn()` and CSS variables from `globals.css`.
+ *
+ * @module components/keel/primitives
+ */
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowLeft, ChevronRight, Plus } from "lucide-react";
 
-import type { CommitmentView, GoalView, IncomeView } from "@/lib/types";
+import type { CommitmentView, IncomeView } from "@/lib/types";
 import { cn, formatAud, sentenceCaseFrequency } from "@/lib/utils";
 
 import { AvatarMenu } from "@/components/keel/avatar-menu";
@@ -11,7 +23,7 @@ type NavItem =
   | { href: string; label: string }
   | { href: string; label: string; match: (path: string) => boolean };
 
-const navItems: NavItem[] = [
+const ALL_NAV_ITEMS: NavItem[] = [
   {
     href: "/",
     label: "Home",
@@ -23,10 +35,17 @@ const navItems: NavItem[] = [
       path.startsWith("/commitments"),
   },
   { href: "/timeline", label: "Timeline" },
-  { href: "/wealth", label: "Wealth" },
-  { href: "/goals", label: "Goals", match: (path) => path === "/goals" || path.startsWith("/goals/") },
   { href: "/ask", label: "Ask" },
+  { href: "/goals", label: "Goals", match: (path) => path === "/goals" || path.startsWith("/goals/") },
+  { href: "/wealth", label: "Wealth" },
 ];
+
+function tabNavItems(): NavItem[] {
+  if (process.env.NEXT_PUBLIC_KEEL_ASK_AVAILABLE === "1") {
+    return ALL_NAV_ITEMS;
+  }
+  return ALL_NAV_ITEMS.filter((item) => item.href !== "/ask");
+}
 
 function isNavActive(item: NavItem, currentPath: string) {
   return "match" in item ? item.match(currentPath) : item.href === currentPath;
@@ -64,28 +83,38 @@ function IconAsk({ active }: { active: boolean }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
-        d="M8.5 8.75c0-2.1 1.6-3.75 3.75-3.75S16 6.65 16 8.75c0 1.55-.9 2.85-2.2 3.45-.55.25-.95.75-1.05 1.35"
+        d="M6.5 6.5c0-1.1.9-2 2-2h7c1.1 0 2 .9 2 2v7.5c0 .8-.5 1.5-1.2 1.8l-2.3 1v-1.8H8.5c-1.1 0-2-.9-2-2V6.5Z"
         stroke={stroke}
         strokeWidth="1.6"
-        strokeLinecap="round"
+        strokeLinejoin="round"
       />
-      <path d="M12.25 17.2h.01" stroke={stroke} strokeWidth="3" strokeLinecap="round" />
+      <path d="M9 10h4.5" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M9 13h2.5" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
 
 function IconWealth({ active }: { active: boolean }) {
   const stroke = active ? "rgba(240, 235, 220, 0.92)" : "rgba(168, 172, 159, 0.95)";
+  const fillA = active ? "rgba(240, 235, 220, 0.22)" : "rgba(168, 172, 159, 0.18)";
+  const fillB = active ? "rgba(240, 235, 220, 0.12)" : "rgba(168, 172, 159, 0.1)";
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="none" stroke={stroke} strokeWidth="1.6" />
       <path
-        d="M6.5 7.5h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z"
+        d="M12 12 12 3a9 9 0 0 1 8.485 6H12Z"
+        fill={fillA}
         stroke={stroke}
-        strokeWidth="1.6"
+        strokeWidth="1.2"
         strokeLinejoin="round"
       />
-      <path d="M8 10.5h8" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M9 14.5h3" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M12 12 20.485 9A9 9 0 0 1 17.364 19.5L12 12Z"
+        fill={fillB}
+        stroke={stroke}
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -153,7 +182,7 @@ export function AppShell({
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[calc(12px+env(safe-area-inset-bottom))]">
         <nav className="pointer-events-auto glass-heavy mx-4 w-full max-w-[380px] rounded-[var(--radius-pill)] px-2 py-2">
           <div className="flex items-end justify-between gap-1">
-            {navItems.map((item) => {
+            {tabNavItems().map((item) => {
               const active = isNavActive(item, currentPath);
 
               return (
@@ -379,50 +408,7 @@ export function CommitmentCard({ commitment }: { commitment: CommitmentView }) {
   );
 }
 
-export function GoalCard({ goal }: { goal: GoalView }) {
-  const hasTarget = Boolean(goal.targetAmount);
-  const percent = goal.targetAmount
-    ? Math.min(Math.round((goal.currentBalance / goal.targetAmount) * 100), 100)
-    : 0;
-
-  return (
-    <Link href={`/goals/${goal.id}`} className="block">
-      <SurfaceCard className="transition-colors hover:border-primary/40">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[15px] font-medium">{goal.name}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {hasTarget ? "Savings goal" : "Open-ended goal"}
-          </p>
-        </div>
-        <p className="font-mono text-[15px] font-semibold text-primary">
-          {formatAud(goal.contributionPerPay)}
-          <span className="ml-1 font-sans text-xs font-normal text-muted-foreground">/pay</span>
-        </p>
-      </div>
-
-      {hasTarget ? (
-        <>
-          <div className="mt-3 flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">
-              {formatAud(goal.currentBalance)} of {formatAud(goal.targetAmount ?? 0)}
-            </span>
-            <span className="text-primary">{percent}%</span>
-          </div>
-          <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
-          </div>
-          {goal.targetDate ? (
-            <p className="mt-3 text-xs text-emerald-500">On track for {goal.targetDate}</p>
-          ) : null}
-        </>
-      ) : (
-        <p className="mt-3 text-xs text-primary">{formatAud(goal.currentBalance)} saved</p>
-      )}
-      </SurfaceCard>
-    </Link>
-  );
-}
+export { GoalCard } from "@/components/keel/goal-card";
 
 export function AddCardLink({
   href,

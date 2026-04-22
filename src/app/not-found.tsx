@@ -1,3 +1,9 @@
+/**
+ * Global 404 page (App Router `not-found.tsx`).
+ *
+ * @module app/not-found
+ */
+
 import Link from "next/link";
 
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";

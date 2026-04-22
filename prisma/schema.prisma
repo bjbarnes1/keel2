@@ -1,3 +1,7 @@
+// Keel2 Postgres schema (Supabase-hosted). Multi-tenant via Budget + BudgetMember;
+// all domain tables carry `budgetId` (or inherit through relations) for isolation.
+// Spend + wealth modules extend the core commitments/incomes model.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -67,16 +71,17 @@ model BudgetInvite {
 }
 
 model Income {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   budgetId    String
-  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  budget      Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   name        String
   amount      Decimal
   frequency   String
   nextPayDate DateTime
-  isPrimary   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isPrimary   Boolean   @default(false)
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   versions    IncomeVersion[]
   commitments Commitment[] @relation("IncomeCommitments")

@@ -1,13 +1,16 @@
+/**
+ * Section header for category-grouped commitment lists.
+ *
+ * @module components/keel/category-group-header
+ */
+
 type CategoryGroupHeaderProps = {
   label: string;
   count?: number;
   className?: string;
 };
 
-/**
- * Section header for grouped lists (category, etc.).
- * Typography: muted ink, slight tracking.
- */
+/** Typography: muted ink, slight tracking. */
 export function CategoryGroupHeader({ label, count, className }: CategoryGroupHeaderProps) {
   return (
     <div

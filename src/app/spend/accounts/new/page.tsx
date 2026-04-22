@@ -1,3 +1,9 @@
+/**
+ * New linked spend account form (`createSpendAccountAction`).
+ *
+ * @module app/spend/accounts/new/page
+ */
+
 import { createSpendAccountAction } from "@/app/actions/keel-spend";
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import { SubmitButton } from "@/components/keel/submit-button";

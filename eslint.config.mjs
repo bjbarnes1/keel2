@@ -1,3 +1,9 @@
+/**
+ * ESLint flat config for Next.js 16 (core-web-vitals + TypeScript presets).
+ *
+ * @module eslint.config
+ */
+
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTypescript from "eslint-config-next/typescript";
 

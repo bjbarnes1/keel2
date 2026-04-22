@@ -1,3 +1,12 @@
+/**
+ * Pure math for comparing annualized commitment plans to arbitrary calendar windows.
+ *
+ * `plannedAmountForPeriod` scales recurring commitments into a fractional “month” budget
+ * for report periods that aren’t aligned to pay cycles.
+ *
+ * @module lib/spend/actual-vs-planned
+ */
+
 import { annualizeAmount } from "@/lib/engine/keel";
 import type { CommitmentFrequency } from "@/lib/types";
 

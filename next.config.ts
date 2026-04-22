@@ -1,7 +1,19 @@
+/**
+ * Next.js build/runtime configuration.
+ *
+ * Historical URL paths (`/bills`, `/incomes`, …) redirect to the current IA so
+ * bookmarks and marketing links keep working after the Commitments / Settings rename.
+ *
+ * @module next.config
+ */
+
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  env: {
+    NEXT_PUBLIC_KEEL_ASK_AVAILABLE: process.env.ANTHROPIC_API_KEY?.trim() ? "1" : "0",
+  },
   async redirects() {
     return [
       { source: "/bills", destination: "/commitments", permanent: false },
@@ -12,6 +24,8 @@ const nextConfig: NextConfig = {
       { source: "/incomes", destination: "/settings/incomes", permanent: false },
       { source: "/incomes/new", destination: "/settings/incomes/new", permanent: false },
       { source: "/budget/members", destination: "/settings/household", permanent: false },
+      { source: "/settings/wealth", destination: "/wealth", permanent: false },
+      { source: "/settings/wealth/new", destination: "/wealth/new", permanent: false },
     ];
   },
 };

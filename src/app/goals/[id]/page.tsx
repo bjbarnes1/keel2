@@ -1,3 +1,9 @@
+/**
+ * Goal detail + upcoming contributions; mixes server data with client subcomponents.
+ *
+ * @module app/goals/[id]/page
+ */
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";

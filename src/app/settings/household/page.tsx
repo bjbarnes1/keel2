@@ -1,3 +1,9 @@
+/**
+ * Household members + invite flow (`createBudgetInviteAction`).
+ *
+ * @module app/settings/household/page
+ */
+
 import Link from "next/link";
 
 import { createBudgetInviteAction } from "@/app/actions/keel";

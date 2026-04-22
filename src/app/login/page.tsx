@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * Email magic-link login via Supabase (`createSupabaseBrowserClient`).
+ *
+ * Client Component: reads `searchParams` for post-auth redirect target (`next`).
+ *
+ * @module app/login/page
+ */
+
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 

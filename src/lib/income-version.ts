@@ -1,3 +1,14 @@
+/**
+ * Income version effective-range utilities.
+ *
+ * Versions are half-open intervals in UTC calendar space: active when
+ * `effectiveFrom <= asOf <= effectiveTo` (or `effectiveTo === null` for open-ended).
+ * Used by JSON demo persistence and Prisma readers to reconstruct the engine inputs
+ * as-of any historical date.
+ *
+ * @module lib/income-version
+ */
+
 export type IncomeVersionSlice = {
   effectiveFrom: Date;
   effectiveTo: Date | null;

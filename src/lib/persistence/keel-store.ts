@@ -1,6 +1,14 @@
-// Barrel re-exports for domain modules.
-// The original ~2,500-line file was split into focused persistence modules;
-// this file preserves the public API so callers don't need to change imports.
+/**
+ * Facade re-export barrel for the persistence layer.
+ *
+ * Historically a single large module; split into `auth`, `budget`, `commitments`, etc.
+ * Import from here in application code to keep call sites stable (`@/lib/persistence/keel-store`).
+ *
+ * **Guidance:** add new exports when a function is part of the “public persistence API”
+ * consumed by Server Actions or route handlers; keep test-only helpers file-local.
+ *
+ * @module lib/persistence/keel-store
+ */
 
 export { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
 export { getBudgetContext } from "./auth";
@@ -23,7 +31,7 @@ export {
   getIncomeForEdit,
   updateIncomeFuture,
   setPrimaryIncome,
-  deleteIncome,
+  archiveIncome,
 } from "./income";
 export {
   getCommitmentForEdit,
@@ -66,4 +74,5 @@ export {
   getDashboardSnapshot,
   getCommitmentSkipPreviewBundle,
   getProjectionEngineInput,
+  buildProjectionChunkFromState,
 } from "./dashboard";

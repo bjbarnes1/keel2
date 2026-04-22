@@ -1,3 +1,9 @@
+/**
+ * Heuristic memo → commitment matcher for reconciliation autocomplete (token overlap).
+ *
+ * @module lib/spend/suggest-commitment
+ */
+
 export type CommitmentCandidate = {
   id: string;
   name: string;

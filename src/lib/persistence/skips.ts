@@ -1,3 +1,13 @@
+/**
+ * Skip persistence: active commitment/goal skips for projection overlays.
+ *
+ * `getActiveSkipsForBudget` returns DTOs consumed by `applySkipsToEvents` in the engine.
+ * Rows are budget-scoped; strategies (`MAKE_UP_NEXT`, `SPREAD`, …) are validated before
+ * being mapped into `SkipInput` unions.
+ *
+ * @module lib/persistence/skips
+ */
+
 import { getPrismaClient } from "@/lib/prisma";
 import type {
   CommitmentSkipInput,

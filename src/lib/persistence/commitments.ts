@@ -1,3 +1,13 @@
+/**
+ * Commitment (bill) CRUD + versioned “effective from” edits.
+ *
+ * Mirrors the income module: Prisma path uses append-only `CommitmentVersion` rows;
+ * JSON fallback mutates `StoredCommitment` in `state.ts`. All queries are scoped by
+ * `budgetId` from `getBudgetContext()`.
+ *
+ * @module lib/persistence/commitments
+ */
+
 import { randomUUID } from "node:crypto";
 
 import { unstable_noStore as noStore } from "next/cache";
@@ -83,7 +93,7 @@ export async function createCommitment(input: {
     const { budget } = await getBudgetContext();
 
     const incomes = await prisma.income.findMany({
-      where: { budgetId: budget.id },
+      where: { budgetId: budget.id, archivedAt: null },
       orderBy: { createdAt: "asc" },
     });
     if (incomes.length === 0) {

@@ -1,3 +1,13 @@
+/**
+ * Bank spend ingestion + reconciliation: accounts, CSV import batches, transactions.
+ *
+ * Sensitive fields (BSB/account numbers) are encrypted at rest via `encryptBankSecret`;
+ * list views only expose masked suffixes. Dedupe keys are computed in `lib/spend/dedupe`
+ * to make re-imports idempotent.
+ *
+ * @module lib/persistence/spend
+ */
+
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getPrismaClient } from "@/lib/prisma";

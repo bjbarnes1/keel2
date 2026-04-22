@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Header avatar control: sign-out + navigation via Supabase browser client + portal menu.
+ *
+ * @module components/keel/avatar-menu
+ */
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -107,10 +113,13 @@ export function AvatarMenu({ initialLetter = "K" }: { initialLetter?: string }) 
         <div
           ref={panelRef}
           role="menu"
-          className="glass-heavy pointer-events-auto fixed min-w-[220px] rounded-[var(--radius-lg)] border border-white/12 p-1 shadow-[0_16px_48px_rgba(0,0,0,0.35)]"
+          className="pointer-events-auto fixed min-w-[220px] rounded-[var(--radius-lg)] border border-white/12 p-1 shadow-[0_16px_48px_rgba(0,0,0,0.35)]"
           style={{
             top: panelPos.top,
             right: panelPos.right,
+            backgroundColor: "rgba(20, 26, 23, 0.92)",
+            backdropFilter: "blur(40px) saturate(180%)",
+            WebkitBackdropFilter: "blur(40px) saturate(180%)",
             opacity: open ? 1 : 0,
             transform: open ? "scale(1)" : "scale(0.98)",
             transition: `opacity ${PANEL_ANIM_MS}ms ${PANEL_EASE}, transform ${PANEL_ANIM_MS}ms ${PANEL_EASE}`,
@@ -120,14 +129,6 @@ export function AvatarMenu({ initialLetter = "K" }: { initialLetter?: string }) 
             <p className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--keel-ink-3)]">Account</p>
           </div>
           <div className="h-px bg-white/10" />
-          <Link
-            role="menuitem"
-            href="/profile"
-            onClick={close}
-            className="block rounded-[var(--radius-md)] px-3 py-2.5 text-sm text-[color:var(--keel-ink)] transition-colors hover:bg-white/6"
-          >
-            Profile
-          </Link>
           <Link
             role="menuitem"
             href="/settings"

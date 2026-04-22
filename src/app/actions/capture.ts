@@ -1,5 +1,15 @@
 "use server";
 
+/**
+ * AI Capture Server Actions: validate LLM output, map categories, create domain rows.
+ *
+ * Gated by `KEEL_AI_ENABLED` and per-user `assertWithinAiRateLimit`. Uses Supabase
+ * directly for auth (not `getBudgetContext`) to keep error messages aligned with the
+ * capture UI, then calls persistence creators.
+ *
+ * @module app/actions/capture
+ */
+
 import { revalidatePath } from "next/cache";
 
 import { commitmentCaptureSchema, incomeCaptureSchema, assetCaptureSchema } from "@/lib/ai/parse-capture";
@@ -108,6 +118,5 @@ export async function createAssetFromCapture(input: unknown) {
 
   revalidatePath("/timeline");
   revalidatePath("/");
-  revalidatePath("/settings/wealth");
   revalidatePath("/wealth");
 }

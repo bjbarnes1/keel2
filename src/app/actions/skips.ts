@@ -1,5 +1,17 @@
 "use server";
 
+/**
+ * Server Actions for persisting commitment and goal skips (payment deferrals / strategies).
+ *
+ * All paths require configured Postgres + Supabase (`assertSkipsPersistence`) because
+ * skip rows participate in RLS-scoped projection overlays.
+ *
+ * Input validation: Zod schemas below enforce ISO dates, strategy enums, and bounded
+ * `spreadOverN` to prevent trivial DoS payloads.
+ *
+ * @module app/actions/skips
+ */
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 

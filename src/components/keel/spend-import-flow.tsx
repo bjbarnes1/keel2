@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * End-to-end CSV import UI: preview, mapping, commit via `keel-spend` actions.
+ *
+ * @module components/keel/spend-import-flow
+ */
+
 import { useMemo, useState, useTransition } from "react";
 
 import {

@@ -1,3 +1,12 @@
+/**
+ * Home dashboard: Server Component that loads `getDashboardSnapshot()` and renders
+ * available money, upcoming projection rows, and goal cards inside `AppShell`.
+ *
+ * `force-dynamic` — figures are user-specific and must not be statically cached.
+ *
+ * @module app/page
+ */
+
 import Link from "next/link";
 
 import {
@@ -74,7 +83,7 @@ export default async function HomePage() {
           <p className="mt-1 text-xs text-muted-foreground">{snapshot.alert}</p>
         </div>
         <Link href="/balance" className="text-sm font-medium text-primary">
-          Update
+          Update balance
         </Link>
       </SurfaceCard>
 

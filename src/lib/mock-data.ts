@@ -1,3 +1,12 @@
+/**
+ * Deterministic fixture state for demos, Storybook-style exploration, or tests
+ * that need a rich dashboard without seeding Postgres.
+ *
+ * Not imported by production routes — safe to tweak for local UX experiments.
+ *
+ * @module lib/mock-data
+ */
+
 import {
   buildProjectionTimeline,
   calculateAvailableMoney,

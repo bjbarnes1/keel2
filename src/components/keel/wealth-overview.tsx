@@ -1,3 +1,9 @@
+/**
+ * Wealth holdings list + sparkline history (Server Component; embeds client children).
+ *
+ * @module components/keel/wealth-overview
+ */
+
 import Link from "next/link";
 
 import { deleteWealthHoldingAction } from "@/app/actions/keel-wealth";

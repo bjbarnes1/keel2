@@ -1,3 +1,12 @@
+/**
+ * Budget-scoped category taxonomy (categories + subcategories).
+ *
+ * When no DB is configured, returns a static default tree so UIs remain usable in
+ * offline demos.
+ *
+ * @module lib/persistence/categories
+ */
+
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getPrismaClient } from "@/lib/prisma";

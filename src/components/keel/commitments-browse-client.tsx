@@ -1,8 +1,15 @@
 "use client";
 
+/**
+ * Main commitments browse experience: grouping, row kebab actions, skip entry points.
+ *
+ * @module components/keel/commitments-browse-client
+ */
+
 import Link from "next/link";
+import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ScheduledCashflowEvent } from "@/lib/engine/skips";
 import { annualizeAmount } from "@/lib/engine/keel";
@@ -14,7 +21,6 @@ import { CommitmentSkipSheet } from "@/components/keel/commitment-skip-sheet";
 import { CategoryGroupHeader } from "@/components/keel/category-group-header";
 import { FloatingAddButton } from "@/components/keel/floating-add-button";
 import { CommitmentCardContent, EmptyState, SurfaceCard } from "@/components/keel/primitives";
-import { SwipeActionRow } from "@/components/keel/swipe-action-row";
 
 type GoalOption = { id: string; name: string };
 
@@ -45,6 +51,7 @@ export function CommitmentsBrowseClient({
 }: Props) {
   const router = useRouter();
   const [sort, setSort] = useState<SortMode>("due");
+  const [menuId, setMenuId] = useState<string | null>(null);
   const [skipCtx, setSkipCtx] = useState<{
     id: string;
     name: string;
@@ -52,6 +59,17 @@ export function CommitmentsBrowseClient({
     originalDateIso: string;
   } | null>(null);
   const [archiveCtx, setArchiveCtx] = useState<{ id: string; name: string } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuId) return;
+    function onDoc(e: MouseEvent) {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setMenuId(null);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuId]);
 
   const sorted = useMemo(() => {
     const copy = commitments.slice();
@@ -134,7 +152,11 @@ export function CommitmentsBrowseClient({
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div
+        className="mb-3 inline-flex rounded-[var(--radius-pill)] p-0.5 glass-clear"
+        role="tablist"
+        aria-label="Sort commitments"
+      >
         {(
           [
             ["due", "Due date"],
@@ -145,12 +167,14 @@ export function CommitmentsBrowseClient({
           <button
             key={id}
             type="button"
+            role="tab"
+            aria-selected={sort === id}
             onClick={() => setSort(id)}
             className={cn(
-              "rounded-[var(--radius-pill)] px-3 py-1.5 text-xs font-medium transition-colors",
+              "rounded-[calc(var(--radius-pill)-2px)] px-3 py-1.5 text-xs font-medium transition-colors",
               sort === id
-                ? "glass-tint-safe text-[color:var(--keel-ink)]"
-                : "glass-clear text-[color:var(--keel-ink-3)]",
+                ? "glass-tint-safe text-[color:var(--keel-ink)] shadow-sm"
+                : "text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]",
             )}
           >
             {label}
@@ -165,38 +189,87 @@ export function CommitmentsBrowseClient({
             <ul className="space-y-2">
               {group.rows.map((c) => {
                 const nextIso = c.nextDueDateIso;
+                const menuOpen = menuId === c.id;
+
                 return (
-                  <li key={c.id}>
-                    <SwipeActionRow
-                      secondaryAction={{
-                        label: "Skip next",
-                        tint: "neutral",
-                        onPress: () => {
-                          if (!nextIso) return;
-                          setSkipCtx({
-                            id: c.id,
-                            name: c.name,
-                            amount: c.amount,
-                            originalDateIso: nextIso,
-                          });
-                        },
-                      }}
-                      primaryAction={{
-                        label: "Archive",
-                        tint: "attend",
-                        onPress: () => setArchiveCtx({ id: c.id, name: c.name }),
-                      }}
+                  <li key={c.id} className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/commitments/${c.id}`)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <SurfaceCard className="border-white/8 !p-4 transition-colors hover:border-white/14">
+                        <CommitmentCardContent commitment={c} />
+                      </SurfaceCard>
+                    </button>
+                    <div
+                      className="relative flex shrink-0 flex-col justify-center"
+                      ref={menuOpen ? menuRef : undefined}
                     >
                       <button
                         type="button"
-                        onClick={() => router.push(`/commitments/${c.id}`)}
-                        className="block w-full text-left"
+                        aria-label={`Actions for ${c.name}`}
+                        aria-expanded={menuOpen}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuId((id) => (id === c.id ? null : c.id));
+                        }}
+                        className="glass-clear inline-flex h-10 w-10 items-center justify-center rounded-full text-[color:var(--keel-ink-2)] hover:text-[color:var(--keel-ink)]"
                       >
-                        <SurfaceCard className="border-white/8 !p-4 transition-colors hover:border-white/14">
-                          <CommitmentCardContent commitment={c} />
-                        </SurfaceCard>
+                        <MoreHorizontal className="h-5 w-5" />
                       </button>
-                    </SwipeActionRow>
+                      {menuOpen ? (
+                        <div
+                          role="menu"
+                          className="glass-heavy absolute right-0 top-full z-30 mt-1 min-w-[200px] rounded-[var(--radius-md)] border border-white/12 py-1 shadow-[0_12px_40px_rgba(0,0,0,0.35)]"
+                          style={{
+                            backgroundColor: "rgba(20, 26, 23, 0.92)",
+                            backdropFilter: "blur(40px) saturate(180%)",
+                          }}
+                        >
+                          {nextIso ? (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="block w-full px-3 py-2.5 text-left text-sm text-[color:var(--keel-ink)] hover:bg-white/6"
+                              onClick={() => {
+                                setMenuId(null);
+                                setSkipCtx({
+                                  id: c.id,
+                                  name: c.name,
+                                  amount: c.amount,
+                                  originalDateIso: nextIso,
+                                });
+                              }}
+                            >
+                              Skip next payment
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="block w-full px-3 py-2.5 text-left text-sm text-[color:var(--keel-ink)] hover:bg-white/6"
+                            onClick={() => {
+                              setMenuId(null);
+                              router.push(`/commitments/${c.id}`);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="block w-full px-3 py-2.5 text-left text-sm text-[color:var(--keel-ink-2)] hover:bg-white/6"
+                            onClick={() => {
+                              setMenuId(null);
+                              setArchiveCtx({ id: c.id, name: c.name });
+                            }}
+                          >
+                            Archive
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </li>
                 );
               })}

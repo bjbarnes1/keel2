@@ -1,3 +1,11 @@
+/**
+ * Vercel build orchestration: runs Prisma migrations when appropriate, then `next build`.
+ *
+ * Requires `DATABASE_URL`; uses `DIRECT_URL` for migration connectivity when migrations run.
+ *
+ * @module scripts/vercel-build
+ */
+
 import { execSync } from "node:child_process";
 
 function run(command) {

@@ -1,3 +1,9 @@
+/**
+ * Actual vs planned report for a calendar month (`getActualVsPlannedReport`).
+ *
+ * @module app/spend/report/page
+ */
+
 import Link from "next/link";
 
 import { AppShell, SectionTitle, SurfaceCard } from "@/components/keel/primitives";

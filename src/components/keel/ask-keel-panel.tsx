@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Ask Keel chat UI: POSTs to `/api/ask-keel`, renders structured response cards + chips.
+ *
+ * @module components/keel/ask-keel-panel
+ */
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";

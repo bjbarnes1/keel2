@@ -1,3 +1,5 @@
+/** Vitest: `lib/spend/csv` parsing and row building. */
+
 import { describe, expect, it } from "vitest";
 
 import {

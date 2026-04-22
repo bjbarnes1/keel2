@@ -1,9 +1,32 @@
 "use server";
 
+/**
+ * Server Actions for household money operations (commitments, incomes, goals,
+ * categories, bank balance) plus read-only projection chunk loading.
+ *
+ * **Auth & tenancy:** every mutator ultimately calls into `src/lib/persistence/*`,
+ * which uses `getBudgetContext()` to ensure the Supabase user owns (or is a member of)
+ * the active budget. Errors surface as thrown `Error` strings consumed by forms.
+ *
+ * **Cache:** mutating actions call `revalidatePath` for affected routes; some
+ * actions end in `redirect()` for PRG-style navigation after POST.
+ *
+ * **Next.js constraint:** this file must only export async functions — shared Zod
+ * schemas for chunk loading live in `src/lib/engine/projection-chunk-schema.ts`.
+ *
+ * @module app/actions/keel
+ */
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import type { ProjectionEvent } from "@/lib/engine/keel";
 import {
+  loadProjectionChunkInputSchema,
+  type LoadProjectionChunkInput,
+} from "@/lib/engine/projection-chunk-schema";
+import {
+  buildProjectionChunkFromState,
   createCommitment,
   createIncome,
   createBudgetInvite,
@@ -12,14 +35,17 @@ import {
   createGoal,
   deleteCommitment,
   deleteCategory,
-  deleteIncome,
+  archiveIncome,
   deleteSubcategory,
   acceptBudgetInvite,
+  getProjectionEngineInput,
   setPrimaryIncome,
   updateBankBalance,
   updateCommitmentFuture,
   updateIncomeFuture,
 } from "@/lib/persistence/keel-store";
+
+/** Parses numeric FormData fields; missing values become 0 (caller validates range). */
 function parseAmount(value: FormDataEntryValue | null) {
   return Number.parseFloat(String(value ?? "0"));
 }
@@ -193,13 +219,13 @@ export async function setPrimaryIncomeAction(formData: FormData) {
   redirect("/settings/incomes");
 }
 
-export async function deleteIncomeAction(formData: FormData) {
+export async function archiveIncomeAction(formData: FormData) {
   const incomeId = String(formData.get("incomeId") ?? "").trim();
   if (!incomeId) {
     throw new Error("Income id is required.");
   }
 
-  await deleteIncome(incomeId);
+  await archiveIncome(incomeId);
   revalidatePath("/");
   revalidatePath("/commitments");
   revalidatePath("/bills");
@@ -263,4 +289,32 @@ export async function deleteSubcategoryAction(formData: FormData) {
   await deleteSubcategory(subcategoryId);
   revalidatePath("/settings/categories");
   redirect("/settings/categories");
+}
+
+// --- Projection chunk loader -------------------------------------------------
+
+/**
+ * Loads a window of projection events for on-demand timeline chunks.
+ *
+ * Reads the current budget's engine inputs (incomes, commitments, goals, active skips),
+ * computes the available-money floor at `asOf`, then builds a projection for
+ * [startDateIso, startDateIso + horizonDays]. Running balances on the returned events
+ * already reflect every event between `asOf` and `startDateIso`.
+ *
+ * Authentication: inherits from `getProjectionEngineInput` -> `readState`, which throws if
+ * no authed user (DB mode) or falls back to the demo store (non-DB mode). Never
+ * silently returns empty arrays on failure.
+ */
+export async function loadProjectionChunk(
+  input: LoadProjectionChunkInput,
+): Promise<ProjectionEvent[]> {
+  const payload = loadProjectionChunkInputSchema.parse(input);
+  const { state, activeSkips } = await getProjectionEngineInput();
+
+  return buildProjectionChunkFromState({
+    state,
+    activeSkips,
+    startDateIso: payload.startDateIso,
+    horizonDays: payload.horizonDays,
+  });
 }

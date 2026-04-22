@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Skip creation sheet: preview engine impact, POST `createCommitmentSkip`.
+ *
+ * @module components/keel/commitment-skip-sheet
+ */
+
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 

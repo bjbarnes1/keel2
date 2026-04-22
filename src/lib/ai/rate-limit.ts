@@ -1,3 +1,17 @@
+/**
+ * Per-user AI rate limiting (abuse protection + cost control).
+ *
+ * **Production path:** atomic upsert into `AiRateLimit` via raw SQL — Prisma’s
+ * `upsert` cannot express the “reset counter when window rolls” logic in one round
+ * trip without races under concurrency.
+ *
+ * **Local-dev fallback:** in-memory sliding window when Postgres isn’t configured.
+ * Process-local only; not suitable horizontally — acceptable for `vercel dev`.
+ *
+ * @throws Error with message `RATE_LIMITED` when the cap is exceeded.
+ * @module lib/ai/rate-limit
+ */
+
 import { getPrismaClient } from "@/lib/prisma";
 
 function isDbAvailable() {
@@ -47,6 +61,11 @@ async function assertDb(userId: string, limit: number, windowMs: number) {
   if (calls > limit) throw new Error("RATE_LIMITED");
 }
 
+/**
+ * Enforces a fixed-window counter per user. Call **before** expensive AI work.
+ *
+ * @param input.limit max calls allowed within each `windowMs` bucket
+ */
 export async function assertWithinAiRateLimit(input: {
   userId: string;
   limit: number;

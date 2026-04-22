@@ -1,3 +1,5 @@
+/** Vitest: `normalizeParsedBill` defensive parsing. */
+
 import { describe, expect, it } from "vitest";
 
 import { normalizeParsedBill } from "@/lib/ai/parse-bill";

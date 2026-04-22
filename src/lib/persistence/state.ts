@@ -1,3 +1,17 @@
+/**
+ * JSON file–backed persistence for local development without Postgres.
+ *
+ * Stores a single `StoredKeelState` document under `.keel/state.json` (path resolved
+ * relative to the process cwd). Versioned income/commitment rows use effective dating
+ * via `pickIncomeVersionAt` / `pickCommitmentVersionAt` so edits behave like the Prisma
+ * “append-only versions” model.
+ *
+ * **Not for production:** concurrent writes are last-write-wins; no RLS. When
+ * `hasConfiguredDatabase()` is true, callers should use Prisma modules instead.
+ *
+ * @module lib/persistence/state
+ */
+
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -6,7 +20,7 @@ import { pickIncomeVersionAt } from "@/lib/income-version";
 import { getPrismaClient } from "@/lib/prisma";
 import type { CommitmentCategory } from "@/lib/types";
 
-import { toIsoDate } from "@/lib/utils";
+import { formatDisplayDate, toIsoDate } from "@/lib/utils";
 
 import { getAuthedUser, getOrCreateActiveBudget } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured, isHostedProduction } from "./config";
@@ -31,6 +45,8 @@ export type StoredIncome = {
   frequency: "weekly" | "fortnightly" | "monthly";
   nextPayDate: string;
   isPrimary?: boolean;
+  /** Set when income is archived (hidden from active budget math). */
+  archivedAt?: string | null;
 };
 
 export type StoredCommitment = {
@@ -89,21 +105,16 @@ export type StoredKeelState = {
 
 const demoStorePath = path.join(process.cwd(), "data", "dev-store.json");
 
-// Fix #9: module-level formatter avoids recreating Intl.DateTimeFormat on every call.
-const SHORT_DATE_FMT = new Intl.DateTimeFormat("en-AU", {
-  month: "short",
-  day: "numeric",
-  timeZone: "UTC",
-});
-
+/** @deprecated Prefer {@link formatDisplayDate} from `@/lib/utils` — kept for persistence imports. */
 export function formatShortDate(isoDate: string) {
-  return SHORT_DATE_FMT.format(new Date(`${isoDate}T00:00:00Z`));
+  return formatDisplayDate(isoDate, "short");
 }
 
 function normalizeDemoState(raw: StoredKeelState): StoredKeelState {
   return {
     ...raw,
     commitments: raw.commitments.filter((c) => !c.archivedAt),
+    incomes: raw.incomes.filter((i) => !i.archivedAt),
   };
 }
 
@@ -130,6 +141,7 @@ export async function readPrismaState(): Promise<StoredKeelState> {
     where: { id: budget.id },
     include: {
       incomes: {
+        where: { archivedAt: null },
         orderBy: { createdAt: "asc" },
         include: { versions: { orderBy: { effectiveFrom: "desc" } } },
       },

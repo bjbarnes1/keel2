@@ -1,3 +1,9 @@
+/**
+ * Goals list surface.
+ *
+ * @module app/goals/page
+ */
+
 import Link from "next/link";
 
 import { AppShell, GoalCard, SurfaceCard } from "@/components/keel/primitives";

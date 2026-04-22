@@ -1,4 +1,8 @@
-import Link from "next/link";
+/**
+ * Tab-bar wealth overview (requires DB — shows fallback copy otherwise).
+ *
+ * @module app/wealth/page
+ */
 
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import { WealthOverview } from "@/components/keel/wealth-overview";
@@ -14,11 +18,7 @@ export default async function WealthPage() {
           <p className="text-sm text-muted-foreground">
             Wealth tracking uses your linked database. Configure{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">DATABASE_URL</code> and sign in to see
-            holdings here (same data as{" "}
-            <Link href="/settings/wealth" className="font-medium text-primary underline-offset-4 hover:underline">
-              Settings → Wealth
-            </Link>
-            ).
+            holdings on this tab.
           </p>
         </SurfaceCard>
       </AppShell>
@@ -32,13 +32,7 @@ export default async function WealthPage() {
 
   return (
     <AppShell title="Wealth" currentPath="/wealth">
-      <WealthOverview snapshot={snapshot} history={history} addHref="/settings/wealth/new" />
-      <p className="mt-6 text-center text-xs text-muted-foreground">
-        Prefer the settings layout?{" "}
-        <Link href="/settings/wealth" className="font-medium text-primary underline-offset-4 hover:underline">
-          Open wealth in Settings
-        </Link>
-      </p>
+      <WealthOverview snapshot={snapshot} history={history} addHref="/wealth/new" />
     </AppShell>
   );
 }

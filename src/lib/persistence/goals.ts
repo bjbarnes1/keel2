@@ -1,3 +1,11 @@
+/**
+ * Savings goal persistence (contributions, targets, optional funding income link).
+ *
+ * Smaller surface area than commitments/incomes — mostly CRUD for the goals UI.
+ *
+ * @module lib/persistence/goals
+ */
+
 import { randomUUID } from "node:crypto";
 
 import { unstable_noStore as noStore } from "next/cache";
@@ -49,7 +57,7 @@ export async function createGoal(input: {
     const { budget } = await getBudgetContext();
 
     const incomes = await prisma.income.findMany({
-      where: { budgetId: budget.id },
+      where: { budgetId: budget.id, archivedAt: null },
       orderBy: { createdAt: "asc" },
     });
     if (incomes.length === 0) {

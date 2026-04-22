@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * AI + manual bill intake (`createCommitmentAction`), optional `/api/parse-bill` assist.
+ *
+ * @module components/keel/bill-intake-flow
+ */
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";

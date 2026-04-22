@@ -1,3 +1,12 @@
+/**
+ * Thin adapter over `parse-capture` for bill / commitment-shaped outputs.
+ *
+ * Used by `/api/parse-bill` and manual intake flows — keeps a stable `ParsedBill` type
+ * for UI forms while the heavy lifting (LLM prompt + Zod repair) lives in `parse-capture.ts`.
+ *
+ * @module lib/ai/parse-bill
+ */
+
 import { normalizeCommitmentCapture, parseCommitmentCapture } from "@/lib/ai/parse-capture";
 
 export type ParsedBill = {

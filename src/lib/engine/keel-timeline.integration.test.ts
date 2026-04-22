@@ -1,3 +1,5 @@
+/** Vitest: `buildTimelineForTest` wiring (skips + available money, no DB). */
+
 import { describe, expect, it } from "vitest";
 
 import { buildTimelineForTest } from "@/lib/engine/keel";

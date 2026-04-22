@@ -1,19 +1,24 @@
 "use client";
 
+/**
+ * Commitment detail interactive shell: sheets for skip/edit/archive; skip-next on held card.
+ *
+ * @module components/keel/commitment-detail-client
+ */
+
 import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ScheduledCashflowEvent } from "@/lib/engine/skips";
 import type { CommitmentSkipInput, CommitmentView, IncomeView } from "@/lib/types";
-import { cn, formatAud } from "@/lib/utils";
+import { cn, formatAud, formatDisplayDate } from "@/lib/utils";
 
 import { CommitmentArchiveSheet } from "@/components/keel/commitment-archive-sheet";
 import { CommitmentEditSheet } from "@/components/keel/commitment-edit-sheet";
 import { CommitmentRestoreSheet } from "@/components/keel/commitment-restore-sheet";
 import { CommitmentSkipSheet } from "@/components/keel/commitment-skip-sheet";
 import { AppShell, CommitmentCardContent, SurfaceCard } from "@/components/keel/primitives";
-import { SwipeActionRow } from "@/components/keel/swipe-action-row";
 
 type CategoryOption = {
   id: string;
@@ -87,6 +92,7 @@ export function CommitmentDetailClient({
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const initialSkip = useMemo(
@@ -96,6 +102,8 @@ export function CommitmentDetailClient({
   const [sheetOpen, setSheetOpen] = useState(initialSkip.sheetOpen);
   const [sheetDate, setSheetDate] = useState<string | null>(initialSkip.sheetDate);
   const [restoreSkipId, setRestoreSkipId] = useState<string | null>(null);
+
+  const nextPayment = occurrences[0];
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -129,6 +137,10 @@ export function CommitmentDetailClient({
         <div
           role="menu"
           className="glass-heavy absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-[var(--radius-md)] border border-white/12 py-1 shadow-[0_12px_40px_rgba(0,0,0,0.35)]"
+          style={{
+            backgroundColor: "rgba(20, 26, 23, 0.92)",
+            backdropFilter: "blur(40px) saturate(180%)",
+          }}
         >
           <button
             type="button"
@@ -180,6 +192,64 @@ export function CommitmentDetailClient({
             of {formatAud(display.amount)}
           </span>
         </p>
+
+        {nextPayment ? (
+          <div className="mt-4 border-t border-white/10 pt-4">
+            {skipConfirmOpen ? (
+              <div className="rounded-[var(--radius-md)] glass-clear p-3">
+                <p className="text-sm leading-6 text-[color:var(--keel-ink-2)]">
+                  Skip payment on{" "}
+                  <span className="font-medium text-[color:var(--keel-ink)]">
+                    {formatDisplayDate(nextPayment.iso, "long")}
+                  </span>
+                  ? Keel will adjust your projections.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    className="flex-1 rounded-[var(--radius-md)] border border-white/15 py-2.5 text-sm font-medium text-[color:var(--keel-ink-2)]"
+                    onClick={() => setSkipConfirmOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex-1 rounded-[var(--radius-md)] border border-white/12 py-2.5 text-sm font-semibold text-[color:var(--keel-ink)]",
+                      "glass-tint-attend",
+                    )}
+                    onClick={() => {
+                      setSheetDate(nextPayment.iso);
+                      setSheetOpen(true);
+                      setSkipConfirmOpen(false);
+                    }}
+                  >
+                    Confirm skip
+                  </button>
+                </div>
+              </div>
+            ) : nextPayment.activeSkipId ? (
+              <button
+                type="button"
+                onClick={() => setRestoreSkipId(nextPayment.activeSkipId!)}
+                className="rounded-[var(--radius-pill)] border border-white/12 bg-white/6 px-4 py-2 text-sm font-medium text-[color:var(--keel-ink-3)] transition-colors hover:bg-white/10"
+              >
+                Skipped · Tap to reinstate
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSkipConfirmOpen(true)}
+                className={cn(
+                  "w-full rounded-[var(--radius-md)] border border-white/12 py-3 text-sm font-semibold text-[color:var(--keel-ink)]",
+                  "glass-tint-attend",
+                )}
+              >
+                Skip next payment
+              </button>
+            )}
+          </div>
+        ) : null}
       </SurfaceCard>
 
       <SurfaceCard className="mb-4 !p-4">
@@ -188,60 +258,6 @@ export function CommitmentDetailClient({
         </p>
         <p className="mt-2 text-sm leading-6 text-[color:var(--keel-ink-2)]">{keelNoticed}</p>
       </SurfaceCard>
-
-      <section className="mb-4">
-        <h2 className="text-sm font-semibold text-[color:var(--keel-ink)]">Upcoming</h2>
-        <p className="mt-1 text-xs text-[color:var(--keel-ink-3)]">Next three scheduled payments.</p>
-        <ul className="mt-3 space-y-2">
-          {occurrences.length === 0 ? (
-            <li className="rounded-[var(--radius-md)] border border-white/10 px-3 py-4 text-sm text-[color:var(--keel-ink-3)]">
-              No upcoming occurrences in range.
-            </li>
-          ) : (
-            occurrences.map((row) => (
-              <li key={row.iso}>
-                <SwipeActionRow
-                  secondaryAction={
-                    row.activeSkipId
-                      ? undefined
-                      : {
-                          label: "Skip",
-                          tint: "neutral",
-                          onPress: () => {
-                            setSheetDate(row.iso);
-                            setSheetOpen(true);
-                          },
-                        }
-                  }
-                  primaryAction={
-                    row.activeSkipId
-                      ? {
-                          label: "Restore",
-                          tint: "safe",
-                          onPress: () => setRestoreSkipId(row.activeSkipId!),
-                        }
-                      : undefined
-                  }
-                >
-                  <SurfaceCard className="!p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-mono text-sm text-[color:var(--keel-ink)]">{row.iso}</p>
-                        <p className="text-xs text-[color:var(--keel-ink-3)]">{formatAud(row.amount)}</p>
-                      </div>
-                      {row.activeSkipId ? (
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--keel-ink-4)]">
-                          Skipped
-                        </span>
-                      ) : null}
-                    </div>
-                  </SurfaceCard>
-                </SwipeActionRow>
-              </li>
-            ))
-          )}
-        </ul>
-      </section>
 
       <section className="mb-6">
         <h2 className="text-sm font-semibold text-[color:var(--keel-ink)]">Recent spend</h2>
@@ -257,7 +273,9 @@ export function CommitmentDetailClient({
                   key={tx.id}
                   className="glass-clear rounded-[var(--radius-md)] border border-white/10 px-3 py-3"
                 >
-                  <p className="text-xs text-[color:var(--keel-ink-4)]">{tx.postedOnIso}</p>
+                  <p className="text-xs text-[color:var(--keel-ink-4)]">
+                    {formatDisplayDate(tx.postedOnIso)}
+                  </p>
                   <p className="mt-1 text-sm text-[color:var(--keel-ink)]">{tx.memo || "Spend"}</p>
                   <p className="mt-1 font-mono text-sm tabular-nums text-[color:var(--keel-ink)]">
                     {formatAud(out)}
@@ -274,6 +292,7 @@ export function CommitmentDetailClient({
         onClose={() => {
           setSheetOpen(false);
           setSheetDate(null);
+          setSkipConfirmOpen(false);
           if (prefillSkipDate) {
             router.replace(`/commitments/${commitmentId}`);
           }

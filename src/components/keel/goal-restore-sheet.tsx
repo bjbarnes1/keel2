@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Revoke an active goal skip (`revokeGoalSkip`).
+ *
+ * @module components/keel/goal-restore-sheet
+ */
+
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 

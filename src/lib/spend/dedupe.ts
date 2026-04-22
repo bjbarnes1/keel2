@@ -1,3 +1,11 @@
+/**
+ * Deterministic hash key for imported spend rows so re-imports can upsert safely.
+ *
+ * Normalizes memo whitespace + case; uses fixed-point amount string to avoid float drift.
+ *
+ * @module lib/spend/dedupe
+ */
+
 import { createHash } from "node:crypto";
 
 export function spendTransactionDedupeKey(input: {

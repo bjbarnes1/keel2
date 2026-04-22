@@ -1,3 +1,9 @@
+/**
+ * Spend hub: accounts overview + links to import / reconcile / report.
+ *
+ * @module app/spend/page
+ */
+
 import Link from "next/link";
 
 import { AppShell, SectionTitle, SurfaceCard } from "@/components/keel/primitives";

@@ -1,3 +1,5 @@
+/** Vitest: skip strategies and cashflow mutation (`skips.ts`). */
+
 import { describe, expect, it } from "vitest";
 
 import { buildTimelineForTest } from "@/lib/engine/keel";

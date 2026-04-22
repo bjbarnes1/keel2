@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Revoke an active commitment skip (`revokeCommitmentSkip`).
+ *
+ * @module components/keel/commitment-restore-sheet
+ */
+
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 

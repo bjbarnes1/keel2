@@ -1,3 +1,18 @@
+/**
+ * Global styles for the App Router.
+ *
+ * Tailwind CSS v4 entry: `@import "tailwindcss"` enables utility compilation.
+ * Design system lives in `:root` CSS variables (`--keel-*`, radii, glass presets)
+ * and utility classes (`.glass-clear`, `.keel-bg`, …). Prefer these tokens in new UI
+ * over hard-coded hex in JSX.
+ */
+
+/*
+ * Global styles for the App Router.
+ * Tailwind v4: @import "tailwindcss" enables utilities.
+ * Design tokens: :root --keel-*, radii, glass utilities (.glass-clear, …).
+ */
+
 @import "tailwindcss";
 
 @theme inline {

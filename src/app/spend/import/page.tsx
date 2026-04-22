@@ -1,3 +1,9 @@
+/**
+ * CSV import wizard (`SpendImportFlow`).
+ *
+ * @module app/spend/import/page
+ */
+
 import Link from "next/link";
 
 import { SpendImportFlow } from "@/components/keel/spend-import-flow";

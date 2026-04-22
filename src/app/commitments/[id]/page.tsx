@@ -1,3 +1,11 @@
+/**
+ * Commitment detail: composes engine occurrences, skip history, spend rollups, edits.
+ *
+ * Server Component; calls `notFound()` when the id is missing or out of tenant.
+ *
+ * @module app/commitments/[id]/page
+ */
+
 import { notFound } from "next/navigation";
 
 import { listCommitmentBillOccurrences } from "@/lib/engine/keel";

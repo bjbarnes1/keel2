@@ -1,3 +1,16 @@
+/**
+ * Skip strategies for bills and goals: transforms scheduled cashflow *before* balances run.
+ *
+ * Commitment strategies (`MAKE_UP_NEXT`, `SPREAD`, `MOVE_ON`) can change the amount tied
+ * to a specific bill occurrence, remove it, or push value to future events. Goal skips
+ * adjust contribution timing / targets for preview flows.
+ *
+ * Also hosts helpers for parsing bill event ids (`commitmentId` + ISO date) shared by UI
+ * deep links and engine reconciliation.
+ *
+ * @module lib/engine/skips
+ */
+
 import type { EngineGoal } from "@/lib/engine/keel";
 import type {
   CommitmentSkipInput,
