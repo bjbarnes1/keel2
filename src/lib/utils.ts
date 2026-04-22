@@ -71,6 +71,9 @@ export function formatDisplayDate(
   isoDate: string,
   format: "short" | "long" | "short-day" = "short",
 ) {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+    return isoDate || "";
+  }
   const d = new Date(`${isoDate}T00:00:00Z`);
   if (format === "long") return DISPLAY_LONG.format(d);
   if (format === "short-day") return DISPLAY_SHORT_DAY.format(d);
