@@ -34,22 +34,34 @@ export async function getActiveSkipsForBudget(budgetId: string): Promise<ActiveS
   ]);
 
   return {
-    commitmentSkips: commitmentRows.map((row) => ({
-      kind: "commitment" as const,
-      skipId: row.id,
-      commitmentId: row.commitmentId,
-      originalDateIso: row.originalDate.toISOString().slice(0, 10),
-      strategy: isCommitmentSkipStrategy(row.strategy) ? row.strategy : "MAKE_UP_NEXT",
-      spreadOverN: row.spreadOverN ?? undefined,
-      redirectTo: row.redirectTo ?? undefined,
-    })),
-    goalSkips: goalRows.map((row) => ({
-      kind: "goal" as const,
-      skipId: row.id,
-      goalId: row.goalId,
-      originalDateIso: row.originalDate.toISOString().slice(0, 10),
-      strategy: isGoalSkipStrategy(row.strategy) ? row.strategy : "EXTEND_DATE",
-    })),
+    commitmentSkips: commitmentRows.flatMap((row) => {
+      if (!isCommitmentSkipStrategy(row.strategy)) {
+        console.warn(`[getActiveSkipsForBudget] unknown commitment strategy "${row.strategy}" for skip ${row.id}, skipping`);
+        return [];
+      }
+      return [{
+        kind: "commitment" as const,
+        skipId: row.id,
+        commitmentId: row.commitmentId,
+        originalDateIso: row.originalDate.toISOString().slice(0, 10),
+        strategy: row.strategy,
+        spreadOverN: row.spreadOverN ?? undefined,
+        redirectTo: row.redirectTo ?? undefined,
+      }];
+    }),
+    goalSkips: goalRows.flatMap((row) => {
+      if (!isGoalSkipStrategy(row.strategy)) {
+        console.warn(`[getActiveSkipsForBudget] unknown goal strategy "${row.strategy}" for skip ${row.id}, skipping`);
+        return [];
+      }
+      return [{
+        kind: "goal" as const,
+        skipId: row.id,
+        goalId: row.goalId,
+        originalDateIso: row.originalDate.toISOString().slice(0, 10),
+        strategy: row.strategy,
+      }];
+    }),
   };
 }
 

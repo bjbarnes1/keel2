@@ -194,14 +194,16 @@ export async function setPrimaryIncome(incomeId: string) {
     });
     if (!target) throw new Error("Income not found.");
 
-    await prisma.income.updateMany({
-      where: { budgetId: budget.id },
-      data: { isPrimary: false },
-    });
-    await prisma.income.update({
-      where: { id: incomeId },
-      data: { isPrimary: true },
-    });
+    await prisma.$transaction([
+      prisma.income.updateMany({
+        where: { budgetId: budget.id },
+        data: { isPrimary: false },
+      }),
+      prisma.income.update({
+        where: { id: incomeId },
+        data: { isPrimary: true },
+      }),
+    ]);
     return;
   }
 

@@ -47,9 +47,9 @@ export type StoredCommitment = {
   archivedAt?: string | null;
 };
 
-// Fix #21: narrowing helpers avoid silent `as` casts when Prisma returns String fields.
 export function narrowIncomeFrequency(raw: string): StoredIncome["frequency"] {
   if (raw === "weekly" || raw === "fortnightly" || raw === "monthly") return raw;
+  console.warn(`[narrowIncomeFrequency] unexpected value: "${raw}", falling back to "fortnightly"`);
   return "fortnightly";
 }
 
@@ -62,6 +62,9 @@ export function narrowCommitmentFrequency(raw: string): StoredCommitment["freque
     raw === "annual"
   )
     return raw;
+  console.warn(
+    `[narrowCommitmentFrequency] unexpected value: "${raw}", falling back to "monthly"`,
+  );
   return "monthly";
 }
 
