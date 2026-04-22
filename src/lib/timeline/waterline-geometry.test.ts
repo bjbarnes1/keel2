@@ -200,6 +200,20 @@ describe("catmullRomPath", () => {
     expect(d).toMatch(/^M /);
     expect(d).toMatch(/C /);
   });
+
+  it("does not emit NaN/Infinity coordinates (path is SVG-safe)", () => {
+    const d = catmullRomPath(
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 15 },
+        { x: 20, y: 5 },
+        { x: 30, y: 10 },
+      ],
+      0.5,
+    );
+    expect(d).not.toMatch(/NaN/);
+    expect(d).not.toMatch(/Infinity/);
+  });
 });
 
 describe("buildAvailableMoneyTrajectory", () => {

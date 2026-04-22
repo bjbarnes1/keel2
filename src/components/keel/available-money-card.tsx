@@ -16,18 +16,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { formatAud } from "@/lib/utils";
+import { formatAud, formatDisplayDate } from "@/lib/utils";
 
 const CROSSFADE_MS = 200;
 
-function formatShortDate(date: Date): string {
-  return date
-    .toLocaleDateString("en-AU", {
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    })
-    .toUpperCase();
+function formatShortCaps(date: Date): string {
+  return formatDisplayDate(date.toISOString().slice(0, 10), "short").toUpperCase();
 }
 
 type Frame<T> = { key: string; value: T };
@@ -73,7 +67,7 @@ export type AvailableMoneyCardProps = {
 
 export function AvailableMoneyCard({ value, focalDate, isTodayFocused }: AvailableMoneyCardProps) {
   const labelKey = isTodayFocused ? "today" : `on:${focalDate.toISOString()}`;
-  const labelText = isTodayFocused ? "YOU HAVE" : `ON ${formatShortDate(focalDate)}`;
+  const labelText = isTodayFocused ? "YOU HAVE" : `ON ${formatShortCaps(focalDate)}`;
   const valueKey = `v:${value.toFixed(2)}`;
   const valueText = formatAud(value);
   const isNegative = value < 0;
@@ -100,12 +94,12 @@ export function AvailableMoneyCard({ value, focalDate, isTodayFocused }: Availab
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none inline-flex min-w-[130px] flex-col items-center rounded-[var(--radius-xs)] px-[18px] py-[10px] text-center"
+      className="pointer-events-none inline-flex min-w-[130px] flex-col items-center rounded-[var(--radius-sm)] px-[18px] py-[10px] text-center"
       style={{
         background: "rgba(20, 26, 23, 0.85)",
         backdropFilter: "blur(30px) saturate(180%)",
         WebkitBackdropFilter: "blur(30px) saturate(180%)",
-        border: "0.5px solid rgba(168, 215, 189, 0.25)",
+        border: "0.5px solid rgba(142, 196, 168, 0.25)",
         boxShadow:
           "inset 0 0.5px 0 rgba(255, 255, 255, 0.1), 0 8px 24px rgba(0, 0, 0, 0.5)",
       }}
