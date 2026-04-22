@@ -442,7 +442,12 @@ export function WaterlineChart({
     <div
       ref={containerRef}
       className={cn("relative w-full select-none", className)}
-      style={{ touchAction: "pan-y" }}
+      style={{
+        touchAction: "pan-y",
+        maxWidth: 500,
+        marginLeft: "auto",
+        marginRight: "auto",
+      }}
     >
       <svg
         role="img"
@@ -459,12 +464,12 @@ export function WaterlineChart({
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(168, 215, 189, 0.25)" />
-            <stop offset="100%" stopColor="rgba(168, 215, 189, 0)" />
+            <stop offset="0%" stopColor="rgba(142, 196, 168, 0.25)" />
+            <stop offset="100%" stopColor="rgba(142, 196, 168, 0)" />
           </linearGradient>
           <radialGradient id={todayBandId} cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0%" stopColor="rgba(168, 215, 189, 0.06)" />
-            <stop offset="100%" stopColor="rgba(168, 215, 189, 0)" />
+            <stop offset="0%" stopColor="rgba(142, 196, 168, 0.06)" />
+            <stop offset="100%" stopColor="rgba(142, 196, 168, 0)" />
           </radialGradient>
         </defs>
 
@@ -478,7 +483,7 @@ export function WaterlineChart({
           <path
             d={trajectoryLinePath}
             fill="none"
-            stroke="rgba(168, 215, 189, 0.4)"
+            stroke="rgba(142, 196, 168, 0.4)"
             strokeWidth={1.25}
             strokeLinecap="round"
           />
@@ -514,6 +519,17 @@ export function WaterlineChart({
           strokeDasharray="3 4"
         />
 
+        {/* NOW label */}
+        <text
+          x={nowX}
+          y={ABOVE_TOP - 8}
+          textAnchor="middle"
+          fill="var(--keel-safe-soft)"
+          style={{ fontSize: 8, letterSpacing: "1.5px", fontWeight: 600 }}
+        >
+          NOW
+        </text>
+
         {/* Markers */}
         {groups.map((group) => {
           const x = xForIsoDate({
@@ -535,10 +551,10 @@ export function WaterlineChart({
 
           const fill = isBill
             ? isAttention
-              ? "#d4a55c"
+              ? "var(--keel-attend)"
               : "rgba(240, 235, 220, 0.85)"
             : "#f0ebdc";
-          const stroke = isAttention ? "rgba(212, 165, 92, 0.55)" : "none";
+          const stroke = isAttention ? "rgba(212, 143, 70, 0.55)" : "none";
 
           return (
             <g key={`${group.dateIso}-${group.type}`} opacity={opacity}>
@@ -573,22 +589,13 @@ export function WaterlineChart({
         })}
 
         {/* Focal dot + pulse ring */}
-        <g
-          style={
-            reducedMotion
-              ? undefined
-              : {
-                  transition: "transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-                  transform: `translate(0px, 0px)`,
-                }
-          }
-        >
+        <g>
           <circle
             cx={nowX}
             cy={focalDotY}
             r={7}
             fill="none"
-            stroke="rgba(168, 215, 189, 0.4)"
+            stroke="rgba(142, 196, 168, 0.4)"
             strokeWidth={1}
             className={cn(
               !reducedMotion && !isGesturing && "waterline-focal-pulse",
@@ -598,7 +605,7 @@ export function WaterlineChart({
             cx={nowX}
             cy={focalDotY}
             r={4}
-            fill="#a8d7bd"
+            fill="var(--keel-safe-soft)"
             style={
               reducedMotion
                 ? undefined

@@ -25,27 +25,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectionEvent } from "@/lib/engine/keel";
 import type { SyncSource } from "@/lib/hooks/use-timeline-sync";
 import { toIsoDate } from "@/lib/timeline/waterline-geometry";
-import { cn, formatAud } from "@/lib/utils";
+import { cn, formatAud, formatDisplayDate } from "@/lib/utils";
 
 const SCROLL_SETTLE_MS = 250;
-
-function formatDateLong(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-AU", {
-    day: "numeric",
-    month: "long",
-    timeZone: "UTC",
-  });
-}
-
-function formatDateShort(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`)
-    .toLocaleDateString("en-AU", {
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    })
-    .toUpperCase();
-}
 
 function opacityForUpcoming(iso: string, focalIso: string): number {
   const target = new Date(`${iso}T00:00:00Z`).getTime();
@@ -54,6 +36,10 @@ function opacityForUpcoming(iso: string, focalIso: string): number {
   if (days > 28) return 0.5;
   if (days > 14) return 0.75;
   return 1;
+}
+
+function formatShortCaps(iso: string): string {
+  return formatDisplayDate(iso, "short").toUpperCase();
 }
 
 export type TimelineLegendProps = {
@@ -174,7 +160,9 @@ export function TimelineLegend({
     >
       {todays.length > 0 ? (
         <section className="mb-4">
-          <p className="label-upper mb-2 px-1 pt-1">Today · {formatDateLong(todayIso)}</p>
+          <p className="label-upper mb-2 px-1 pt-1">
+            Today · {formatDisplayDate(todayIso, "long")}
+          </p>
           <div className="space-y-1">
             {todays.map((event) => (
               <LegendRow
@@ -184,7 +172,7 @@ export function TimelineLegend({
                 isToday
                 isFocal={event.date === focalIso}
                 isHighlighted={syncSource === "chart" && event.date === focalIso}
-                registerRef={registerRow(event.id)}
+                registerRef={registerRow(event.date)}
                 onTap={() => onRowTap(new Date(`${event.date}T00:00:00Z`))}
               />
             ))}
@@ -209,7 +197,7 @@ export function TimelineLegend({
                 isFocal={event.date === focalIso}
                 isHighlighted={syncSource === "chart" && event.date === focalIso}
                 showDivider={idx !== upcoming.length - 1}
-                registerRef={registerRow(event.id)}
+                registerRef={registerRow(event.date)}
                 onTap={() => onRowTap(new Date(`${event.date}T00:00:00Z`))}
               />
             ))
@@ -241,7 +229,7 @@ export function TimelineLegend({
                   isFocal={event.date === focalIso}
                   isHighlighted={syncSource === "chart" && event.date === focalIso}
                   showDivider={idx !== earlier.length - 1}
-                  registerRef={registerRow(event.id)}
+                  registerRef={registerRow(event.date)}
                   onTap={() => onRowTap(new Date(`${event.date}T00:00:00Z`))}
                 />
               ))}
@@ -252,9 +240,9 @@ export function TimelineLegend({
 
       <style>{`
         @keyframes keel-legend-glow {
-          0% { box-shadow: 0 0 0 0 rgba(168, 215, 189, 0.4); }
-          50% { box-shadow: 0 0 0 2px rgba(168, 215, 189, 0.4); }
-          100% { box-shadow: 0 0 0 0 rgba(168, 215, 189, 0); }
+          0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--keel-safe-soft), transparent 60%); }
+          50% { box-shadow: 0 0 0 2px color-mix(in oklab, var(--keel-safe-soft), transparent 60%); }
+          100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--keel-safe-soft), transparent 100%); }
         }
         .keel-legend-highlight {
           animation: keel-legend-glow 1s ease-out;
@@ -337,7 +325,7 @@ function LegendRow({
         gridTemplateColumns: "56px 1fr auto",
         opacity: rowOpacity,
         borderLeftColor: isToday ? "var(--keel-safe-soft)" : undefined,
-        background: isToday ? "rgba(168, 215, 189, 0.08)" : undefined,
+        background: isToday ? "color-mix(in srgb, var(--keel-safe-soft) 12%, transparent)" : undefined,
         borderBottomColor: showDivider ? "rgba(255,255,255,0.04)" : undefined,
       }}
     >
@@ -350,7 +338,7 @@ function LegendRow({
           color: isToday ? "var(--keel-safe-soft)" : "var(--keel-ink-5)",
         }}
       >
-        {isToday ? "TODAY" : formatDateShort(iso)}
+        {isToday ? "TODAY" : formatShortCaps(iso)}
       </span>
       <span
         className="min-w-0 truncate"

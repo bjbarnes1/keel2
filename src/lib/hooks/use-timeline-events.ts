@@ -25,10 +25,17 @@
  *   - `error` — populated on fetch failure; surface a retry UI, do not auto-retry.
  */
 
-import { useEffect, useMemo, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { loadProjectionChunk } from "@/app/actions/keel";
 import type { ProjectionEvent } from "@/lib/engine/keel";
+import {
+  addDaysUtc,
+  diffDaysUtc,
+  fromIsoDate,
+  startOfUtcDay,
+  toIsoDate as toIsoDateUtc,
+} from "@/lib/timeline/waterline-geometry";
 
 // --- Constants ---------------------------------------------------------------
 
@@ -127,24 +134,28 @@ export const INITIAL_STATE: TimelineEventsState = {
   error: null,
 };
 
+/** UTC calendar date as `YYYY-MM-DD` (timeline convention). */
 export function toIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return toIsoDateUtc(date);
 }
 
 export function addDaysIso(iso: string, days: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  return toIsoDateUtc(addDaysUtc(fromIsoDate(iso), days));
 }
 
 export function daysBetweenIso(startIso: string, endIso: string): number {
-  const start = new Date(`${startIso}T00:00:00Z`).getTime();
-  const end = new Date(`${endIso}T00:00:00Z`).getTime();
-  return Math.round((end - start) / 86_400_000);
+  return diffDaysUtc(fromIsoDate(startIso), fromIsoDate(endIso));
 }
 
 export function makeRangeKey(startDateIso: string, horizonDays: number): string {
   return `${startDateIso}:${horizonDays}`;
+}
+
+export function hasReachedMaxHorizonForFocal(input: { today: Date; focalDate: Date }): boolean {
+  const todayIso = toIsoDate(input.today);
+  const focalIso = toIsoDate(input.focalDate);
+  const delta = Math.abs(daysBetweenIso(todayIso, focalIso));
+  return delta > MAX_HORIZON_DAYS - MAX_HORIZON_WARN_DAYS;
 }
 
 export function mergeEvents(
@@ -335,19 +346,22 @@ export function useTimelineEvents(focalDate: Date): UseTimelineEventsReturn {
   const mountedRef = useRef(true);
   const initialLoadStartedRef = useRef(false);
 
+  // Today is stable for the lifetime of the mount. This keeps horizon comparisons coherent
+  // even if the user leaves the tab open past midnight.
+  const [today] = useState<Date>(() => startOfUtcDay(new Date()));
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
-  }, []);
+  }, [today]);
 
   // Initial load — fires exactly once per mount.
   useEffect(() => {
     if (initialLoadStartedRef.current) return;
     initialLoadStartedRef.current = true;
 
-    const today = new Date();
     const startDateIso = addDaysIso(toIsoDate(today), -INITIAL_CENTER_OFFSET_DAYS);
     const rangeKey = makeRangeKey(startDateIso, INITIAL_CHUNK_DAYS);
     const timestamp = Date.now();
@@ -373,7 +387,7 @@ export function useTimelineEvents(focalDate: Date): UseTimelineEventsReturn {
           error: err instanceof Error ? err : new Error(String(err)),
         });
       });
-  }, []);
+  }, [today]);
 
   // Adjacent pre-fetch on focalDate movement.
   useEffect(() => {
@@ -381,7 +395,7 @@ export function useTimelineEvents(focalDate: Date): UseTimelineEventsReturn {
     if (state.isInitialLoading || state.isFetchingMore) return;
 
     const now = Date.now();
-    const plan = planFetch({ state, focalDate, today: new Date(), now });
+    const plan = planFetch({ state, focalDate, today, now });
     if (plan.kind === "none" || plan.kind === "initial") return;
 
     dispatch({
@@ -423,6 +437,7 @@ export function useTimelineEvents(focalDate: Date): UseTimelineEventsReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     focalDate,
+    today,
     state.window?.startDateIso,
     state.window?.endDateIso,
     state.isInitialLoading,
@@ -449,11 +464,8 @@ export function useTimelineEvents(focalDate: Date): UseTimelineEventsReturn {
   }, [state.window, focalDate]);
 
   const hasReachedMaxHorizon = useMemo(() => {
-    const todayIso = toIsoDate(new Date());
-    const focalIso = toIsoDate(focalDate);
-    const delta = Math.abs(daysBetweenIso(todayIso, focalIso));
-    return delta > MAX_HORIZON_DAYS - MAX_HORIZON_WARN_DAYS;
-  }, [focalDate]);
+    return hasReachedMaxHorizonForFocal({ today, focalDate });
+  }, [focalDate, today]);
 
   return {
     events: state.window?.events ?? [],
