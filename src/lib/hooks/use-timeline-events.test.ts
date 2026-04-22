@@ -7,6 +7,7 @@ import {
   ADJACENT_CHUNK_DAYS,
   DEBOUNCE_WINDOW_MS,
   EDGE_DISTANCE_DAYS,
+  MAX_HORIZON_WARN_DAYS,
   INITIAL_CENTER_OFFSET_DAYS,
   INITIAL_CHUNK_DAYS,
   INITIAL_STATE,
@@ -14,6 +15,7 @@ import {
   PRUNE_THRESHOLD_MS,
   addDaysIso,
   daysBetweenIso,
+  hasReachedMaxHorizonForFocal,
   isDebounced,
   makeRangeKey,
   mergeEvents,
@@ -422,5 +424,25 @@ describe("planFetch", () => {
     );
     const plan = planFetch({ state, focalDate: nearEnd, today: TODAY, now });
     expect(plan.kind).toBe("none");
+  });
+});
+
+describe("hasReachedMaxHorizonForFocal", () => {
+  it("returns false when focalDate is comfortably inside the 24-week cap", () => {
+    expect(
+      hasReachedMaxHorizonForFocal({
+        today: TODAY,
+        focalDate: new Date(`${addDaysIso(TODAY_ISO, MAX_HORIZON_DAYS - MAX_HORIZON_WARN_DAYS - 5)}T00:00:00Z`),
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true when focalDate is within the warning band near the cap", () => {
+    expect(
+      hasReachedMaxHorizonForFocal({
+        today: TODAY,
+        focalDate: new Date(`${addDaysIso(TODAY_ISO, MAX_HORIZON_DAYS - MAX_HORIZON_WARN_DAYS + 1)}T00:00:00Z`),
+      }),
+    ).toBe(true);
   });
 });
