@@ -91,6 +91,14 @@ export function CommitmentsBrowseClient({
   const [sort, setSort] = useState<SortMode>("due");
   const [menuId, setMenuId] = useState<string | null>(null);
   const [archivedExpanded, setArchivedExpanded] = useState(false);
+
+  // Optimistic list state: updated immediately on archive/restore so the row
+  // disappears without waiting for router.refresh() to complete.
+  const [liveActive, setLiveActive] = useState(commitments);
+  const [liveArchived, setLiveArchived] = useState(archivedCommitments);
+  useEffect(() => { setLiveActive(commitments); }, [commitments]);
+  useEffect(() => { setLiveArchived(archivedCommitments); }, [archivedCommitments]);
+
   const [skipCtx, setSkipCtx] = useState<{
     id: string;
     name: string;
@@ -121,7 +129,7 @@ export function CommitmentsBrowseClient({
   }, [menuId]);
 
   const sorted = useMemo(() => {
-    const copy = commitments.slice();
+    const copy = liveActive.slice();
     copy.sort((a, b) => {
       if (sort === "amount") {
         return b.amount - a.amount;
@@ -134,7 +142,7 @@ export function CommitmentsBrowseClient({
       return ad.localeCompare(bd);
     });
     return copy;
-  }, [commitments, sort]);
+  }, [liveActive, sort]);
 
   const groups = useMemo(() => {
     const byCat = new Map<string, CommitmentView[]>();
@@ -160,10 +168,10 @@ export function CommitmentsBrowseClient({
   }, [sorted]);
 
   const archivedSorted = useMemo(() => {
-    const copy = archivedCommitments.slice();
+    const copy = liveArchived.slice();
     copy.sort((a, b) => a.name.localeCompare(b.name));
     return copy;
-  }, [archivedCommitments]);
+  }, [liveArchived]);
 
   function openEditForCommitment(c: CommitmentView) {
     const fields = editPayloadsById[c.id];
@@ -194,12 +202,13 @@ export function CommitmentsBrowseClient({
                   className="block w-full px-3 py-2.5 text-left text-sm text-[color:var(--keel-ink)] hover:bg-white/6"
                   onClick={() => {
                     setMenuId(null);
+                    setLiveArchived((prev) => prev.filter((x) => x.id !== c.id));
                     startTransition(async () => {
                       try {
                         await restoreCommitmentAction(c.id);
                         router.refresh();
                       } catch {
-                        /* surface via toast later */
+                        setLiveArchived(archivedCommitments); // revert on error
                       }
                     });
                   }}
@@ -311,7 +320,7 @@ export function CommitmentsBrowseClient({
     );
   }
 
-  if (commitments.length === 0 && archivedCommitments.length === 0) {
+  if (liveActive.length === 0 && liveArchived.length === 0) {
     return (
       <AppShell title="Commitments" currentPath="/commitments">
         <div className="flex min-h-[50vh] flex-col items-center justify-center rounded-[var(--radius-md)] glass-clear px-6 py-12 text-center">
@@ -340,7 +349,7 @@ export function CommitmentsBrowseClient({
               Count
             </p>
             <p className="mt-1 font-mono text-[16px] font-medium tabular-nums text-[color:var(--keel-ink)]">
-              {commitments.length}
+              {liveActive.length}
             </p>
           </div>
           <div>
@@ -392,7 +401,7 @@ export function CommitmentsBrowseClient({
         ))}
       </div>
 
-      {commitments.length === 0 ? (
+      {liveActive.length === 0 ? (
         <p className="py-6 text-center text-sm text-[color:var(--keel-ink-4)]">
           No active commitments. Restore one from archived below if you have any.
         </p>
@@ -409,11 +418,11 @@ export function CommitmentsBrowseClient({
         </div>
       )}
 
-      {archivedCommitments.length > 0 ? (
+      {liveArchived.length > 0 ? (
         <section className="mb-6">
           <CategoryGroupHeader
             label="ARCHIVED"
-            count={archivedCommitments.length}
+            count={liveArchived.length}
             action={{
               label: archivedExpanded ? "Hide" : "Show",
               onTap: () => setArchivedExpanded((e) => !e),
@@ -446,6 +455,7 @@ export function CommitmentsBrowseClient({
         commitmentId={archiveCtx?.id ?? ""}
         commitmentName={archiveCtx?.name ?? ""}
         heldFormatted={archiveCtx?.heldFormatted}
+        onArchived={(id) => setLiveActive((prev) => prev.filter((x) => x.id !== id))}
       />
 
       {editCtx ? (

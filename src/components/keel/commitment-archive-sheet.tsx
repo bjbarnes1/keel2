@@ -21,6 +21,8 @@ type Props = {
   commitmentName: string;
   /** Optional: amount currently held toward the next due date (for copy). */
   heldFormatted?: string;
+  /** Called with the archived id immediately before navigation/refresh. */
+  onArchived?: (id: string) => void;
 };
 
 export function CommitmentArchiveSheet({
@@ -29,6 +31,7 @@ export function CommitmentArchiveSheet({
   commitmentId,
   commitmentName,
   heldFormatted,
+  onArchived,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -40,6 +43,7 @@ export function CommitmentArchiveSheet({
     startTransition(async () => {
       try {
         await archiveCommitmentAction(commitmentId);
+        onArchived?.(commitmentId);
         onClose();
         router.push("/commitments");
         router.refresh();

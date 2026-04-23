@@ -16,12 +16,15 @@ import {
 } from "@/components/keel/primitives";
 import { HomeUpcomingRows } from "@/components/keel/home-upcoming-rows";
 import { GoalRow } from "@/components/keel/goal-row";
-import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
+import { InsightCard } from "@/components/keel/insight-card";
+import { getDashboardSnapshot, getLatestAiInsight } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const snapshot = await getDashboardSnapshot();
+  const [snapshot, insight] = await Promise.all([getDashboardSnapshot(), getLatestAiInsight()]);
+
+  const aiEnabled = process.env.KEEL_AI_ENABLED === "true";
 
   return (
     <AppShell title="Keel" currentPath="/">
@@ -31,6 +34,10 @@ export default async function HomePage() {
         reserved={snapshot.totalReserved}
         goalContributions={snapshot.totalGoalContributions}
       />
+
+      {(aiEnabled || insight) ? (
+        <InsightCard insight={insight} aiEnabled={aiEnabled} />
+      ) : null}
 
       <HomeUpcomingRows incomes={snapshot.incomes} timeline={snapshot.timeline} />
 

@@ -80,3 +80,4 @@ export {
   getProjectionEngineInput,
   buildProjectionChunkFromState,
 } from "./dashboard";
+export { getLatestAiInsight, type StoredAiInsight } from "./ai-insight";

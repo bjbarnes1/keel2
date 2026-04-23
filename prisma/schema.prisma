@@ -56,6 +56,7 @@ model Budget {
   goalSkips          GoalSkip[]
   incomeSkips        IncomeSkip[]
   learnedPatterns    UserLearnedPatterns?
+  aiInsight          UserAiInsight?
 }
 
 model BudgetMember {
@@ -395,6 +396,25 @@ model SpendTransaction {
   // over a postedOn range. Without it Postgres uses (budgetId, postedOn) and filters
   // commitmentId in memory, which scales poorly as the table grows.
   @@index([budgetId, commitmentId, postedOn])
+}
+
+// ─── Proactive AI insight — one cached LLM-generated card per budget ──────────
+// Refreshed on demand via the home-screen "Refresh" button. Stores only the last
+// result; prior results are overwritten (upsert). `generatedAt` drives staleness UX.
+
+model UserAiInsight {
+  id        String   @id @default(cuid())
+  budgetId  String   @unique
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  headline    String
+  body        String?
+  generatedAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([budgetId])
 }
 
 // ─── Plan 11: AI Context — Layer B (Learned Patterns) ────────────────────────
