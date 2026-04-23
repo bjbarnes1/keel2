@@ -40,7 +40,7 @@ export async function classifyAskIntent(
   message: string,
 ): Promise<AskIntentClassification & { usage?: AnthropicUsageSlice }> {
   const response = await client.messages.create({
-    model: "claude-3-5-haiku-20241022",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 120,
     system: `You classify a single user message about Australian household cashflow.
 
@@ -105,7 +105,7 @@ export async function extractHypotheticalCommitmentSkips(
   }
 
   const response = await client.messages.create({
-    model: "claude-3-5-haiku-20241022",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 400,
     system: `You extract hypothetical "skip a bill payment" scenarios from the user message.
 

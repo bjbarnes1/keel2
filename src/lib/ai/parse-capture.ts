@@ -34,7 +34,7 @@ export {
   type IncomeCapturePayload,
 } from "@/lib/ai/capture-schemas";
 
-const SONNET_CAPTURE_MODEL = "claude-sonnet-4-20250514";
+const SONNET_CAPTURE_MODEL = "claude-sonnet-4-6";
 
 /** When set, successful Anthropic completions are billed to the user’s daily AI cost bucket. */
 export type AiParseCostContext = { userId: string };

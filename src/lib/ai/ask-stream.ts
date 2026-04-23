@@ -22,8 +22,8 @@ import {
   trackAnthropicCompletion,
 } from "@/lib/ai/rate-limit";
 
-const HAIKU_MODEL = "claude-3-5-haiku-20241022";
-const SONNET_MODEL = "claude-sonnet-4-20250514";
+const HAIKU_MODEL = "claude-haiku-4-5-20251001";
+const SONNET_MODEL = "claude-sonnet-4-6";
 
 const citationExtractSchema = z.object({
   citations: z

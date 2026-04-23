@@ -12,6 +12,9 @@ const DEFAULT_AUD_PER_USD = Number(process.env.KEEL_AI_AUD_PER_USD ?? "1.55");
 type ModelRates = { inputUsdPerMtok: number; outputUsdPerMtok: number };
 
 const MODEL_RATES: Record<string, ModelRates> = {
+  "claude-haiku-4-5-20251001": { inputUsdPerMtok: 0.8, outputUsdPerMtok: 4.0 },
+  "claude-sonnet-4-6": { inputUsdPerMtok: 3.0, outputUsdPerMtok: 15.0 },
+  // Legacy aliases kept so cost rows written before the model migration still resolve.
   "claude-3-5-haiku-20241022": { inputUsdPerMtok: 0.25, outputUsdPerMtok: 1.25 },
   "claude-sonnet-4-20250514": { inputUsdPerMtok: 3.0, outputUsdPerMtok: 15.0 },
 };

@@ -46,8 +46,8 @@ import { formatDisplayDate, roundMoney } from "@/lib/utils";
 
 export type { AskKeelResponse } from "@/lib/ai/ask-keel-schema";
 
-const HAIKU_MODEL = "claude-3-5-haiku-20241022";
-const SONNET_MODEL = "claude-sonnet-4-20250514";
+const HAIKU_MODEL = "claude-haiku-4-5-20251001";
+const SONNET_MODEL = "claude-sonnet-4-6";
 
 // Every response on this route is per-user and sensitive. Set explicit no-store headers
 // so a misconfigured CDN or reverse proxy can't cache one user's Ask response and serve

@@ -41,7 +41,7 @@ export async function classifyCaptureSentence(
   }
 
   const response = await client.messages.create({
-    model: "claude-3-5-haiku-20241022",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 120,
     system: `You classify a single user sentence for a personal finance app.
 
@@ -62,7 +62,7 @@ Rules:
   if (costContext) {
     await trackAnthropicCompletion({
       userId: costContext.userId,
-      model: "claude-3-5-haiku-20241022",
+      model: "claude-haiku-4-5-20251001",
       usage: response.usage,
     });
   }
