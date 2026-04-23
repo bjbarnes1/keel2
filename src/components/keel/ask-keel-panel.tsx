@@ -10,7 +10,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import type { AskKeelResponse } from "@/app/api/ask-keel/route";
+import type { AskKeelResponse } from "@/lib/ai/ask-keel-schema";
+import { encodeCapturePrefillPayload } from "@/lib/ai/capture-prefill";
 import { cn, formatAud } from "@/lib/utils";
 
 type Chip = string | { text: string; action?: string };
@@ -111,6 +112,15 @@ export function AskKeelPanel() {
         return;
       }
 
+      if (data.type === "capture_redirect") {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: data.headline, payload: data },
+        ]);
+        router.push(`/capture?prefill=${encodeCapturePrefillPayload({ sentence: data.sentence, capture: data.capture })}`);
+        return;
+      }
+
       setMessages((prev) => [...prev, { role: "assistant", text: data.headline, payload: data }]);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", text: "Ask is offline right now." }]);
@@ -182,7 +192,7 @@ export function AskKeelPanel() {
                 </div>
               ) : null}
 
-              {message.payload?.chips?.length ? (
+              {message.payload && "chips" in message.payload && message.payload.chips?.length ? (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {message.payload.chips.map((chip, chipIdx) => {
                     const label = chipText(chip as Chip);

@@ -55,6 +55,17 @@ export function billEventId(commitmentId: string, isoDate: string) {
   return `${commitmentId}-${isoDate}`;
 }
 
+/**
+ * Scheduled income event ids follow `income-{incomeId}-{yyyy-mm-dd}` (see {@link collectScheduledProjectionEvents}).
+ */
+export function parseIncomeEventId(eventId: string): { incomeId: string; iso: string } | null {
+  const m = /^income-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(eventId);
+  if (!m) {
+    return null;
+  }
+  return { incomeId: m[1]!, iso: m[2]! };
+}
+
 function sortScheduled(events: ScheduledCashflowEvent[]) {
   return [...events].sort((left, right) => {
     const dateOrder = left.date.localeCompare(right.date);

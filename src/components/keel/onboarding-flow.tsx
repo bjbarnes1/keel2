@@ -27,7 +27,7 @@ const payFrequencies = [
   { value: "Monthly", hint: "12 times a year" },
 ];
 
-const sampleBills = [
+const sampleCommitmentExamples = [
   "Mortgage · $2,400 / month",
   "Internet · $89 / month",
   "Car Insurance · $480 / quarter",
@@ -39,19 +39,19 @@ export function OnboardingFlow() {
   const [payAmount, setPayAmount] = useState("4200");
   const [nextPayday, setNextPayday] = useState("2026-04-24");
   const [bankBalance, setBankBalance] = useState("8696");
-  const [billText, setBillText] = useState("");
-  const [addedBills, setAddedBills] = useState<string[]>(sampleBills);
+  const [commitmentDraftText, setCommitmentDraftText] = useState("");
+  const [addedCommitmentLines, setAddedCommitmentLines] = useState<string[]>(sampleCommitmentExamples);
 
   const progress = `${((step + 1) / steps.length) * 100}%`;
   const availableMoney = useMemo(() => 4299, []);
 
-  function addBill() {
-    if (!billText.trim()) {
+  function addCommitmentLine() {
+    if (!commitmentDraftText.trim()) {
       return;
     }
 
-    setAddedBills((current) => [...current, billText.trim()]);
-    setBillText("");
+    setAddedCommitmentLines((current) => [...current, commitmentDraftText.trim()]);
+    setCommitmentDraftText("");
   }
 
   return (
@@ -164,30 +164,30 @@ export function OnboardingFlow() {
         >
           <div className="space-y-4">
             <textarea
-              value={billText}
-              onChange={(event) => setBillText(event.target.value)}
+              value={commitmentDraftText}
+              onChange={(event) => setCommitmentDraftText(event.target.value)}
               rows={3}
               placeholder='e.g. "Mortgage $2400 monthly due first of the month"'
               className="w-full rounded-2xl border border-border bg-card px-4 py-4 text-sm outline-none"
             />
             <button
               type="button"
-              onClick={addBill}
+              onClick={addCommitmentLine}
               className="w-full rounded-2xl border border-dashed border-primary/30 bg-primary/10 px-4 py-3 text-sm font-medium text-primary"
             >
               + Add another
             </button>
             <div className="space-y-2">
-              {addedBills.map((bill) => (
+              {addedCommitmentLines.map((line) => (
                 <div
-                  key={bill}
+                  key={line}
                   className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground"
                 >
-                  {bill}
+                  {line}
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">{addedBills.length} commitments added</p>
+            <p className="text-xs text-muted-foreground">{addedCommitmentLines.length} commitments added</p>
           </div>
         </StepFrame>
       ) : null}

@@ -62,7 +62,7 @@ function makeState(): StoredKeelState {
   };
 }
 
-const emptySkips: ActiveSkipsBundle = { commitmentSkips: [], goalSkips: [] };
+const emptySkips: ActiveSkipsBundle = { commitmentSkips: [], goalSkips: [], incomeSkips: [] };
 
 describe("loadProjectionChunk validation", () => {
   // Valid payload — passes through untouched.
@@ -210,6 +210,7 @@ describe("buildProjectionChunkFromState", () => {
           },
         ],
         goalSkips: [],
+        incomeSkips: [],
       },
       asOf,
       startDateIso: "2026-04-20",

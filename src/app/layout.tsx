@@ -13,6 +13,8 @@ import type { ReactNode } from "react";
 
 import "@/app/globals.css";
 
+import { GlassSheetScopeProvider } from "@/components/keel/glass-sheet-scope";
+
 export const metadata: Metadata = {
   title: "Keel",
   description: "See what you actually have.",
@@ -21,7 +23,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body>{children}</body>
+      <body>
+        <GlassSheetScopeProvider>{children}</GlassSheetScopeProvider>
+      </body>
     </html>
   );
 }

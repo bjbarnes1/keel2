@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Upcoming bill list inside commitment edit context (skip-aware display).
+ * Upcoming payments list inside commitment edit context (skip-aware display).
  *
- * @module components/keel/bill-edit-upcoming
+ * @module components/keel/commitment-edit-upcoming
  */
 
 import { useMemo, useState } from "react";
@@ -30,7 +30,7 @@ function resolvePrefill(prefillSkipDate: string | undefined, occurrences: Occurr
   return { sheetDate: match.iso, sheetOpen: true };
 }
 
-export function BillEditUpcoming({
+export function CommitmentEditUpcoming({
   commitmentId,
   commitmentName,
   occurrences,

@@ -2,7 +2,7 @@
  * Natural-language → structured finance objects for Capture + Ask flows.
  *
  * Responsibilities:
- * - Define Zod schemas for commitments, incomes, and wealth assets (`*CaptureSchema`).
+ * - Zod wire schemas live in {@link module:lib/ai/capture-schemas} (client-safe); this module re-exports them.
  * - Call Anthropic with narrowly scoped system prompts; require JSON-only responses.
  * - Normalize messy model output (`extractJsonObject`, repair passes) before validation.
  * - Compute `perPay` using engine helpers so UI and engine agree on cadence math.
@@ -13,68 +13,31 @@
  * @module lib/ai/parse-capture
  */
 
-import { z } from "zod";
-
 import { getAnthropicClient } from "@/lib/ai/client";
+import {
+  assetCaptureSchema,
+  commitmentCaptureSchema,
+  incomeCaptureSchema,
+  type AssetCapturePayload,
+  type CommitmentCapturePayload,
+  type IncomeCapturePayload,
+} from "@/lib/ai/capture-schemas";
+import { trackAnthropicCompletion } from "@/lib/ai/rate-limit";
 import { calculatePerPayAmount } from "@/lib/engine/keel";
 
-// --- Zod wire schemas (validated shapes for Server Actions / forms) ------------
+export {
+  assetCaptureSchema,
+  commitmentCaptureSchema,
+  incomeCaptureSchema,
+  type AssetCapturePayload,
+  type CommitmentCapturePayload,
+  type IncomeCapturePayload,
+} from "@/lib/ai/capture-schemas";
 
-/**
- * Parsed bill / recurring commitment from Capture or Ask flows.
- *
- * - `amount`: currency per **billing cycle** (not annualized).
- * - `perPay`: money to set aside each primary pay period (fortnightly assumption when auto).
- * - `perPayAuto`: when true, `perPay` was derived; when false, user/model fixed it explicitly.
- */
-export const commitmentCaptureSchema = z.object({
-  name: z.string().min(1),
-  amount: z.number().finite().nonnegative(),
-  frequency: z.enum(["weekly", "fortnightly", "monthly", "quarterly", "annual"]),
-  nextDueDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable(),
-  category: z.string().min(1),
-  perPay: z.number().finite().nonnegative(),
-  perPayAuto: z.boolean(),
-});
+const SONNET_CAPTURE_MODEL = "claude-sonnet-4-20250514";
 
-export type CommitmentCapturePayload = z.infer<typeof commitmentCaptureSchema>;
-
-/** Pay-cycle income: amount per pay; `nextPayDate` nullable when unknown. */
-export const incomeCaptureSchema = z.object({
-  name: z.string().min(1),
-  amount: z.number().finite().nonnegative(),
-  frequency: z.enum(["weekly", "fortnightly", "monthly"]),
-  nextPayDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable(),
-  isPrimary: z.boolean().optional(),
-});
-
-export type IncomeCapturePayload = z.infer<typeof incomeCaptureSchema>;
-
-/**
- * Manual wealth holding row. Either `unitPrice × quantity` or `valueOverride` conveys total value.
- * `asOf` optional valuation date for snapshots.
- */
-export const assetCaptureSchema = z.object({
-  name: z.string().min(1),
-  assetType: z.string().min(1),
-  symbol: z.string().min(1).nullable().optional(),
-  quantity: z.number().finite().nonnegative(),
-  unitPrice: z.number().finite().nonnegative().nullable().optional(),
-  valueOverride: z.number().finite().nonnegative().nullable().optional(),
-  asOf: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable()
-    .optional(),
-});
-
-export type AssetCapturePayload = z.infer<typeof assetCaptureSchema>;
+/** When set, successful Anthropic completions are billed to the user’s daily AI cost bucket. */
+export type AiParseCostContext = { userId: string };
 
 /** Allowed commitment cadence literals after normalization. */
 const validCommitmentFrequencies = new Set<CommitmentCapturePayload["frequency"]>([
@@ -346,7 +309,7 @@ export function normalizeCommitmentCapture(raw: unknown): CommitmentCapturePaylo
  * Side effects: network call to Anthropic when configured.
  * @throws Empty input, JSON repair failures, or validation errors from `normalizeCommitmentCapture`.
  */
-export async function parseCommitmentCapture(sentence: string) {
+export async function parseCommitmentCapture(sentence: string, costContext?: AiParseCostContext) {
   const trimmed = sentence.trim();
 
   if (!trimmed) {
@@ -359,7 +322,7 @@ export async function parseCommitmentCapture(sentence: string) {
   }
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: SONNET_CAPTURE_MODEL,
     max_tokens: 450,
     system: `You extract bill/commitment details from natural language for a budgeting app.
 
@@ -386,6 +349,13 @@ Rules:
   const text = response.content.find((item) => item.type === "text");
   const body = text?.type === "text" ? text.text : "";
   const parsed = JSON.parse(extractJsonObject(body));
+  if (costContext) {
+    await trackAnthropicCompletion({
+      userId: costContext.userId,
+      model: SONNET_CAPTURE_MODEL,
+      usage: response.usage,
+    });
+  }
   return normalizeCommitmentCapture(parsed);
 }
 
@@ -438,7 +408,7 @@ export function normalizeIncomeCapture(raw: unknown): IncomeCapturePayload {
  * Parses a natural-language income description via Claude, or {@link fallbackIncomeParse} if no client.
  * @param sentence User text; must be non-empty after trim.
  */
-export async function parseIncomeCapture(sentence: string) {
+export async function parseIncomeCapture(sentence: string, costContext?: AiParseCostContext) {
   const trimmed = sentence.trim();
   if (!trimmed) {
     throw new Error("A description is required.");
@@ -450,7 +420,7 @@ export async function parseIncomeCapture(sentence: string) {
   }
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: SONNET_CAPTURE_MODEL,
     max_tokens: 400,
     system: `You extract income details from natural language for a budgeting app.
 
@@ -472,6 +442,13 @@ Rules:
   const text = response.content.find((item) => item.type === "text");
   const body = text?.type === "text" ? text.text : "";
   const parsed = JSON.parse(extractJsonObject(body));
+  if (costContext) {
+    await trackAnthropicCompletion({
+      userId: costContext.userId,
+      model: SONNET_CAPTURE_MODEL,
+      usage: response.usage,
+    });
+  }
   return normalizeIncomeCapture(parsed);
 }
 
@@ -527,7 +504,7 @@ export function normalizeAssetCapture(raw: unknown): AssetCapturePayload {
  * Parses a natural-language held-asset description via Claude, or {@link fallbackAssetParse} if no client.
  * @param sentence User text; must be non-empty after trim.
  */
-export async function parseAssetCapture(sentence: string) {
+export async function parseAssetCapture(sentence: string, costContext?: AiParseCostContext) {
   const trimmed = sentence.trim();
   if (!trimmed) {
     throw new Error("A description is required.");
@@ -539,7 +516,7 @@ export async function parseAssetCapture(sentence: string) {
   }
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: SONNET_CAPTURE_MODEL,
     max_tokens: 450,
     system: `You extract held-asset details from natural language for a wealth tracker.
 
@@ -563,5 +540,12 @@ Rules:
   const text = response.content.find((item) => item.type === "text");
   const body = text?.type === "text" ? text.text : "";
   const parsed = JSON.parse(extractJsonObject(body));
+  if (costContext) {
+    await trackAnthropicCompletion({
+      userId: costContext.userId,
+      model: SONNET_CAPTURE_MODEL,
+      usage: response.usage,
+    });
+  }
   return normalizeAssetCapture(parsed);
 }

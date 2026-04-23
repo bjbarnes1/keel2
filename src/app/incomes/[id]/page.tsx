@@ -1,5 +1,5 @@
 /**
- * Income detail: hero + read-only upcoming pay events. Skip functionality is deferred.
+ * Income detail: hero + upcoming pay events with skip / unskip controls.
  *
  * @module app/incomes/[id]/page
  */
@@ -7,7 +7,7 @@
 import { notFound } from "next/navigation";
 
 import { collectScheduledProjectionEvents } from "@/lib/engine/keel";
-import { getDashboardSnapshot, getIncomeForEdit } from "@/lib/persistence/keel-store";
+import { getDashboardSnapshot, getIncomeForEdit, listActiveIncomeSkipsForIncome } from "@/lib/persistence/keel-store";
 
 import { IncomeDetailClient } from "@/components/keel/income-detail-client";
 
@@ -44,6 +44,9 @@ export default async function IncomeDetailPage({ params }: { params: Promise<{ i
     notFound();
   }
 
+  const activeSkips = await listActiveIncomeSkipsForIncome(id);
+  const skipByIso = new Map(activeSkips.map((s) => [s.originalDateIso, s]));
+
   const asOf = new Date(`${snapshot.balanceAsOfIso}T00:00:00Z`);
   const horizonDays = 366;
   const schedule = collectScheduledProjectionEvents({
@@ -62,7 +65,14 @@ export default async function IncomeDetailPage({ params }: { params: Promise<{ i
   })
     .filter((e) => e.type === "income")
     .slice(0, upcomingCount(edit.frequency))
-    .map((e) => ({ iso: e.date, amount: e.amount }));
+    .map((e) => {
+      const skip = skipByIso.get(e.date);
+      return {
+        iso: e.date,
+        amount: e.amount,
+        skip: skip ? { id: skip.id, createdAt: skip.createdAt.toISOString() } : null,
+      };
+    });
 
   return (
     <IncomeDetailClient
@@ -73,4 +83,3 @@ export default async function IncomeDetailPage({ params }: { params: Promise<{ i
     />
   );
 }
-

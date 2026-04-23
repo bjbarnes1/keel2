@@ -1,5 +1,5 @@
 /**
- * Commitment (bill) CRUD + versioned “effective from” edits.
+ * Commitment CRUD + versioned “effective from” edits.
  *
  * Mirrors the income module: Prisma path uses append-only `CommitmentVersion` rows;
  * JSON fallback mutates `StoredCommitment` in `state.ts`. All queries are scoped by
@@ -14,8 +14,8 @@ import { unstable_noStore as noStore } from "next/cache";
 
 import { pickCommitmentVersionAt } from "@/lib/commitment-version";
 import { getPrismaClient } from "@/lib/prisma";
-import type { CommitmentCategory } from "@/lib/types";
-import { toIsoDate } from "@/lib/utils";
+import type { CommitmentCategory, CommitmentView } from "@/lib/types";
+import { formatDisplayDate, toIsoDate } from "@/lib/utils";
 
 import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
@@ -33,7 +33,7 @@ export async function getCommitmentForEdit(id: string) {
   const { budget } = await getBudgetContext();
 
   const commitment = await prisma.commitment.findFirst({
-    where: { id, budgetId: budget.id, archivedAt: null },
+    where: { id, budgetId: budget.id },
     include: {
       categoryRef: true,
       subcategoryRef: true,
@@ -164,8 +164,12 @@ export async function updateCommitment(
   }
 
   const state = await readState();
+  const target = state.commitments.find((c) => c.id === id && !c.archivedAt);
+  if (!target) throw new Error("Commitment not found.");
   state.commitments = state.commitments.map((c) =>
-    c.id === id ? { ...c, ...input, category: input.categoryId as CommitmentCategory } : c,
+    c.id === id && !c.archivedAt
+      ? { ...c, ...input, category: input.categoryId as CommitmentCategory }
+      : c,
   );
   await writeState(state);
 }
@@ -203,6 +207,9 @@ export async function updateCommitmentFuture(
     where: { id, budgetId: budget.id },
   });
   if (!commitment) throw new Error("Commitment not found.");
+  if (commitment.archivedAt) {
+    throw new Error("Restore this commitment before saving changes.");
+  }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
     throw new Error("Effective date must be YYYY-MM-DD.");
@@ -276,8 +283,106 @@ export async function deleteCommitment(id: string) {
   }
 
   const state = await readState();
-  const commitment = state.commitments.find((row) => row.id === id);
+  const commitment = state.commitments.find((row) => row.id === id && !row.archivedAt);
   if (!commitment) throw new Error("Commitment not found.");
   commitment.archivedAt = new Date().toISOString();
+  await writeState(state);
+}
+
+function mapStoredCommitmentToBrowseView(row: StoredCommitment): CommitmentView {
+  const nextIso = row.nextDueDate;
+  return {
+    id: row.id,
+    name: row.name,
+    amount: row.amount,
+    frequency: row.frequency,
+    nextDueDate: formatDisplayDate(nextIso, "short"),
+    nextDueDateIso: nextIso,
+    category: row.category,
+    subcategory: row.subcategory,
+    reserved: 0,
+    perPay: 0,
+    percentFunded: 0,
+    fundedByIncomeId: row.fundedByIncomeId,
+    isAttention: undefined,
+  };
+}
+
+/**
+ * Archived commitments for the browse “Archived” section (no reserve math).
+ */
+export async function listArchivedCommitmentsForBrowse(): Promise<CommitmentView[]> {
+  noStore();
+
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    const state = await readState();
+    return state.commitments.filter((c) => Boolean(c.archivedAt)).map(mapStoredCommitmentToBrowseView);
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+  const asOfIso = toIsoDate(new Date());
+
+  const rows = await prisma.commitment.findMany({
+    where: { budgetId: budget.id, archivedAt: { not: null } },
+    orderBy: { name: "asc" },
+    include: {
+      categoryRef: true,
+      subcategoryRef: true,
+      versions: { orderBy: { effectiveFrom: "desc" } },
+    },
+  });
+
+  return rows.map((commitment) => {
+    const slices =
+      commitment.versions?.map((v) => ({
+        effectiveFrom: v.effectiveFrom,
+        effectiveTo: v.effectiveTo,
+        name: v.name,
+        amount: Number(v.amount),
+        frequency: v.frequency,
+        nextDueDate: v.nextDueDate,
+        categoryId: v.categoryId,
+        subcategoryId: v.subcategoryId,
+        fundedByIncomeId: v.fundedByIncomeId,
+      })) ?? [];
+    const picked = pickCommitmentVersionAt(slices, asOfIso);
+    const nextDueDate = (picked ? picked.nextDueDate : commitment.nextDueDate)
+      .toISOString()
+      .slice(0, 10);
+    const stored: StoredCommitment = {
+      id: commitment.id,
+      name: picked?.name ?? commitment.name,
+      amount: picked ? picked.amount : Number(commitment.amount),
+      frequency: narrowCommitmentFrequency(picked?.frequency ?? commitment.frequency),
+      nextDueDate,
+      categoryId: picked?.categoryId ?? commitment.categoryId,
+      category: commitment.categoryRef.name as CommitmentCategory,
+      subcategoryId: picked?.subcategoryId ?? commitment.subcategoryId ?? undefined,
+      subcategory: commitment.subcategoryRef?.name ?? undefined,
+      fundedByIncomeId:
+        picked?.fundedByIncomeId ?? commitment.fundedByIncomeId ?? undefined,
+      archivedAt: commitment.archivedAt?.toISOString(),
+    };
+    return mapStoredCommitmentToBrowseView(stored);
+  });
+}
+
+export async function restoreCommitment(id: string) {
+  if (hasConfiguredDatabase()) {
+    const prisma = getPrismaClient();
+    const { budget } = await getBudgetContext();
+    const result = await prisma.commitment.updateMany({
+      where: { id, budgetId: budget.id, archivedAt: { not: null } },
+      data: { archivedAt: null },
+    });
+    if (result.count === 0) throw new Error("Commitment not found or already active.");
+    return;
+  }
+
+  const state = await readState();
+  const commitment = state.commitments.find((row) => row.id === id && row.archivedAt);
+  if (!commitment) throw new Error("Commitment not found or already active.");
+  commitment.archivedAt = undefined;
   await writeState(state);
 }

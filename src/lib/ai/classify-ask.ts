@@ -15,7 +15,7 @@ import { z } from "zod";
 import { extractJsonObject } from "@/lib/ai/parse-capture";
 import type { CommitmentSkipInput } from "@/lib/types";
 
-export type AskIntentKind = "answer" | "scenario_whatif" | "out_of_scope";
+export type AskIntentKind = "answer" | "scenario_whatif" | "out_of_scope" | "capture";
 
 export type AskIntentClassification = {
   kind: AskIntentKind;
@@ -23,25 +23,31 @@ export type AskIntentClassification = {
   rationale?: string;
 };
 
+export type AnthropicUsageSlice = {
+  input_tokens?: number;
+  output_tokens?: number;
+};
+
 /**
  * Routes a single user message into Ask Keel behavior: normal answer, hypothetical skip scenario, or out-of-scope.
  *
  * @param client Configured Anthropic client (caller supplies credentials).
  * @param message Raw user text from the chat surface.
- * @returns `{ kind, rationale? }`. If JSON is missing/invalid `kind`, returns `{ kind: "answer" }`.
+ * @returns `{ kind, rationale?, usage? }`. If JSON is missing/invalid `kind`, returns `{ kind: "answer" }`.
  */
 export async function classifyAskIntent(
   client: Anthropic,
   message: string,
-): Promise<AskIntentClassification> {
+): Promise<AskIntentClassification & { usage?: AnthropicUsageSlice }> {
   const response = await client.messages.create({
     model: "claude-3-5-haiku-20241022",
     max_tokens: 120,
     system: `You classify a single user message about Australian household cashflow.
 
-Return only JSON: { "kind": "answer" | "scenario_whatif" | "out_of_scope", "rationale"?: string }
+Return only JSON: { "kind": "answer" | "scenario_whatif" | "out_of_scope" | "capture", "rationale"?: string }
 
 Rules:
+- capture: user is declaring a new recurring commitment/bill, pay/income source, savings goal, or held asset in one sentence (e.g. "my electricity is $240 a quarter", "I get paid $5000 a month").
 - scenario_whatif: user asks what happens if they skip a bill/goal payment, defer, miss a due date, or similar hypothetical.
 - out_of_scope: not about budgeting, bills, income, goals, or Keel cashflow.
 - answer: everything else in scope (including normal questions).
@@ -49,7 +55,8 @@ Rules:
 Examples:
 - "What if I skip my rent on the 3rd?" -> scenario_whatif
 - "How much do I spend on groceries?" -> answer
-- "Write me a poem" -> out_of_scope`,
+- "Write me a poem" -> out_of_scope
+- "My gym is $80 a month" -> capture`,
     messages: [{ role: "user", content: message }],
   });
 
@@ -57,10 +64,15 @@ Examples:
   const text = textBlock?.type === "text" ? textBlock.text : "";
   const parsed = JSON.parse(extractJsonObject(text)) as { kind?: string; rationale?: string };
   const kind = parsed.kind;
-  if (kind === "scenario_whatif" || kind === "out_of_scope" || kind === "answer") {
-    return { kind, rationale: parsed.rationale };
+  if (
+    kind === "scenario_whatif" ||
+    kind === "out_of_scope" ||
+    kind === "answer" ||
+    kind === "capture"
+  ) {
+    return { kind, rationale: parsed.rationale, usage: response.usage ?? undefined };
   }
-  return { kind: "answer" };
+  return { kind: "answer", usage: response.usage ?? undefined };
 }
 
 /** Strict `YYYY-MM-DD` for skip original dates (matches engine expectations). */
@@ -71,7 +83,7 @@ const hypotheticalSkipSchema = z.object({
   kind: z.literal("commitment"),
   commitmentId: z.string().min(1),
   originalDateIso: isoDate,
-  strategy: z.enum(["MAKE_UP_NEXT", "SPREAD", "MOVE_ON"]),
+  strategy: z.enum(["MAKE_UP_NEXT", "SPREAD", "MOVE_ON", "STANDALONE"]),
   spreadOverN: z.number().int().min(1).max(24).optional(),
 });
 
@@ -87,9 +99,9 @@ export async function extractHypotheticalCommitmentSkips(
   client: Anthropic,
   message: string,
   allowedCommitmentIds: string[],
-): Promise<CommitmentSkipInput[]> {
+): Promise<{ skips: CommitmentSkipInput[]; usage?: AnthropicUsageSlice }> {
   if (allowedCommitmentIds.length === 0) {
-    return [];
+    return { skips: [] };
   }
 
   const response = await client.messages.create({
@@ -101,7 +113,7 @@ Return only JSON: { "hypotheticalSkips": Array<{
   "kind": "commitment",
   "commitmentId": string,
   "originalDateIso": "YYYY-MM-DD",
-  "strategy": "MAKE_UP_NEXT" | "SPREAD" | "MOVE_ON",
+  "strategy": "MAKE_UP_NEXT" | "SPREAD" | "MOVE_ON" | "STANDALONE",
   "spreadOverN"?: number
 }> }
 
@@ -138,5 +150,5 @@ Rules:
       spreadOverN: row.data.strategy === "SPREAD" ? row.data.spreadOverN : undefined,
     });
   }
-  return out;
+  return { skips: out, usage: response.usage ?? undefined };
 }

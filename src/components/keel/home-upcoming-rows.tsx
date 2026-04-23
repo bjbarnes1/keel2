@@ -80,7 +80,7 @@ export function HomeUpcomingRows({
     const seen = new Set<string>();
 
     for (const event of timeline) {
-      if (event.type !== "income") continue;
+      if (event.type !== "income" || event.isSkipped) continue;
       const incomeId = incomeIdFromEventId(event.id);
       if (!incomeId || seen.has(incomeId)) continue;
       const income = incomeById.get(incomeId);
@@ -124,7 +124,9 @@ export function HomeUpcomingRows({
         {sectionLabel("Upcoming events")}
         <div>
           {upcomingBills.length === 0 ? (
-            <div className="px-3 pb-3 text-sm text-[color:var(--keel-ink-3)]">No upcoming bills yet.</div>
+            <div className="px-3 pb-3 text-sm text-[color:var(--keel-ink-3)]">
+              No upcoming commitments yet.
+            </div>
           ) : (
             upcomingBills.map((event) => (
               <Row

@@ -515,4 +515,22 @@ describe("keel engine", () => {
       }),
     ).toBe(true);
   });
+
+  it("applies income skip: no balance bump and isSkipped on that pay row", () => {
+    const asOf = new Date("2026-04-20T00:00:00Z");
+    const timeline = buildProjectionTimeline({
+      availableMoney: 1000,
+      asOf,
+      horizonDays: 40,
+      incomes: [income],
+      commitments: [],
+      skips: [
+        { kind: "income", incomeId: income.id, originalDateIso: "2026-04-24", strategy: "STANDALONE" },
+      ],
+    });
+    const skippedRow = timeline.find((e) => e.type === "income" && e.date === "2026-04-24");
+    expect(skippedRow?.isSkipped).toBe(true);
+    // Skipped pay adds no credit — balance stays at starting available until other flows move it.
+    expect(skippedRow?.projectedAvailableMoney).toBe(1000);
+  });
 });

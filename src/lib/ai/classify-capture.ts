@@ -10,8 +10,10 @@
 
 import { z } from "zod";
 
+import type { AnthropicUsageSlice } from "@/lib/ai/classify-ask";
 import { getAnthropicClient } from "@/lib/ai/client";
 import { extractJsonObject } from "@/lib/ai/parse-capture";
+import { trackAnthropicCompletion } from "@/lib/ai/rate-limit";
 
 const classificationSchema = z.object({
   kind: z.enum(["commitment", "income", "asset", "unknown"]),
@@ -19,16 +21,23 @@ const classificationSchema = z.object({
 
 export type CaptureKind = z.infer<typeof classificationSchema>["kind"];
 
-export async function classifyCaptureSentence(sentence: string): Promise<CaptureKind> {
+export type ClassifyCaptureResult = {
+  kind: CaptureKind;
+  usage?: AnthropicUsageSlice;
+};
+
+export async function classifyCaptureSentence(
+  sentence: string,
+  costContext?: { userId: string },
+): Promise<ClassifyCaptureResult> {
   const trimmed = sentence.trim();
   if (!trimmed) {
-    return "unknown";
+    return { kind: "unknown" };
   }
 
   const client = getAnthropicClient();
   if (!client) {
-    // Without a key, keep the surface deterministic and conservative.
-    return "unknown";
+    return { kind: "unknown" };
   }
 
   const response = await client.messages.create({
@@ -49,5 +58,13 @@ Rules:
   const text = response.content.find((item) => item.type === "text");
   const body = text?.type === "text" ? text.text : "";
   const parsed = JSON.parse(extractJsonObject(body));
-  return classificationSchema.parse(parsed).kind;
+  const kind = classificationSchema.parse(parsed).kind;
+  if (costContext) {
+    await trackAnthropicCompletion({
+      userId: costContext.userId,
+      model: "claude-3-5-haiku-20241022",
+      usage: response.usage,
+    });
+  }
+  return { kind, usage: response.usage ?? undefined };
 }

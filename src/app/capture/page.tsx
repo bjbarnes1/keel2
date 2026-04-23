@@ -1,5 +1,5 @@
 /**
- * Voice/text capture entry: wraps `CaptureKeelPanel` for quick bill/income/asset intake.
+ * Voice/text capture entry: wraps `CaptureKeelPanel` for quick commitment/income/asset intake.
  *
  * @module app/capture/page
  */

@@ -19,9 +19,17 @@ type Props = {
   onClose: () => void;
   commitmentId: string;
   commitmentName: string;
+  /** Optional: amount currently held toward the next due date (for copy). */
+  heldFormatted?: string;
 };
 
-export function CommitmentArchiveSheet({ open, onClose, commitmentId, commitmentName }: Props) {
+export function CommitmentArchiveSheet({
+  open,
+  onClose,
+  commitmentId,
+  commitmentName,
+  heldFormatted,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +53,8 @@ export function CommitmentArchiveSheet({ open, onClose, commitmentId, commitment
     <GlassSheet
       open={open && Boolean(commitmentId)}
       onClose={onClose}
-      title="Archive commitment"
+      title={`Archive ${commitmentName}?`}
+      size="medium"
       footer={
         <div className="flex gap-2">
           <button
@@ -69,11 +78,25 @@ export function CommitmentArchiveSheet({ open, onClose, commitmentId, commitment
         </div>
       }
     >
-      <p className="text-sm leading-6 text-[color:var(--keel-ink-2)]">
-        <span className="font-medium text-[color:var(--keel-ink)]">{commitmentName}</span> will be
-        archived and removed from active commitments and your pay-period reserve math. You can restore it later
-        from data tools if needed.
-      </p>
+      <div className="space-y-3 text-sm leading-6 text-[color:var(--keel-ink-2)]">
+        <p>
+          Archived commitments stop appearing in your timeline and in pay-period reserve math.
+        </p>
+        <p>
+          {heldFormatted ? (
+            <>
+              Any amount held toward the next due date ({heldFormatted}) stops being reserved and
+              goes back toward your available money.
+            </>
+          ) : (
+            <>
+              Any amount Keel was reserving toward the next due date stops being held; those funds
+              go back toward your available money.
+            </>
+          )}
+        </p>
+        <p>You can restore this commitment anytime from the Archived section on the list.</p>
+      </div>
       {error ? <p className="mt-3 text-sm text-[color:var(--keel-attend)]">{error}</p> : null}
     </GlassSheet>
   );

@@ -17,6 +17,10 @@ enum CommitmentSkipStrategy {
   STANDALONE
 }
 
+enum IncomeSkipStrategy {
+  STANDALONE
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -50,6 +54,7 @@ model Budget {
   spendTransactions  SpendTransaction[]
   commitmentSkips    CommitmentSkip[]
   goalSkips          GoalSkip[]
+  incomeSkips        IncomeSkip[]
 }
 
 model BudgetMember {
@@ -93,6 +98,7 @@ model Income {
   versions    IncomeVersion[]
   commitments Commitment[] @relation("IncomeCommitments")
   goals       Goal[]       @relation("IncomeGoals")
+  skips       IncomeSkip[]
 }
 
 model IncomeVersion {
@@ -245,6 +251,25 @@ model GoalSkip {
   @@index([budgetId])
 }
 
+model IncomeSkip {
+  id              String             @id @default(cuid())
+  budgetId        String
+  incomeId        String
+  originalDate    DateTime           @db.Date
+  strategy        IncomeSkipStrategy @default(STANDALONE)
+  notes           String?
+  revokedAt       DateTime?
+  createdAt       DateTime           @default(now())
+  createdByUserId String
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  income Income @relation(fields: [incomeId], references: [id], onDelete: Cascade)
+
+  @@unique([incomeId, originalDate])
+  @@index([budgetId, revokedAt])
+  @@index([budgetId, originalDate])
+}
+
 model WealthAccount {
   id        String   @id @default(cuid())
   budgetId  String
@@ -333,6 +358,10 @@ model AiRateLimit {
   userId      String   @id
   windowStart DateTime
   calls       Int      @default(0)
+  /** UTC midnight for the calendar day `costCentsDay` accumulates against. */
+  dayStart      DateTime?
+  /** Running total in AUD cents for `dayStart` (resets when the day rolls). */
+  costCentsDay  Int       @default(0)
 }
 
 model SpendTransaction {

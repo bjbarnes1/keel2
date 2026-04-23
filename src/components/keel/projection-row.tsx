@@ -39,7 +39,7 @@ export function ProjectionRow({
   onSkippedBillActivate,
 }: {
   event: ProjectionEventView;
-  /** When set, skipped bill rows become tappable to open restore. */
+  /** When set, skipped commitment rows become tappable to open restore. */
   onSkippedBillActivate?: () => void;
 }) {
   const isIncome = event.type === "income";
@@ -99,6 +99,7 @@ export function ProjectionRow({
             "font-mono text-sm font-semibold",
             isIncome ? "text-emerald-500" : "text-foreground",
             isSkipped && !isIncome ? "line-through decoration-[color:var(--keel-attend)]/70" : null,
+            isSkipped && isIncome ? "line-through text-[color:var(--keel-ink-4)] decoration-[color:var(--keel-ink-4)]" : null,
           )}
         >
           {isIncome ? "+" : "-"}
