@@ -9,6 +9,7 @@ describe("formatAskSnapshotForPrompt", () => {
       bankBalance: 1,
       availableMoney: 2,
       endProjectedAvailableMoney42d: 3,
+      upcomingEvents: [],
       incomes: [],
       commitments: [],
       goals: [],

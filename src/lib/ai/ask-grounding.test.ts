@@ -8,6 +8,7 @@ const baseSnapshot: AskContextSnapshot = {
   bankBalance: 1000,
   availableMoney: 2500,
   endProjectedAvailableMoney42d: 2600,
+  upcomingEvents: [],
   incomes: [{ id: "i1", name: "Salary", amount: 4000, frequency: "fortnightly", nextPayDate: "2025-01-10" }],
   commitments: [
     { id: "c1", name: "Rent", amount: 500, frequency: "weekly", nextDueDate: "2025-01-05", category: "Housing" },

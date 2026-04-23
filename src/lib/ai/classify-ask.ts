@@ -48,7 +48,7 @@ Return only JSON: { "kind": "answer" | "scenario_whatif" | "out_of_scope" | "cap
 
 Rules:
 - capture: user is declaring a new recurring commitment/bill, pay/income source, savings goal, or held asset in one sentence (e.g. "my electricity is $240 a quarter", "I get paid $5000 a month").
-- scenario_whatif: user asks what happens if they skip a bill/goal payment, defer, miss a due date, or similar hypothetical.
+- scenario_whatif: user asks what happens if they skip a bill or pay, miss income, add a new recurring cost, change goal savings per pay, defer a due date, or similar hypothetical projection question.
 - out_of_scope: not about budgeting, bills, income, goals, or Keel cashflow.
 - answer: everything else in scope (including normal questions).
 

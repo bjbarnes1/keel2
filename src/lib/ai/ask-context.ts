@@ -1,13 +1,19 @@
 /**
- * Builds a compact, whitelisted financial snapshot for Ask Keel grounding.
+ * Builds a compact, whitelisted financial snapshot for Ask Keel grounding (Phase 1+2).
+ *
+ * Optional per-user 60s cache reduces repeated Sonnet cost when the user asks follow-ups quickly.
  *
  * @module lib/ai/ask-context
  */
 
-import { calculateAvailableMoney } from "@/lib/engine/keel";
+import { annualizeAmount, calculateAvailableMoney } from "@/lib/engine/keel";
+import type { CommitmentFrequency, PayFrequency } from "@/lib/types";
 import { applyGoalSkipsToGoal } from "@/lib/engine/skips";
 import { buildProjectionChunkFromState, getProjectionEngineInput } from "@/lib/persistence/dashboard";
 import { roundMoney } from "@/lib/utils";
+
+const SNAPSHOT_TTL_MS = 60_000;
+const snapshotCache = new Map<string, { at: number; snapshot: AskContextSnapshot }>();
 
 export type AskContextSnapshot = {
   balanceAsOf: string;
@@ -15,6 +21,24 @@ export type AskContextSnapshot = {
   availableMoney: number;
   /** End of 42-day projection window from balance-as-of, using active skips. */
   endProjectedAvailableMoney42d: number;
+  /** Matches {@link calculateAvailableMoney} breakdown for prose answers. */
+  availableMoneyComponents?: {
+    totalReserved: number;
+    totalGoalContributions: number;
+  };
+  /** Next slice of projection events for “when is my next pay” style questions. */
+  upcomingEvents: Array<{
+    date: string;
+    type: "income" | "bill";
+    name: string;
+    amount: number;
+    projectedAvailableMoney: number;
+  }>;
+  /** Lightweight headline stats derived from the snapshot (approximations). */
+  projections?: {
+    annualIncomeTotal: number;
+    annualCommitmentsTotal: number;
+  };
   incomes: Array<{
     id: string;
     name: string;
@@ -43,8 +67,19 @@ export type AskContextSnapshot = {
 /**
  * Loads the signed-in user's projection engine state and derives numbers the Sonnet
  * branch may cite (available money, short-horizon end balance, entity list).
+ *
+ * @param opts.userId When set, the same snapshot may be reused for 60 seconds for that user.
  */
-export async function buildAskContextSnapshot(): Promise<AskContextSnapshot> {
+export async function buildAskContextSnapshot(opts?: { userId?: string }): Promise<AskContextSnapshot> {
+  const userId = opts?.userId;
+  const now = Date.now();
+  if (userId) {
+    const hit = snapshotCache.get(userId);
+    if (hit && now - hit.at < SNAPSHOT_TTL_MS) {
+      return hit.snapshot;
+    }
+  }
+
   const { state, activeSkips } = await getProjectionEngineInput();
   const asOf = new Date(`${state.user.balanceAsOf}T00:00:00Z`);
   const activeCommitments = state.commitments.filter((c) => !c.archivedAt);
@@ -86,11 +121,37 @@ export async function buildAskContextSnapshot(): Promise<AskContextSnapshot> {
   const endProjected =
     chunk.length > 0 ? chunk[chunk.length - 1]!.projectedAvailableMoney! : availableMoneyResult.availableMoney;
 
-  return {
+  const upcomingEvents = chunk.slice(0, 18).map((row) => ({
+    date: row.date,
+    type: row.type,
+    name: row.label,
+    amount: row.amount,
+    projectedAvailableMoney: row.projectedAvailableMoney,
+  }));
+
+  let annualIncomeTotal = 0;
+  for (const i of activeIncomes) {
+    annualIncomeTotal += annualizeAmount(i.amount, i.frequency as PayFrequency);
+  }
+  let annualCommitmentsTotal = 0;
+  for (const c of activeCommitments) {
+    annualCommitmentsTotal += annualizeAmount(c.amount, c.frequency as CommitmentFrequency);
+  }
+
+  const snapshot: AskContextSnapshot = {
     balanceAsOf: state.user.balanceAsOf,
     bankBalance: state.user.bankBalance,
     availableMoney: roundMoney(availableMoneyResult.availableMoney),
     endProjectedAvailableMoney42d: roundMoney(endProjected),
+    availableMoneyComponents: {
+      totalReserved: roundMoney(availableMoneyResult.totalReserved),
+      totalGoalContributions: roundMoney(availableMoneyResult.totalGoalContributions),
+    },
+    upcomingEvents,
+    projections: {
+      annualIncomeTotal: roundMoney(annualIncomeTotal),
+      annualCommitmentsTotal: roundMoney(annualCommitmentsTotal),
+    },
     incomes: activeIncomes.map((i) => ({
       id: i.id,
       name: i.name,
@@ -115,6 +176,12 @@ export async function buildAskContextSnapshot(): Promise<AskContextSnapshot> {
       targetDate: g.targetDate,
     })),
   };
+
+  if (userId) {
+    snapshotCache.set(userId, { at: now, snapshot });
+  }
+
+  return snapshot;
 }
 
 /**

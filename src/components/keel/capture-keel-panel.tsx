@@ -348,6 +348,7 @@ function PreviewCard({
                 type="checkbox"
                 checked={Boolean(income.isPrimary)}
                 onChange={(e) => setIncome({ ...income, isPrimary: e.target.checked })}
+                aria-label="Use as primary income for goals"
               />
             </label>
           </>

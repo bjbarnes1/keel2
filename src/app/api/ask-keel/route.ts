@@ -1,5 +1,5 @@
 /**
- * Ask Keel HTTP API: streaming-free JSON responses for the Ask panel.
+ * Ask Keel HTTP API: JSON responses and optional NDJSON streaming for quick answers.
  *
  * Route Handler (Node runtime by default): authenticates via Supabase session, rate limits,
  * cost ceiling, tripwires, then runs intent classification + grounded Sonnet JSON,
@@ -14,11 +14,14 @@
 
 import { NextResponse } from "next/server";
 
-import { buildAskContextSnapshot, formatAskSnapshotForPrompt } from "@/lib/ai/ask-context";
+import { buildAskSonnetAnswerSystemPrompt } from "@/lib/ai/ask-answer-prompt";
+import { buildAskContextSnapshot } from "@/lib/ai/ask-context";
+import { validateFreeformCitations } from "@/lib/ai/ask-citations";
 import { enforceAskResponseGrounding } from "@/lib/ai/ask-grounding";
 import { askResponseSchema, type AskKeelResponse } from "@/lib/ai/ask-keel-schema";
+import { createStreamingAskResponse } from "@/lib/ai/ask-stream";
 import { getAnthropicClient } from "@/lib/ai/client";
-import { classifyAskIntent, extractHypotheticalCommitmentSkips } from "@/lib/ai/classify-ask";
+import { classifyAskIntent } from "@/lib/ai/classify-ask";
 import { classifyCaptureSentence } from "@/lib/ai/classify-capture";
 import {
   extractJsonObject,
@@ -34,7 +37,8 @@ import {
 } from "@/lib/ai/rate-limit";
 import { checkTripwires } from "@/lib/ai/tripwires";
 import { buildTimelineForTest } from "@/lib/engine/keel";
-import type { CommitmentSkipInput, SkipInput } from "@/lib/types";
+import { extractScenarioWhatIfModifications } from "@/lib/ai/scenario-whatif";
+import type { CommitmentSkipInput, IncomeSkipInput, SkipInput } from "@/lib/types";
 import { getProjectionEngineInput } from "@/lib/persistence/keel-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDisplayDate, roundMoney } from "@/lib/utils";
@@ -67,8 +71,9 @@ export async function POST(request: Request) {
 
     await assertWithinAiRateLimit({ userId, limit: 20, windowMs: 60 * 60 * 1000 });
 
-    const body = (await request.json()) as { message?: string };
+    const body = (await request.json()) as { message?: string; stream?: boolean };
     const message = String(body.message ?? "").trim();
+    const wantsStream = body.stream === true;
     if (!message) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
     }
@@ -101,6 +106,10 @@ export async function POST(request: Request) {
         body: trip.userMessage,
       };
       return NextResponse.json({ data: refusal });
+    }
+
+    if (wantsStream) {
+      return createStreamingAskResponse({ client, userId, message });
     }
 
     const ceiling = defaultAiCostCeilingCentsAud();
@@ -186,31 +195,85 @@ export async function POST(request: Request) {
       }
 
       const { state, activeSkips } = await getProjectionEngineInput();
-      const commitmentIds = state.commitments.map((commitment) => commitment.id);
-      const { skips: hypothetical, usage: hypUsage } = await extractHypotheticalCommitmentSkips(
-        client,
-        message,
-        commitmentIds,
-      );
+      const commitmentIds = state.commitments.filter((c) => !c.archivedAt).map((c) => c.id);
+      const incomeIds = state.incomes.filter((i) => !i.archivedAt).map((i) => i.id);
+      const goalBrief = state.goals.map((g) => ({
+        id: g.id,
+        name: g.name,
+        contributionPerPay: g.contributionPerPay,
+      }));
+
+      const { data: scenarioMods, usage: hypUsage } = await extractScenarioWhatIfModifications(client, message, {
+        allowedCommitmentIds: commitmentIds,
+        allowedIncomeIds: incomeIds,
+        goals: goalBrief,
+      });
       await trackAnthropicCompletion({ userId, model: HAIKU_MODEL, usage: hypUsage });
 
-      const incomes = state.incomes.map((income) => ({
-        id: income.id,
-        name: income.name,
-        amount: income.amount,
-        frequency: income.frequency,
-        nextPayDate: income.nextPayDate,
+      const incomes = state.incomes
+        .filter((income) => !income.archivedAt)
+        .map((income) => ({
+          id: income.id,
+          name: income.name,
+          amount: income.amount,
+          frequency: income.frequency,
+          nextPayDate: income.nextPayDate,
+        }));
+      const commitmentsBase = state.commitments
+        .filter((c) => !c.archivedAt)
+        .map((commitment) => ({
+          id: commitment.id,
+          name: commitment.name,
+          amount: commitment.amount,
+          frequency: commitment.frequency,
+          nextDueDate: commitment.nextDueDate,
+          fundedByIncomeId: commitment.fundedByIncomeId,
+          category: commitment.category,
+        }));
+      let commitments = commitmentsBase.slice();
+      const SYN = "__ask_scenario_commitment__";
+      if (scenarioMods.syntheticCommitment) {
+        const s = scenarioMods.syntheticCommitment;
+        commitments = [
+          ...commitments,
+          {
+            id: SYN,
+            name: s.name,
+            amount: s.amount,
+            frequency: s.frequency,
+            nextDueDate: s.nextDueDate,
+            fundedByIncomeId: state.primaryIncomeId,
+            category: s.category,
+          },
+        ];
+      }
+
+      let goals = state.goals.map((goal) => ({
+        id: goal.id,
+        name: goal.name,
+        contributionPerPay: goal.contributionPerPay,
+        fundedByIncomeId: goal.fundedByIncomeId,
+        currentBalance: goal.currentBalance,
+        targetAmount: goal.targetAmount,
+        targetDate: goal.targetDate,
       }));
-      const commitments = state.commitments.map((commitment) => ({
-        id: commitment.id,
-        name: commitment.name,
-        amount: commitment.amount,
-        frequency: commitment.frequency,
-        nextDueDate: commitment.nextDueDate,
-        fundedByIncomeId: commitment.fundedByIncomeId,
-        category: commitment.category,
-      }));
-      const goals = state.goals.map((goal) => ({
+      if (scenarioMods.goalContributionChange) {
+        const ch = scenarioMods.goalContributionChange;
+        goals = goals.map((g) =>
+          g.id === ch.goalId ? { ...g, contributionPerPay: ch.newContributionPerPay } : g,
+        );
+      }
+
+      const persisted: SkipInput[] = [
+        ...activeSkips.commitmentSkips,
+        ...activeSkips.goalSkips,
+        ...activeSkips.incomeSkips,
+      ];
+      const hypotheticalCommitment = scenarioMods.commitmentSkips;
+      const hypotheticalIncome = scenarioMods.incomeSkips;
+      const combined: SkipInput[] = [...persisted, ...hypotheticalCommitment, ...hypotheticalIncome];
+
+      const goalsBaseline = state.goals.map((goal) => ({
         id: goal.id,
         name: goal.name,
         contributionPerPay: goal.contributionPerPay,
@@ -220,16 +283,13 @@ export async function POST(request: Request) {
         targetDate: goal.targetDate,
       }));
 
-      const persisted: SkipInput[] = [...activeSkips.commitmentSkips, ...activeSkips.goalSkips];
-      const combined: SkipInput[] = [...persisted, ...hypothetical];
-
       const baseTimeline = buildTimelineForTest({
         asOfIso: state.user.balanceAsOf,
         bankBalance: state.user.bankBalance,
         incomes,
         primaryIncomeId: state.primaryIncomeId,
-        commitments,
-        goals,
+        commitments: commitmentsBase,
+        goals: goalsBaseline,
         skips: persisted,
         horizonDays: 42,
       });
@@ -255,29 +315,48 @@ export async function POST(request: Request) {
       const delta = roundMoney(endHyp - endBase);
 
       const nameById = new Map(state.commitments.map((commitment) => [commitment.id, commitment.name]));
+      const incomeNameById = new Map(state.incomes.map((income) => [income.id, income.name]));
       const chips: Array<string | { text: string; action?: string }> = [];
-      for (const skip of hypothetical) {
+      for (const skip of hypotheticalCommitment) {
         const label = nameById.get(skip.commitmentId) ?? "Commitment";
         chips.push({
           text: `Open skip · ${label} · ${formatDisplayDate(skip.originalDateIso, "short-day")}`,
           action: `skip_commitment:${skip.commitmentId}:${skip.originalDateIso}`,
         });
       }
+      for (const skip of hypotheticalIncome) {
+        const label = incomeNameById.get(skip.incomeId) ?? "Income";
+        chips.push({
+          text: `Open income · ${label} · ${formatDisplayDate(skip.originalDateIso, "short-day")}`,
+          action: `skip_income:${skip.incomeId}:${skip.originalDateIso}`,
+        });
+      }
+
+      const hasScenario =
+        hypotheticalCommitment.length > 0 ||
+        hypotheticalIncome.length > 0 ||
+        Boolean(scenarioMods.syntheticCommitment) ||
+        Boolean(scenarioMods.goalContributionChange);
+
+      const detailLines: string[] = [];
+      detailLines.push(`Baseline end (6 weeks): ${roundMoney(endBase)}`);
+      detailLines.push(`Scenario end (6 weeks): ${roundMoney(endHyp)}`);
+      detailLines.push(`Delta: ${delta >= 0 ? "+" : ""}${delta}`);
 
       const dataOut: AskKeelResponse = {
         type: "scenario_whatif",
-        headline:
-          hypothetical.length === 0
-            ? "I couldn’t pin down a specific commitment skip."
-            : "Here’s how that skip could move your 6‑week projection.",
-        body:
-          hypothetical.length === 0
-            ? "Name the commitment and the payment date (YYYY‑MM‑DD), or open the commitment and use Skip payment."
-            : `Projected available at end of horizon: ${roundMoney(endHyp)} (delta ${delta >= 0 ? "+" : ""}${delta} vs your current plan).`,
-        hypotheticalSkips: hypothetical as CommitmentSkipInput[],
+        headline: hasScenario
+          ? "Here’s how that scenario could move your 6‑week projection."
+          : "I couldn’t pin down a specific change.",
+        body: hasScenario
+          ? `${detailLines.join("\n")}\n\nTap a chip to open the right screen when it’s a skip.`
+          : "Name the commitment or income and the date (YYYY‑MM‑DD), add a bit more detail, or adjust from Timeline.",
+        hypotheticalSkips: hypotheticalCommitment.length ? (hypotheticalCommitment as CommitmentSkipInput[]) : undefined,
+        hypotheticalIncomeSkips: hypotheticalIncome.length ? (hypotheticalIncome as IncomeSkipInput[]) : undefined,
         deltas: {
           endProjectedAvailableMoney: roundMoney(endHyp),
           endAvailableMoneyDelta: delta,
+          baselineEndProjectedAvailableMoney: roundMoney(endBase),
         },
         chips: chips.length ? chips : undefined,
       };
@@ -289,29 +368,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: quotaResponse });
     }
 
-    const snapshot = await buildAskContextSnapshot();
-    const snapshotPrompt = formatAskSnapshotForPrompt(snapshot);
+    const snapshot = await buildAskContextSnapshot({ userId });
 
     const response = await client.messages.create({
       model: SONNET_MODEL,
       max_tokens: 700,
-      system: `${snapshotPrompt}
-
-You are Keel's assistant for Australian household cashflow.
-
-Return only valid JSON for one of these shapes (discriminate with "type"):
-1) { "type":"goal_projection", "headline": string, "chart": { "months": string[], "todayValue": number, "targetValue": number, "targetLabel": string }, "chips"?: (string | { "text": string, "action"?: string })[] }
-2) { "type":"spending_summary", "headline": string, "breakdown": { "label": string, "amount": number }[], "chips"?: (string | { "text": string, "action"?: string })[] }
-3) { "type":"freeform", "headline": string, "body"?: string, "chips"?: (string | { "text": string, "action"?: string })[] , "citations"?: Array<{ "label": string, "amount"?: number, "dateIso"?: string }> }
-
-Rules:
-- Prefer structured types when the user question clearly matches.
-- Use AUD thinking; amounts are numbers (not strings).
-- Keep headline short; body optional and concise.
-- Chips may include optional "action" for deep links (e.g. skip_commitment:id:yyyy-mm-dd).
-- **Grounding:** You may only cite amounts and dates that appear in GROUNDED_SNAPSHOT_JSON. If the snapshot does not contain enough information to answer safely, return type "freeform" explaining what is missing.
-- For type "goal_projection", chart.todayValue MUST equal the snapshot field "availableMoney" (${snapshot.availableMoney}).
-- For type "freeform", when you mention any specific dollar amount or ISO date from the snapshot, also include a "citations" array with the matching snapshot labels/amounts/dates you relied on.`,
+      system: buildAskSonnetAnswerSystemPrompt(snapshot),
       messages: [{ role: "user", content: message }],
     });
 
@@ -322,6 +384,21 @@ Rules:
     const parsed = JSON.parse(extractJsonObject(text));
     const parsedOut = askResponseSchema.parse(parsed);
     const grounded = enforceAskResponseGrounding(parsedOut, snapshot);
+
+    if (grounded.type === "freeform") {
+      const cite = validateFreeformCitations(grounded.citations, snapshot);
+      if (!cite.ok) {
+        console.error("[ask-keel] citation validation", { userId, reasons: cite.reasons });
+        const fallback = askResponseSchema.parse({
+          type: "freeform",
+          headline: "I'm having trouble matching that to your data.",
+          body: "Try rephrasing, or check Timeline for the exact figures.",
+          answerValidationFailed: true,
+          confidence: "low",
+        });
+        return NextResponse.json({ data: fallback });
+      }
+    }
 
     return NextResponse.json({ data: askResponseSchema.parse(grounded) });
   } catch (error) {

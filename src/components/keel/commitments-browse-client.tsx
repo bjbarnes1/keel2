@@ -2,12 +2,11 @@
 
 /**
  * Commitments browse: overview, category groups, kebab row actions, archived section,
- * floating add, header sort menu.
+ * floating add, and a pill segmented sort control.
  *
  * @module components/keel/commitments-browse-client
  */
 
-import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
@@ -90,7 +89,6 @@ export function CommitmentsBrowseClient({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [sort, setSort] = useState<SortMode>("due");
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [skipCtx, setSkipCtx] = useState<{
@@ -110,18 +108,7 @@ export function CommitmentsBrowseClient({
     displayPerPay: number;
   } | null>(null);
 
-  const headerMenuRef = useRef<HTMLDivElement>(null);
   const rowMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!headerMenuOpen) return;
-    function onDoc(e: MouseEvent) {
-      if (headerMenuRef.current?.contains(e.target as Node)) return;
-      setHeaderMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [headerMenuOpen]);
 
   useEffect(() => {
     if (!menuId) return;
@@ -177,56 +164,6 @@ export function CommitmentsBrowseClient({
     copy.sort((a, b) => a.name.localeCompare(b.name));
     return copy;
   }, [archivedCommitments]);
-
-  const headerKebab = (
-    <div className="relative" ref={headerMenuRef}>
-      <button
-        type="button"
-        aria-label="Commitments list options"
-        aria-expanded={headerMenuOpen}
-        onClick={() => setHeaderMenuOpen((o) => !o)}
-        className="glass-clear inline-flex h-9 w-9 items-center justify-center rounded-full text-[color:var(--keel-ink-2)] hover:text-[color:var(--keel-ink)]"
-      >
-        <MoreHorizontal className="h-5 w-5" />
-      </button>
-      {headerMenuOpen ? (
-        <div
-          role="menu"
-          className="glass-heavy absolute right-0 top-full z-30 mt-1 min-w-[220px] rounded-[var(--radius-md)] border border-white/12 py-1 shadow-[0_12px_40px_rgba(0,0,0,0.35)]"
-          style={{
-            backgroundColor: "rgba(20, 26, 23, 0.92)",
-            backdropFilter: "blur(40px) saturate(180%)",
-          }}
-        >
-          <p className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--keel-ink-5)]">
-            Sort
-          </p>
-          {(
-            [
-              ["due", "Due date"],
-              ["amount", "Amount"],
-              ["name", "Name"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={sort === id}
-              className="block w-full px-3 py-2 text-left text-sm text-[color:var(--keel-ink)] hover:bg-white/6"
-              onClick={() => {
-                setSort(id);
-                setHeaderMenuOpen(false);
-              }}
-            >
-              {label}
-              {sort === id ? " · current" : ""}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
 
   function openEditForCommitment(c: CommitmentView) {
     const fields = editPayloadsById[c.id];
@@ -392,7 +329,7 @@ export function CommitmentsBrowseClient({
   }
 
   return (
-    <AppShell title="Commitments" currentPath="/commitments" headerRight={headerKebab}>
+    <AppShell title="Commitments" currentPath="/commitments">
       <div className="glass-heavy mb-4 rounded-[var(--radius-md)] border border-white/10 px-5 py-4 shadow-[var(--glass-inset-highlight-heavy)]">
         <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[color:var(--keel-ink-5)]">
           Overview
@@ -423,6 +360,36 @@ export function CommitmentsBrowseClient({
             </p>
           </div>
         </div>
+      </div>
+
+      <div
+        className="glass-heavy mb-4 flex rounded-[999px] border border-white/10 p-1 shadow-[var(--glass-inset-highlight-heavy)]"
+        role="tablist"
+        aria-label="Sort commitments"
+      >
+        {(
+          [
+            ["due", "Due date"],
+            ["amount", "Amount"],
+            ["name", "Name"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={sort === id}
+            onClick={() => setSort(id)}
+            className={cn(
+              "flex-1 rounded-[999px] px-2 py-2 text-center text-[13px] font-medium transition-colors duration-200",
+              sort === id
+                ? "bg-[rgba(240,235,220,0.08)] text-[color:var(--keel-ink)]"
+                : "text-[color:var(--keel-ink-4)] hover:text-[color:var(--keel-ink-2)]",
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {commitments.length === 0 ? (

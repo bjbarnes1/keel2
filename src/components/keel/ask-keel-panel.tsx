@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Ask Keel chat UI: POSTs to `/api/ask-keel`, renders structured response cards + chips.
+ * Ask Keel chat UI: POSTs to `/api/ask-keel` (JSON or optional NDJSON streaming), renders
+ * structured cards, citations, scenario deltas, and chips.
  *
  * @module components/keel/ask-keel-panel
  */
@@ -15,6 +16,14 @@ import { encodeCapturePrefillPayload } from "@/lib/ai/capture-prefill";
 import { cn, formatAud } from "@/lib/utils";
 
 type Chip = string | { text: string; action?: string };
+
+type ChatMessage = {
+  role: "user" | "assistant";
+  text: string;
+  payload?: AskKeelResponse;
+  /** When true, `text` holds streamed prose before the final structured payload is applied. */
+  streaming?: boolean;
+};
 
 function chipText(chip: Chip) {
   return typeof chip === "string" ? chip : chip.text;
@@ -32,12 +41,30 @@ function parseSkipCommitmentAction(action: string) {
   return { commitmentId: match[1]!, iso: match[2]! };
 }
 
+function parseSkipIncomeAction(action: string) {
+  const match = /^skip_income:(.+):(\d{4}-\d{2}-\d{2})$/.exec(action);
+  if (!match) {
+    return null;
+  }
+  return { incomeId: match[1]!, iso: match[2]! };
+}
+
 function parseSkipGoalAction(action: string) {
   const match = /^skip_goal:(.+):(\d{4}-\d{2}-\d{2})$/.exec(action);
   if (!match) {
     return null;
   }
   return { goalId: match[1]!, iso: match[2]! };
+}
+
+function citationHref(ref: string): string | null {
+  const inc = /^income:([^:]+):/.exec(ref);
+  if (inc) return `/incomes/${inc[1]}`;
+  const com = /^commitment:([^:]+):/.exec(ref);
+  if (com) return `/commitments/${com[1]}`;
+  const goal = /^goal:([^:]+):/.exec(ref);
+  if (goal) return `/goals/${goal[1]}`;
+  return null;
 }
 
 function MicDisabledButton() {
@@ -73,13 +100,41 @@ function MicDisabledButton() {
 
 export function AskKeelPanel() {
   const router = useRouter();
-  const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string; payload?: AskKeelResponse }>>(
-    [],
-  );
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
+  const [streamAnswers, setStreamAnswers] = useState(true);
 
   const canSend = useMemo(() => input.trim().length > 0 && !pending, [input, pending]);
+
+  async function sendNonStreaming(trimmed: string) {
+    const res = await fetch("/api/ask-keel", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: trimmed, stream: false }),
+    });
+
+    if (res.status === 429) {
+      const msg = (await res.json()) as { error?: string };
+      setMessages((prev) => [...prev, { role: "assistant", text: msg.error ?? "Please try again later." }]);
+      return;
+    }
+
+    const json = (await res.json()) as { data?: AskKeelResponse; error?: string };
+    const data = json.data;
+    if (!data) {
+      setMessages((prev) => [...prev, { role: "assistant", text: json.error ?? "Ask is offline right now." }]);
+      return;
+    }
+
+    if (data.type === "capture_redirect") {
+      setMessages((prev) => [...prev, { role: "assistant", text: data.headline, payload: data }]);
+      router.push(`/capture?prefill=${encodeCapturePrefillPayload({ sentence: data.sentence, capture: data.capture })}`);
+      return;
+    }
+
+    setMessages((prev) => [...prev, { role: "assistant", text: data.headline, payload: data }]);
+  }
 
   async function send(text: string) {
     const trimmed = text.trim();
@@ -90,38 +145,110 @@ export function AskKeelPanel() {
     setInput("");
 
     try {
-      const res = await fetch("/api/ask-keel", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
-      });
+      if (streamAnswers) {
+        const res = await fetch("/api/ask-keel", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: trimmed, stream: true }),
+        });
 
-      if (res.status === 429) {
-        const msg = (await res.json()) as { error?: string };
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", text: msg.error ?? "Please try again later." },
-        ]);
-        return;
+        if (res.status === 429) {
+          const msg = (await res.json()) as { error?: string };
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: msg.error ?? "Please try again later." },
+          ]);
+          return;
+        }
+
+        if (!res.ok) {
+          let errText = "Ask is offline right now.";
+          try {
+            const errJson = (await res.json()) as { error?: string };
+            if (errJson.error) errText = errJson.error;
+          } catch {
+            /* ignore */
+          }
+          setMessages((prev) => [...prev, { role: "assistant", text: errText }]);
+          return;
+        }
+
+        const ctype = res.headers.get("content-type") ?? "";
+        if (res.body && ctype.includes("ndjson")) {
+          setMessages((prev) => [...prev, { role: "assistant", text: "", streaming: true }]);
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let streamText = "";
+          let completed = false;
+
+          const applyLast = (patch: Partial<ChatMessage>) => {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next.length - 1;
+              if (last < 0) return prev;
+              next[last] = { ...next[last]!, ...patch };
+              return next;
+            });
+          };
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              let ev: { type?: string; delta?: string; data?: AskKeelResponse };
+              try {
+                ev = JSON.parse(line) as typeof ev;
+              } catch {
+                continue;
+              }
+              if (ev.type === "text" && typeof ev.delta === "string") {
+                streamText += ev.delta;
+                applyLast({ text: streamText, streaming: true });
+              }
+              if (ev.type === "complete" && ev.data) {
+                completed = true;
+                applyLast({
+                  text: ev.data.headline,
+                  payload: ev.data,
+                  streaming: false,
+                });
+              }
+            }
+          }
+          if (buffer.trim()) {
+            try {
+              const ev = JSON.parse(buffer) as { type?: string; data?: AskKeelResponse };
+              if (ev.type === "complete" && ev.data) {
+                completed = true;
+                applyLast({
+                  text: ev.data.headline,
+                  payload: ev.data,
+                  streaming: false,
+                });
+              }
+            } catch {
+              /* ignore trailing partial */
+            }
+          }
+
+          if (!completed) {
+            applyLast({
+              role: "assistant",
+              text: "Ask is offline right now.",
+              streaming: false,
+            });
+          }
+          return;
+        }
       }
 
-      const json = (await res.json()) as { data?: AskKeelResponse; error?: string };
-      const data = json.data;
-      if (!data) {
-        setMessages((prev) => [...prev, { role: "assistant", text: json.error ?? "Ask is offline right now." }]);
-        return;
-      }
-
-      if (data.type === "capture_redirect") {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", text: data.headline, payload: data },
-        ]);
-        router.push(`/capture?prefill=${encodeCapturePrefillPayload({ sentence: data.sentence, capture: data.capture })}`);
-        return;
-      }
-
-      setMessages((prev) => [...prev, { role: "assistant", text: data.headline, payload: data }]);
+      await sendNonStreaming(trimmed);
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", text: "Ask is offline right now." }]);
     } finally {
@@ -133,13 +260,23 @@ export function AskKeelPanel() {
     <div className="pb-28">
       <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15" aria-hidden="true" />
 
-      <div className="mb-4 flex items-center justify-end">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <label className="flex cursor-pointer items-center gap-2 text-[11px] text-[color:var(--keel-ink-4)]">
+          <input
+            type="checkbox"
+            className="accent-[color:var(--keel-safe-soft)]"
+            checked={streamAnswers}
+            onChange={(e) => setStreamAnswers(e.target.checked)}
+            aria-label="Stream short answers as they are typed"
+          />
+          Stream short answers
+        </label>
         <Link href="/capture" className="text-xs font-medium text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]">
           Capture
         </Link>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3" role="log" aria-relevant="additions" aria-label="Ask Keel conversation">
         {messages.map((message, idx) => (
           <div key={idx} className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
             <div
@@ -147,6 +284,7 @@ export function AskKeelPanel() {
                 "max-w-[92%] rounded-[var(--radius-lg)] px-3 py-2 text-sm leading-6",
                 message.role === "user" ? "glass-tint-safe" : "glass-clear",
               )}
+              {...(message.streaming ? { "aria-live": "polite" as const } : {})}
             >
               <p className="font-medium text-[color:var(--keel-ink)]">{message.text}</p>
 
@@ -182,12 +320,64 @@ export function AskKeelPanel() {
                 <p className="mt-2 text-xs leading-6 text-[color:var(--keel-ink-3)]">{message.payload.body}</p>
               ) : null}
 
+              {message.payload?.type === "freeform" && message.payload.citations?.length ? (
+                <div className="mt-2 border-t border-white/10 pt-2">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--keel-ink-5)]">
+                    Based on
+                  </p>
+                  <ul className="mt-1 flex flex-wrap gap-2">
+                    {message.payload.citations.map((c) => {
+                      const href = citationHref(c.ref);
+                      const inner = (
+                        <span className="font-mono tabular-nums text-[color:var(--keel-ink)]">
+                          {c.amount != null ? formatAud(c.amount) : c.dateIso ?? c.label}
+                        </span>
+                      );
+                      return (
+                        <li key={`${c.ref}-${c.label}`}>
+                          {href ? (
+                            <Link
+                              href={href}
+                              className="keel-chip inline-flex items-center gap-1 px-2 py-1 text-[11px] text-[color:var(--keel-ink-2)] underline-offset-2 hover:underline"
+                            >
+                              {c.label} · {inner}
+                            </Link>
+                          ) : (
+                            <span className="keel-chip inline-flex items-center gap-1 px-2 py-1 text-[11px] text-[color:var(--keel-ink-2)]">
+                              {c.label} · {inner}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+
+              {message.payload?.type === "freeform" && message.payload.confidence === "low" ? (
+                <p className="mt-2 text-[11px] text-[color:var(--keel-ink-5)]">Low confidence — double-check in Timeline.</p>
+              ) : null}
+
+              {message.payload?.type === "freeform" && message.payload.answerValidationFailed ? (
+                <p className="mt-1 text-[11px] text-[color:var(--keel-ink-4)]">Something didn&apos;t line up with your snapshot.</p>
+              ) : null}
+
               {message.payload?.type === "scenario_whatif" && message.payload.body ? (
                 <div className="mt-2 space-y-2 text-xs leading-6 text-[color:var(--keel-ink-3)]">
-                  <p>{message.payload.body}</p>
+                  <p className="whitespace-pre-line">{message.payload.body}</p>
                   <p className="font-mono text-[color:var(--keel-ink-2)]">
-                    End balance {formatAud(message.payload.deltas.endProjectedAvailableMoney)} · Delta{" "}
-                    {formatAud(message.payload.deltas.endAvailableMoneyDelta)}
+                    {message.payload.deltas.baselineEndProjectedAvailableMoney != null ? (
+                      <>
+                        Baseline end {formatAud(message.payload.deltas.baselineEndProjectedAvailableMoney)} · Scenario end{" "}
+                        {formatAud(message.payload.deltas.endProjectedAvailableMoney)} · Delta{" "}
+                        {formatAud(message.payload.deltas.endAvailableMoneyDelta)}
+                      </>
+                    ) : (
+                      <>
+                        End balance {formatAud(message.payload.deltas.endProjectedAvailableMoney)} · Delta{" "}
+                        {formatAud(message.payload.deltas.endAvailableMoneyDelta)}
+                      </>
+                    )}
                   </p>
                 </div>
               ) : null}
@@ -214,6 +404,11 @@ export function AskKeelPanel() {
                             );
                             return;
                           }
+                          const income = parseSkipIncomeAction(action);
+                          if (income) {
+                            router.push(`/incomes/${income.incomeId}`);
+                            return;
+                          }
                           const goal = parseSkipGoalAction(action);
                           if (goal) {
                             router.push(`/goals/${goal.goalId}?skipDate=${encodeURIComponent(goal.iso)}`);
@@ -234,11 +429,13 @@ export function AskKeelPanel() {
       </div>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(96px+env(safe-area-inset-bottom))] z-40 flex justify-center px-5">
-        <div className="pointer-events-auto glass-heavy flex w-full max-w-[420px] items-center gap-2 rounded-[var(--radius-pill)] px-3 py-2">
+        <div className="pointer-events-auto glass-heavy flex w-full max-w-[520px] items-center gap-2 rounded-[var(--radius-pill)] px-3 py-2">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask Keel…"
+            aria-label="Message to Ask Keel"
+            autoComplete="off"
             className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-[color:var(--keel-ink)] outline-none placeholder:text-[color:var(--keel-ink-4)]"
             onKeyDown={(e) => {
               if (e.key === "Enter") {

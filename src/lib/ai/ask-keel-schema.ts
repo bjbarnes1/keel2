@@ -12,6 +12,13 @@ import {
   incomeCaptureSchema,
 } from "@/lib/ai/capture-schemas";
 
+const incomeSkipWireSchema = z.object({
+  kind: z.literal("income"),
+  incomeId: z.string().min(1),
+  originalDateIso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  strategy: z.literal("STANDALONE"),
+});
+
 const chipSchema = z.union([
   z.string(),
   z.object({
@@ -21,6 +28,8 @@ const chipSchema = z.union([
 ]);
 
 const citationSchema = z.object({
+  /** Stable key from the snapshot allow-list (see `buildCitationRefAllowList`). */
+  ref: z.string().min(1),
   label: z.string().min(1),
   amount: z.number().finite().optional(),
   dateIso: z.string().optional(),
@@ -59,9 +68,11 @@ export const askResponseSchema = z.discriminatedUnion("type", [
         }),
       )
       .optional(),
+    hypotheticalIncomeSkips: z.array(incomeSkipWireSchema).optional(),
     deltas: z.object({
       endProjectedAvailableMoney: z.number().finite(),
       endAvailableMoneyDelta: z.number().finite(),
+      baselineEndProjectedAvailableMoney: z.number().finite().optional(),
     }),
     chips: z.array(chipSchema).optional(),
   }),
@@ -69,8 +80,11 @@ export const askResponseSchema = z.discriminatedUnion("type", [
     type: z.literal("freeform"),
     headline: z.string().min(1),
     body: z.string().optional(),
+    confidence: z.enum(["high", "medium", "low"]).optional(),
     chips: z.array(chipSchema).optional(),
     citations: z.array(citationSchema).optional(),
+    /** When true, UI may offer retry; set only by the API on validation failure. */
+    answerValidationFailed: z.boolean().optional(),
   }),
   z.object({
     type: z.literal("capture_redirect"),

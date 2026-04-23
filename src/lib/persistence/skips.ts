@@ -8,6 +8,8 @@
  * @module lib/persistence/skips
  */
 
+import { Prisma } from "@prisma/client";
+
 import { getPrismaClient } from "@/lib/prisma";
 import type {
   CommitmentSkipInput,
@@ -33,6 +35,11 @@ function isGoalSkipStrategy(value: string): value is GoalSkipStrategy {
   return value === "EXTEND_DATE" || value === "REBALANCE";
 }
 
+/** Preview deploys often skip `migrate deploy`; treat missing `IncomeSkip` as zero rows. */
+function isMissingTableError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
+}
+
 export type ActiveSkipsBundle = {
   commitmentSkips: CommitmentSkipInput[];
   goalSkips: GoalSkipInput[];
@@ -45,11 +52,26 @@ export async function getActiveSkipsForBudget(budgetId: string): Promise<ActiveS
   }
 
   const prisma = getPrismaClient();
-  const [commitmentRows, goalRows, incomeRows] = await Promise.all([
+  const [commitmentRows, goalRows] = await Promise.all([
     prisma.commitmentSkip.findMany({ where: { budgetId, revokedAt: null } }),
     prisma.goalSkip.findMany({ where: { budgetId, revokedAt: null } }),
-    prisma.incomeSkip.findMany({ where: { budgetId, revokedAt: null } }),
   ]);
+
+  let incomeRows: Awaited<ReturnType<typeof prisma.incomeSkip.findMany>>;
+  try {
+    incomeRows = await prisma.incomeSkip.findMany({
+      where: { budgetId, revokedAt: null },
+    });
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      console.warn(
+        "[getActiveSkipsForBudget] IncomeSkip table missing (run migrations or set VERCEL_RUN_MIGRATIONS=1 on preview). Treating income skips as empty.",
+      );
+      incomeRows = [];
+    } else {
+      throw error;
+    }
+  }
 
   return {
     commitmentSkips: commitmentRows.flatMap((row) => {
@@ -99,10 +121,21 @@ export async function listActiveIncomeSkipsForIncome(incomeId: string) {
   }
   const { budget } = await getBudgetContext();
   const prisma = getPrismaClient();
-  const rows = await prisma.incomeSkip.findMany({
-    where: { budgetId: budget.id, incomeId, revokedAt: null },
-    orderBy: { originalDate: "asc" },
-  });
+  let rows: Awaited<ReturnType<typeof prisma.incomeSkip.findMany>>;
+  try {
+    rows = await prisma.incomeSkip.findMany({
+      where: { budgetId: budget.id, incomeId, revokedAt: null },
+      orderBy: { originalDate: "asc" },
+    });
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      console.warn(
+        "[listActiveIncomeSkipsForIncome] IncomeSkip table missing; returning [].",
+      );
+      return [];
+    }
+    throw error;
+  }
   return rows.map((row) => ({
     id: row.id,
     originalDateIso: row.originalDate.toISOString().slice(0, 10),
