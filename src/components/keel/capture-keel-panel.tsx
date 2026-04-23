@@ -25,7 +25,9 @@ type CaptureApiResponse =
   | { kind: "income"; payload: IncomeCapturePayload }
   | { kind: "asset"; payload: AssetCapturePayload };
 
-export function CaptureKeelPanel() {
+type CategoryOption = { id: string; name: string; subcategories: Array<{ id: string; name: string }> };
+
+export function CaptureKeelPanel({ categories = [] }: { categories?: CategoryOption[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   /** Dedupes React Strict Mode double-invoke and re-navigation with the same Ask → Capture payload. */
@@ -228,6 +230,7 @@ export function CaptureKeelPanel() {
           {preview && preview.kind !== "unknown" ? (
             <PreviewCard
               preview={preview}
+              categories={categories}
               onReset={() => {
                 setSentence(draftSentence);
                 setPreview(null);
@@ -247,10 +250,12 @@ export function CaptureKeelPanel() {
 
 function PreviewCard({
   preview,
+  categories,
   onReset,
   onCommitted,
 }: {
   preview: Extract<CaptureApiResponse, { kind: "commitment" | "income" | "asset" }>;
+  categories: CategoryOption[];
   onReset: () => void;
   onCommitted: () => void;
 }) {
@@ -309,7 +314,12 @@ function PreviewCard({
               value={commitment.nextDueDate ?? ""}
               onChange={(v) => setCommitment({ ...commitment, nextDueDate: v ? v : null })}
             />
-            <Field label="Category" value={commitment.category} onChange={(v) => setCommitment({ ...commitment, category: v })} />
+            <CategoryField
+              label="Category"
+              value={commitment.category}
+              categories={categories}
+              onChange={(v) => setCommitment({ ...commitment, category: v })}
+            />
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs text-[color:var(--keel-ink-3)]">Per-pay reserve</span>
               <div className="flex items-center gap-2">
@@ -405,6 +415,81 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-sm text-[color:var(--keel-ink)] outline-none ring-1 ring-white/10"
       />
+    </label>
+  );
+}
+
+function CategoryField({
+  label,
+  value,
+  categories,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  categories: CategoryOption[];
+  onChange: (next: string) => void;
+}) {
+  const [customMode, setCustomMode] = useState(false);
+
+  // If the AI returned a name not in the list, start in custom mode so the user
+  // can see the suggested value and change it or pick from the dropdown.
+  const matchedInList = categories.some((c) => c.name.toLowerCase() === value.toLowerCase());
+
+  if (customMode || (!matchedInList && categories.length > 0)) {
+    return (
+      <label className="block">
+        <span className="text-[11px] font-medium text-[color:var(--keel-ink-4)]">{label}</span>
+        <div className="mt-1 flex gap-2">
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="New category name"
+            className="min-w-0 flex-1 rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-sm text-[color:var(--keel-ink)] outline-none ring-1 ring-white/10"
+          />
+          {categories.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setCustomMode(false);
+                onChange(categories[0]?.name ?? "");
+              }}
+              className="shrink-0 rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-xs text-[color:var(--keel-ink-3)] ring-1 ring-white/10"
+            >
+              Pick existing
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-[10px] text-[color:var(--keel-ink-4)]">
+          This will create a new category in your budget.
+        </p>
+      </label>
+    );
+  }
+
+  return (
+    <label className="block">
+      <span className="text-[11px] font-medium text-[color:var(--keel-ink-4)]">{label}</span>
+      <div className="mt-1 flex gap-2">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="min-w-0 flex-1 rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-sm text-[color:var(--keel-ink)] outline-none ring-1 ring-white/10"
+        >
+          {categories.map((c) => (
+            <option key={c.id} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => setCustomMode(true)}
+          className="shrink-0 rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-xs text-[color:var(--keel-ink-3)] ring-1 ring-white/10"
+        >
+          + New
+        </button>
+      </div>
     </label>
   );
 }

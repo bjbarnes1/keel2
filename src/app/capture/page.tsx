@@ -9,10 +9,13 @@ import { Suspense } from "react";
 
 import { CaptureKeelPanel } from "@/components/keel/capture-keel-panel";
 import { AppShell } from "@/components/keel/primitives";
+import { getCategoryOptions } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
 
-export default function CapturePage() {
+export default async function CapturePage() {
+  const categories = await getCategoryOptions();
+
   return (
     <AppShell
       title="Capture"
@@ -29,7 +32,7 @@ export default function CapturePage() {
     >
       <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/15" aria-hidden="true" />
       <Suspense fallback={null}>
-        <CaptureKeelPanel />
+        <CaptureKeelPanel categories={categories} />
       </Suspense>
     </AppShell>
   );

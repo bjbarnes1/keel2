@@ -17,6 +17,8 @@ import { commitmentCaptureSchema, incomeCaptureSchema, assetCaptureSchema } from
 import { assertWithinAiRateLimit } from "@/lib/ai/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createCommitment, createIncome, createWealthHolding, getCategoryOptions } from "@/lib/persistence/keel-store";
+import { getBudgetContext } from "@/lib/persistence/auth";
+import { getPrismaClient } from "@/lib/prisma";
 
 async function requireAuthedUserId() {
   const supabase = await createSupabaseServerClient();
@@ -44,16 +46,24 @@ function defaultIsoDate(daysFromToday: number) {
 }
 
 async function resolveCategoryId(categoryName: string) {
+  const trimmed = categoryName.trim() || "Other";
   const options = await getCategoryOptions();
-  const match =
-    options.find((c) => c.name.toLowerCase() === categoryName.trim().toLowerCase()) ??
-    options.find((c) => c.name.toLowerCase() === "other");
 
-  if (!match) {
-    throw new Error("Unable to resolve category.");
-  }
+  const existing =
+    options.find((c) => c.name.toLowerCase() === trimmed.toLowerCase()) ??
+    options.find((c) => c.name.toLowerCase() === "other") ??
+    options[0];
 
-  return match.id;
+  if (existing) return existing.id;
+
+  // AI suggested a category the budget doesn't have yet — create it on the fly.
+  const { budget } = await getBudgetContext();
+  const prisma = getPrismaClient();
+  const row = await prisma.category.create({
+    data: { budgetId: budget.id, name: trimmed, sortOrder: 0 },
+    select: { id: true },
+  });
+  return row.id;
 }
 
 export async function createCommitmentFromCapture(input: unknown) {
