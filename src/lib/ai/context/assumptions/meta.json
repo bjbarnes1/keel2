@@ -1,0 +1,12 @@
+{
+  "version": "2026.04.v1",
+  "composition": {
+    "economic": "2026.04",
+    "australianTax": "FY2026-27",
+    "lifeStage": "2026.04"
+  },
+  "lastReviewed": "2026-04-22",
+  "reviewIntervalDays": 90,
+  "nextReviewDue": "2026-07-22",
+  "maintainerNote": "Every Layer C review should re-check source citations, update the `lastReviewed` field on each file, and roll `nextReviewDue` forward by `reviewIntervalDays`. If any confidence level changes, update the corresponding cite in `ask-answer-prompt.ts` so the LLM's wording matches."
+}

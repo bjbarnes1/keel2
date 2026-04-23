@@ -1,0 +1,28 @@
+{
+  "version": "2026.04",
+  "lastReviewed": "2026-04-22",
+  "childCosts": {
+    "childcarePerChildAnnualAverage": 18000,
+    "childcareEndsAtAge": 5,
+    "schoolAgeAdditionalAnnual": 3500,
+    "teenAgeAdditionalAnnual": 4500,
+    "note": "Regional, school-type, and activity-level variance is enormous. Treat as a rough ceiling, not a forecast. Centrelink subsidies can substantially reduce net cost.",
+    "confidence": "low"
+  },
+  "retirement": {
+    "comfortableRetirementCoupleAnnual": 73337,
+    "modestRetirementCoupleAnnual": 47731,
+    "comfortableRetirementSingleAnnual": 52085,
+    "modestRetirementSingleAnnual": 33134,
+    "source": "ASFA Retirement Standard, update Dec 2025",
+    "confidence": "medium"
+  },
+  "generalLifeCostShifts": [
+    "Discretionary spending typically declines 20-30% when a child is born, then recovers over the first 2-3 years.",
+    "Housing costs typically peak between ages 35-50 as mortgage principal is paid down.",
+    "Healthcare out-of-pocket costs accelerate after age 55, particularly dental and specialist care.",
+    "Transport costs often fall in retirement as commuting disappears, though regional residents may see no change.",
+    "Insurance premiums rise materially through the 60s across life, income-protection, and health.",
+    "Aged-care entry, when it happens, is typically funded by a mix of super drawdown, home equity release, and the age pension — cash savings alone rarely suffice."
+  ]
+}

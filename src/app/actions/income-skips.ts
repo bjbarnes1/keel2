@@ -11,6 +11,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { invalidateLayerACache } from "@/lib/ai/context/generators/build-layer-a";
 import { getPrismaClient } from "@/lib/prisma";
 import {
   getBudgetContext,
@@ -36,11 +37,12 @@ const revokeIncomeSkipSchema = z.object({
   skipId: z.string().min(1),
 });
 
-function revalidateIncomeSkipPaths(incomeId: string) {
+function revalidateIncomeSkipPaths(incomeId: string, userId?: string) {
   revalidatePath("/");
   revalidatePath("/timeline");
   revalidatePath("/incomes");
   revalidatePath(`/incomes/${incomeId}`);
+  if (userId) invalidateLayerACache(userId);
 }
 
 export async function createIncomeSkip(input: unknown) {
@@ -95,13 +97,13 @@ export async function createIncomeSkip(input: unknown) {
     }
   });
 
-  revalidateIncomeSkipPaths(payload.incomeId);
+  revalidateIncomeSkipPaths(payload.incomeId, authedUser?.id);
 }
 
 export async function revokeIncomeSkip(input: unknown) {
   assertSkipsPersistence();
   const payload = revokeIncomeSkipSchema.parse(input);
-  const { budget } = await getBudgetContext();
+  const { authedUser, budget } = await getBudgetContext();
   const prisma = getPrismaClient();
 
   const row = await prisma.incomeSkip.findFirst({
@@ -120,5 +122,5 @@ export async function revokeIncomeSkip(input: unknown) {
     data: { revokedAt: new Date() },
   });
 
-  revalidateIncomeSkipPaths(row.incomeId);
+  revalidateIncomeSkipPaths(row.incomeId, authedUser?.id);
 }

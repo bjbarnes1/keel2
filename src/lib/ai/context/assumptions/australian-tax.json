@@ -1,0 +1,34 @@
+{
+  "version": "FY2026-27",
+  "effectiveFrom": "2026-07-01",
+  "effectiveUntil": "2027-06-30",
+  "individualIncomeTaxBrackets": [
+    { "from": 0, "to": 18200, "rate": 0, "offset": 0 },
+    { "from": 18201, "to": 45000, "rate": 0.16, "offset": 0 },
+    { "from": 45001, "to": 135000, "rate": 0.3, "offset": 4288 },
+    { "from": 135001, "to": 190000, "rate": 0.37, "offset": 31288 },
+    { "from": 190001, "to": null, "rate": 0.45, "offset": 51638 }
+  ],
+  "medicareLevyRate": 0.02,
+  "medicareLevySurchargeThresholds": {
+    "singleBase": 97000,
+    "familyBase": 194000,
+    "note": "Thresholds indexed annually; surcharge tiers above base range 1.0%-1.5%. Keel cites the base thresholds only; directs users to the ATO for tier detail."
+  },
+  "superGuaranteeRate": 0.12,
+  "superContributionCaps": {
+    "concessionalAnnual": 30000,
+    "nonConcessionalAnnual": 120000
+  },
+  "hecsRepaymentThresholds": [
+    { "from": 54435, "rate": 0.01 },
+    { "from": 62850, "rate": 0.02 },
+    { "from": 66620, "rate": 0.025 },
+    { "from": 70618, "rate": 0.03 },
+    { "from": 74855, "rate": 0.035 },
+    { "from": 79346, "rate": 0.04 }
+  ],
+  "source": "ATO individual tax rate schedules, FY2026-27; Fair Work super guarantee schedule.",
+  "lastReviewed": "2026-04-22",
+  "confidence": "high"
+}
