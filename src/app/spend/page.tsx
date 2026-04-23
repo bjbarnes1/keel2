@@ -43,6 +43,12 @@ export default async function SpendPage({
           vs Budget
         </Link>
         <Link
+          href="/spend/patterns"
+          className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-primary"
+        >
+          Patterns
+        </Link>
+        <Link
           href="/spend/accounts/new"
           className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-primary"
         >
