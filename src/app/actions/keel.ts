@@ -25,6 +25,7 @@ import {
   loadProjectionChunkInputSchema,
   type LoadProjectionChunkInput,
 } from "@/lib/engine/projection-chunk-schema";
+import type { CommitmentEditValues, IncomeEditValues } from "@/lib/schemas/record-edit-schemas";
 import {
   buildProjectionChunkFromState,
   createCommitment,
@@ -43,6 +44,7 @@ import {
   updateBankBalance,
   updateCommitmentFuture,
   updateIncomeFuture,
+  restoreCommitment,
 } from "@/lib/persistence/keel-store";
 
 /** Parses numeric FormData fields; missing values become 0 (caller validates range). */
@@ -97,7 +99,6 @@ export async function createCommitmentAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/timeline");
   redirect("/commitments");
 }
@@ -124,7 +125,6 @@ export async function updateCommitmentAction(id: string, formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/timeline");
 }
 
@@ -132,7 +132,55 @@ export async function archiveCommitmentAction(id: string) {
   await deleteCommitment(id);
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
+  revalidatePath("/timeline");
+}
+
+export async function restoreCommitmentAction(id: string) {
+  await restoreCommitment(id);
+  revalidatePath("/");
+  revalidatePath("/commitments");
+  revalidatePath("/timeline");
+}
+
+/** Sheet-friendly income save: persists a versioned row and revalidates without redirecting. */
+export async function saveIncomeEditFromSheet(input: {
+  incomeId: string;
+  data: IncomeEditValues;
+  appliesFromIso: string;
+}) {
+  await updateIncomeFuture({
+    incomeId: input.incomeId,
+    name: input.data.name,
+    amount: input.data.amount,
+    frequency: input.data.frequency,
+    nextPayDate: input.data.nextPayDate,
+    effectiveFrom: input.appliesFromIso,
+  });
+  revalidatePath("/");
+  revalidatePath("/commitments");
+  revalidatePath("/goals");
+  revalidatePath("/timeline");
+  revalidatePath("/incomes");
+}
+
+/** Sheet-friendly commitment save: persists a versioned row and revalidates without redirecting. */
+export async function saveCommitmentEditFromSheet(input: {
+  commitmentId: string;
+  data: CommitmentEditValues;
+  appliesFromIso: string;
+}) {
+  await updateCommitmentFuture(input.commitmentId, {
+    effectiveFrom: input.appliesFromIso,
+    name: input.data.name,
+    amount: input.data.amount,
+    frequency: input.data.frequency,
+    nextDueDate: input.data.nextDueDate,
+    categoryId: input.data.categoryId,
+    subcategoryId: input.data.subcategoryId,
+    fundedByIncomeId: input.data.fundedByIncomeId,
+  });
+  revalidatePath("/");
+  revalidatePath("/commitments");
   revalidatePath("/timeline");
 }
 
@@ -173,7 +221,6 @@ export async function createIncomeAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
   revalidatePath("/incomes");
@@ -196,7 +243,6 @@ export async function updateIncomeFutureAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
   revalidatePath("/incomes");
@@ -212,7 +258,6 @@ export async function setPrimaryIncomeAction(formData: FormData) {
   await setPrimaryIncome(incomeId);
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
   revalidatePath("/incomes");
@@ -228,7 +273,6 @@ export async function archiveIncomeAction(formData: FormData) {
   await archiveIncome(incomeId);
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/goals");
   revalidatePath("/timeline");
   revalidatePath("/incomes");
@@ -260,7 +304,6 @@ export async function createCategoryAction(formData: FormData) {
   });
   revalidatePath("/settings/categories");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/spend/reconcile");
   redirect("/settings/categories");
 }
@@ -272,7 +315,6 @@ export async function createSubcategoryAction(formData: FormData) {
   });
   revalidatePath("/settings/categories");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/spend/reconcile");
   redirect("/settings/categories");
 }

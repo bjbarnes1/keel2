@@ -21,7 +21,7 @@ export function CommitmentRestoreSheet({
   open: boolean;
   onClose: () => void;
   skipId: string | null;
-  /** Bill name or short context */
+  /** Commitment name or short context */
   label?: string;
 }) {
   const router = useRouter();
@@ -57,7 +57,7 @@ export function CommitmentRestoreSheet({
               {label ? (
                 <h2 className="mt-1 text-lg font-semibold text-[color:var(--keel-ink)]">{label}</h2>
               ) : (
-                <h2 className="mt-1 text-lg font-semibold text-[color:var(--keel-ink)]">Bill skip</h2>
+                <h2 className="mt-1 text-lg font-semibold text-[color:var(--keel-ink)]">Commitment skip</h2>
               )}
               <p className="mt-2 text-sm leading-relaxed text-[color:var(--keel-ink-3)]">
                 Put this occurrence back on your schedule. Forecasts update right away.

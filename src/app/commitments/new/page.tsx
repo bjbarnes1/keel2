@@ -1,10 +1,10 @@
 /**
- * Add commitment — AI-assisted intake flow (`BillIntakeFlow`).
+ * Add commitment — AI-assisted intake flow (`CommitmentIntakeFlow`).
  *
  * @module app/commitments/new/page
  */
 
-import { BillIntakeFlow } from "@/components/keel/bill-intake-flow";
+import { CommitmentIntakeFlow } from "@/components/keel/commitment-intake-flow";
 import { AppShell } from "@/components/keel/primitives";
 import { getCategoryOptions, getDashboardSnapshot } from "@/lib/persistence/keel-store";
 
@@ -14,7 +14,7 @@ export default async function NewCommitmentPage() {
 
   return (
     <AppShell title="Add a commitment" currentPath="/commitments" backHref="/commitments">
-      <BillIntakeFlow
+      <CommitmentIntakeFlow
         incomes={snapshot.incomes}
         primaryIncomeId={snapshot.primaryIncomeId}
         categories={categories}

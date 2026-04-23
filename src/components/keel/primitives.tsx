@@ -32,7 +32,8 @@ const ALL_NAV_ITEMS: NavItem[] = [
       path.startsWith("/spend") ||
       path.startsWith("/balance") ||
       path.startsWith("/bills") ||
-      path.startsWith("/commitments"),
+      path.startsWith("/commitments") ||
+      path.startsWith("/incomes"),
   },
   { href: "/timeline", label: "Timeline" },
   { href: "/ask", label: "Ask" },
@@ -80,6 +81,7 @@ function IconTimeline({ active }: { active: boolean }) {
 
 function IconAsk({ active }: { active: boolean }) {
   const stroke = active ? "rgba(240, 235, 220, 0.92)" : "rgba(168, 172, 159, 0.95)";
+  const fillDot = active ? "rgba(240, 235, 220, 0.35)" : "rgba(168, 172, 159, 0.28)";
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
@@ -90,14 +92,16 @@ function IconAsk({ active }: { active: boolean }) {
       />
       <path d="M9 10h4.5" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" />
       <path d="M9 13h2.5" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="17.5" cy="7.5" r="2.2" fill={fillDot} stroke={stroke} strokeWidth="1.1" />
     </svg>
   );
 }
 
 function IconWealth({ active }: { active: boolean }) {
   const stroke = active ? "rgba(240, 235, 220, 0.92)" : "rgba(168, 172, 159, 0.95)";
-  const fillA = active ? "rgba(240, 235, 220, 0.22)" : "rgba(168, 172, 159, 0.18)";
-  const fillB = active ? "rgba(240, 235, 220, 0.12)" : "rgba(168, 172, 159, 0.1)";
+  const fillA = active ? "rgba(240, 235, 220, 0.2)" : "rgba(168, 172, 159, 0.16)";
+  const fillB = active ? "rgba(240, 235, 220, 0.1)" : "rgba(168, 172, 159, 0.09)";
+  const fillC = active ? "rgba(240, 235, 220, 0.06)" : "rgba(168, 172, 159, 0.06)";
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="9" fill="none" stroke={stroke} strokeWidth="1.6" />
@@ -105,14 +109,21 @@ function IconWealth({ active }: { active: boolean }) {
         d="M12 12 12 3a9 9 0 0 1 8.485 6H12Z"
         fill={fillA}
         stroke={stroke}
-        strokeWidth="1.2"
+        strokeWidth="1.15"
         strokeLinejoin="round"
       />
       <path
         d="M12 12 20.485 9A9 9 0 0 1 17.364 19.5L12 12Z"
         fill={fillB}
         stroke={stroke}
-        strokeWidth="1.2"
+        strokeWidth="1.15"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 12 6.636 19.5A9 9 0 0 1 3.515 9L12 12Z"
+        fill={fillC}
+        stroke={stroke}
+        strokeWidth="1.15"
         strokeLinejoin="round"
       />
     </svg>
@@ -157,7 +168,7 @@ export function AppShell({
   headerRight?: ReactNode;
 }) {
   return (
-    <div className="keel-bg mx-auto min-h-screen max-w-[420px] bg-background text-foreground">
+    <div className="keel-bg mx-auto min-h-screen max-w-[520px] bg-background text-foreground">
       <header className="sticky top-0 z-30 flex items-center justify-between bg-background/70 px-5 pb-2 pt-3 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           {backHref ? (
@@ -180,7 +191,7 @@ export function AppShell({
       <main className="px-5 pb-32">{children}</main>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[calc(12px+env(safe-area-inset-bottom))]">
-        <nav className="pointer-events-auto glass-heavy mx-4 w-full max-w-[380px] rounded-[var(--radius-pill)] px-2 py-2">
+        <nav className="pointer-events-auto glass-heavy mx-4 w-full max-w-[480px] rounded-[var(--radius-pill)] px-2 py-2">
           <div className="flex items-end justify-between gap-1">
             {tabNavItems().map((item) => {
               const active = isNavActive(item, currentPath);
@@ -470,7 +481,7 @@ export function ModalSheet({
   return (
     <AppShell title="Balance" currentPath="/">
       <div className="fixed inset-0 bg-black/55" />
-      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-[420px] rounded-t-3xl border border-border bg-card p-6">
+      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-[520px] rounded-t-3xl border border-border bg-card p-6">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">{title}</h2>

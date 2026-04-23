@@ -39,6 +39,8 @@
   --keel-ink-3: #a8ac9f;
   --keel-ink-4: #8a8f88;
   --keel-ink-5: #5f645e;
+  /** Progress track / subtle dividers */
+  --keel-ink-6: rgba(240, 235, 220, 0.06);
 
   /* Accents */
   --keel-safe: #6bb391;

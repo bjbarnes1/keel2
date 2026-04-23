@@ -5,23 +5,61 @@
  * holds Tailwind v4 `@import`, design tokens `--keel-*`, and glass utilities).
  * Dark mode is fixed at the `<html>` level to match the product’s dark-first UI.
  *
+ * **Metadata:** `metadataBase` uses `NEXT_PUBLIC_SITE_URL` when set (production URL
+ * for Open Graph); otherwise localhost for dev. `themeColor` is exported via
+ * `viewport` per Next.js 16 guidance.
+ *
  * @module app/layout
  */
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
 import "@/app/globals.css";
 
+import { GlassSheetScopeProvider } from "@/components/keel/glass-sheet-scope";
+
+const siteName = "Keel";
+const description =
+  "See what you actually have — commitments, goals, and cashflow grounded in your balance and pay cycle.";
+
 export const metadata: Metadata = {
-  title: "Keel",
-  description: "See what you actually have.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  applicationName: siteName,
+  title: {
+    default: siteName,
+    template: `%s · ${siteName}`,
+  },
+  description,
+  manifest: "/manifest.json",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg" }],
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_AU",
+    siteName,
+    title: siteName,
+    description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteName,
+    description,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#141a17",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body>{children}</body>
+      <body>
+        <GlassSheetScopeProvider>{children}</GlassSheetScopeProvider>
+      </body>
     </html>
   );
 }

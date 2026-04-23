@@ -7,15 +7,16 @@
  */
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createAssetFromCapture,
   createCommitmentFromCapture,
   createIncomeFromCapture,
 } from "@/app/actions/capture";
-import type { AssetCapturePayload, CommitmentCapturePayload, IncomeCapturePayload } from "@/lib/ai/parse-capture";
+import { decodeCapturePrefillParam } from "@/lib/ai/capture-prefill";
+import type { AssetCapturePayload, CommitmentCapturePayload, IncomeCapturePayload } from "@/lib/ai/capture-schemas";
 import { cn, formatAud } from "@/lib/utils";
 
 type CaptureApiResponse =
@@ -25,7 +26,10 @@ type CaptureApiResponse =
   | { kind: "asset"; payload: AssetCapturePayload };
 
 export function CaptureKeelPanel() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  /** Dedupes React Strict Mode double-invoke and re-navigation with the same Ask → Capture payload. */
+  const prefillDigestApplied = useRef<string | null>(null);
   const forcedKindParam = searchParams.get("kind");
   const forcedKind =
     forcedKindParam === "commitment" || forcedKindParam === "income" || forcedKindParam === "asset"
@@ -40,6 +44,28 @@ export function CaptureKeelPanel() {
   const [preferForm, setPreferForm] = useState(false);
 
   const canSubmit = useMemo(() => sentence.trim().length > 0 && !pending, [sentence, pending]);
+
+  useEffect(() => {
+    const raw = searchParams.get("prefill");
+    if (!raw) {
+      return;
+    }
+    const decoded = decodeCapturePrefillParam(raw);
+    if (!decoded) {
+      return;
+    }
+    const digest = `${decoded.sentence}::${decoded.capture.kind}::${decoded.capture.payload.name}`;
+    if (prefillDigestApplied.current === digest) {
+      return;
+    }
+    prefillDigestApplied.current = digest;
+    setPreferForm(false);
+    setError(null);
+    setSentence(decoded.sentence);
+    setDraftSentence(decoded.sentence);
+    setPreview(decoded.capture);
+    router.replace("/capture", { scroll: false });
+  }, [router, searchParams]);
 
   async function runCapture(nextSentence: string) {
     const trimmed = nextSentence.trim();
@@ -322,6 +348,7 @@ function PreviewCard({
                 type="checkbox"
                 checked={Boolean(income.isPrimary)}
                 onChange={(e) => setIncome({ ...income, isPrimary: e.target.checked })}
+                aria-label="Use as primary income for goals"
               />
             </label>
           </>

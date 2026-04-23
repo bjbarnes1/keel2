@@ -15,9 +15,11 @@ import type { CommitmentSkipInput, CommitmentView, IncomeView } from "@/lib/type
 import { cn, formatAud, formatDisplayDate } from "@/lib/utils";
 
 import { CommitmentArchiveSheet } from "@/components/keel/commitment-archive-sheet";
+import type { CommitmentFields } from "@/components/keel/commitment-edit-sheet";
 import { CommitmentEditSheet } from "@/components/keel/commitment-edit-sheet";
 import { CommitmentRestoreSheet } from "@/components/keel/commitment-restore-sheet";
 import { CommitmentSkipSheet } from "@/components/keel/commitment-skip-sheet";
+import { CategoryGroupHeader } from "@/components/keel/category-group-header";
 import { AppShell, CommitmentCardContent, SurfaceCard } from "@/components/keel/primitives";
 
 type CategoryOption = {
@@ -36,16 +38,6 @@ type SkipPreview = {
   baselineOrdered: ScheduledCashflowEvent[];
   startingAvailableMoney: number;
   existingCommitmentSkips: CommitmentSkipInput[];
-};
-
-type CommitmentFields = {
-  name: string;
-  amount: number;
-  frequency: CommitmentView["frequency"];
-  nextDueDate: string;
-  categoryId: string;
-  subcategoryId?: string;
-  fundedByIncomeId?: string;
 };
 
 type Props = {
@@ -148,7 +140,7 @@ export function CommitmentDetailClient({
               setEditOpen(true);
             }}
           >
-            Edit
+            Edit details
           </button>
           <button
             type="button"
@@ -180,7 +172,7 @@ export function CommitmentDetailClient({
       </SurfaceCard>
 
       <SurfaceCard className={cn("mb-4", heldTint, "!p-4")}>
-        <p className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--keel-ink-3)]">
+        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[color:var(--keel-ink-5)]">
           Held toward next due date
         </p>
         <p className="mt-2 font-mono text-2xl font-semibold tabular-nums text-[color:var(--keel-ink)]">
@@ -192,18 +184,34 @@ export function CommitmentDetailClient({
       </SurfaceCard>
 
       <SurfaceCard className="mb-4 !p-4">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-[color:var(--keel-ink-3)]">
+        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[color:var(--keel-ink-5)]">
           Keel noticed
         </p>
         <p className="mt-2 text-sm leading-6 text-[color:var(--keel-ink-2)]">{keelNoticed}</p>
       </SurfaceCard>
 
       <section className="mb-6">
-        <div className="px-1 pb-2">
-          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-[color:var(--keel-ink-5)]">
-            Upcoming
-          </p>
-        </div>
+        <CategoryGroupHeader
+          label={`Upcoming · Next ${Math.min(
+            occurrences.length,
+            (() => {
+              switch (display.frequency) {
+                case "weekly":
+                  return 10;
+                case "fortnightly":
+                  return 10;
+                case "monthly":
+                  return 6;
+                case "quarterly":
+                  return 4;
+                case "annual":
+                  return 3;
+                default:
+                  return 6;
+              }
+            })(),
+          )} scheduled payments`}
+        />
 
         <div className="glass-clear overflow-hidden rounded-[var(--radius-md)] border border-white/10">
           {occurrences.length === 0 ? (
@@ -278,10 +286,9 @@ export function CommitmentDetailClient({
       </section>
 
       <section className="mb-6">
-        <h2 className="text-sm font-semibold text-[color:var(--keel-ink)]">Recent spend</h2>
-        <p className="mt-1 text-xs text-[color:var(--keel-ink-3)]">Transactions linked to this commitment.</p>
+        <CategoryGroupHeader label="Recent spend · Linked transactions" />
         {recentSpend.length === 0 ? (
-          <p className="mt-3 text-sm text-[color:var(--keel-ink-3)]">No linked spend yet.</p>
+          <p className="mt-2 text-sm text-[color:var(--keel-ink-4)]">No linked spend yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {recentSpend.map((tx) => {
@@ -347,6 +354,7 @@ export function CommitmentDetailClient({
         onClose={() => setArchiveOpen(false)}
         commitmentId={commitmentId}
         commitmentName={display.name}
+        heldFormatted={formatAud(display.reserved)}
       />
     </AppShell>
   );

@@ -546,18 +546,27 @@ export function WaterlineChart({
           const isBill = group.type === "bill";
           const commitmentId = isBill ? commitmentIdFromEventId(group.primary.id) : null;
           const isAttention = Boolean(commitmentId && attentionCommitmentIds?.has(commitmentId));
+          const isSkipped = Boolean(group.primary.isSkipped);
           const markerY = isBill ? BASELINE_Y + height : BASELINE_Y - height;
           const stemEndY = isBill ? markerY - radius - 1 : markerY + radius + 1;
 
-          const fill = isBill
-            ? isAttention
-              ? "var(--keel-attend)"
-              : "rgba(240, 235, 220, 0.85)"
-            : "#f0ebdc";
-          const stroke = isAttention ? "rgba(212, 143, 70, 0.55)" : "none";
+          const r = isSkipped ? Math.max(2, radius * 0.82) : radius;
+
+          const fill = isSkipped
+            ? "none"
+            : isBill
+              ? isAttention
+                ? "var(--keel-attend)"
+                : "rgba(240, 235, 220, 0.85)"
+              : "#f0ebdc";
+          const stroke = isSkipped
+            ? "rgba(240, 235, 220, 0.45)"
+            : isAttention
+              ? "rgba(212, 143, 70, 0.55)"
+              : "none";
 
           return (
-            <g key={`${group.dateIso}-${group.type}`} opacity={opacity}>
+            <g key={`${group.dateIso}-${group.type}`} opacity={isSkipped ? opacity * 0.4 : opacity}>
               <line
                 x1={x}
                 y1={BASELINE_Y}
@@ -569,19 +578,21 @@ export function WaterlineChart({
               <circle
                 cx={x}
                 cy={markerY}
-                r={radius}
+                r={r}
                 fill={fill}
                 stroke={stroke}
-                strokeWidth={isAttention ? 0.75 : 0}
+                strokeWidth={isSkipped ? 1.1 : isAttention ? 0.75 : 0}
               />
               {group.companions.map((companion, idx) => (
                 <circle
                   key={companion.id}
                   cx={x + COMPANION_OFFSET + idx * 1.5}
                   cy={markerY + (isBill ? COMPANION_OFFSET : -COMPANION_OFFSET)}
-                  r={radius * COMPANION_RADIUS_SCALE}
-                  fill={fill}
-                  opacity={0.7}
+                  r={r * COMPANION_RADIUS_SCALE}
+                  fill={isSkipped ? "none" : fill}
+                  stroke={isSkipped ? "rgba(240, 235, 220, 0.35)" : stroke}
+                  strokeWidth={isSkipped ? 0.9 : 0}
+                  opacity={isSkipped ? 0.4 : 0.7}
                 />
               ))}
             </g>

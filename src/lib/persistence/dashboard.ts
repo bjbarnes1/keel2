@@ -203,9 +203,10 @@ function toDashboardSnapshot(
     annualSpendActualToDate: number;
     spendByCommitment: DashboardSnapshot["spendByCommitment"];
   },
-  activeSkips: ActiveSkipsBundle = { commitmentSkips: [], goalSkips: [] },
+  activeSkips: ActiveSkipsBundle = { commitmentSkips: [], goalSkips: [], incomeSkips: [] },
 ): DashboardSnapshot {
   const asOf = new Date(`${state.user.balanceAsOf}T00:00:00Z`);
+  const activeCommitments = state.commitments.filter((c) => !c.archivedAt);
   const primaryIncomeForGoals =
     state.incomes.find((income) => income.id === state.primaryIncomeId) ?? null;
 
@@ -229,7 +230,7 @@ function toDashboardSnapshot(
     bankBalance: state.user.bankBalance,
     incomes: state.incomes,
     primaryIncomeId: state.primaryIncomeId,
-    commitments: state.commitments,
+    commitments: activeCommitments,
     goals: goalsAdjusted,
     asOf,
   });
@@ -242,7 +243,7 @@ function toDashboardSnapshot(
     (sum, income) => sum + annualizeAmount(income.amount, income.frequency),
     0,
   );
-  const annualCommitmentsForecast = state.commitments.reduce(
+  const annualCommitmentsForecast = activeCommitments.reduce(
     (sum, commitment) => sum + annualizeAmount(commitment.amount, commitment.frequency),
     0,
   );
@@ -252,7 +253,11 @@ function toDashboardSnapshot(
   );
 
   const timelineHorizonDays = 42;
-  const skipInputs: SkipInput[] = [...activeSkips.commitmentSkips, ...activeSkips.goalSkips];
+  const skipInputs: SkipInput[] = [
+    ...activeSkips.commitmentSkips,
+    ...activeSkips.goalSkips,
+    ...(activeSkips.incomeSkips ?? []),
+  ];
 
   // Fix #5: single 365-day build replaces previous 4× calls (42d + 31d + 92d + 365d).
   const MAX_HORIZON_DAYS = 365;
@@ -261,7 +266,7 @@ function toDashboardSnapshot(
     asOf,
     horizonDays: MAX_HORIZON_DAYS,
     incomes: state.incomes,
-    commitments: state.commitments,
+    commitments: activeCommitments,
     skips: skipInputs,
   });
 
@@ -272,7 +277,7 @@ function toDashboardSnapshot(
     asOf,
     horizonDays: timelineHorizonDays,
     incomes: state.incomes,
-    commitments: state.commitments,
+    commitments: activeCommitments,
   });
   const commitmentDisplayRows = activeSkips.commitmentSkips.map((row) => ({
     skipId: row.skipId,
@@ -347,6 +352,9 @@ function toDashboardSnapshot(
           : undefined;
 
       const skipRow = event.type === "bill" ? skipDisplayIndex.get(event.id) : undefined;
+      const engineSkip = event as typeof event & { isSkipped?: boolean; skipId?: string };
+      const incomeSkipped = Boolean(engineSkip.isSkipped && event.type === "income");
+      const billSkipped = Boolean(skipRow?.isSkipped);
 
       return {
         ...event,
@@ -356,11 +364,11 @@ function toDashboardSnapshot(
         isAttention: isAttention ? true : undefined,
         attentionReserved: isAttention && reserve ? reserve.reserved : undefined,
         isNextPayIncome,
-        isSkipped: skipRow?.isSkipped ? true : undefined,
-        skipId: skipRow?.skipId,
-        skipStrategy: skipRow?.isSkipped ? skipRow.strategy : undefined,
+        isSkipped: billSkipped || incomeSkipped ? true : undefined,
+        skipId: skipRow?.skipId ?? (incomeSkipped ? engineSkip.skipId : undefined),
+        skipStrategy: billSkipped ? skipRow?.strategy : incomeSkipped ? "STANDALONE" : undefined,
         isSkipSpreadTarget: skipRow?.isSpreadTarget ? true : undefined,
-        displayAmount: skipRow?.isSkipped ? event.amount : undefined,
+        displayAmount: billSkipped || incomeSkipped ? event.amount : undefined,
       };
     }),
     forecast: {
@@ -504,6 +512,7 @@ export function buildProjectionChunkFromState(input: {
 }) {
   const asOf = input.asOf ?? new Date(`${input.state.user.balanceAsOf}T00:00:00Z`);
   const startDate = new Date(`${input.startDateIso}T00:00:00Z`);
+  const activeCommitments = input.state.commitments.filter((c) => !c.archivedAt);
 
   const primaryIncome =
     input.state.incomes.find((income) => income.id === input.state.primaryIncomeId) ?? null;
@@ -528,7 +537,7 @@ export function buildProjectionChunkFromState(input: {
     bankBalance: input.state.user.bankBalance,
     incomes: input.state.incomes,
     primaryIncomeId: input.state.primaryIncomeId,
-    commitments: input.state.commitments,
+    commitments: activeCommitments,
     goals: goalsAdjusted,
     asOf,
   });
@@ -536,6 +545,7 @@ export function buildProjectionChunkFromState(input: {
   const skipInputs: SkipInput[] = [
     ...input.activeSkips.commitmentSkips,
     ...input.activeSkips.goalSkips,
+    ...(input.activeSkips.incomeSkips ?? []),
   ];
 
   return buildProjectionTimeline({
@@ -544,7 +554,7 @@ export function buildProjectionChunkFromState(input: {
     startDate,
     horizonDays: input.horizonDays,
     incomes: input.state.incomes,
-    commitments: input.state.commitments,
+    commitments: activeCommitments,
     skips: skipInputs,
   });
 }

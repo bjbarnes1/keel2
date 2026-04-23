@@ -61,7 +61,6 @@ function revalidateSkipPaths() {
   revalidatePath("/");
   revalidatePath("/timeline");
   revalidatePath("/commitments");
-  revalidatePath("/bills");
   revalidatePath("/goals");
 }
 

@@ -12,9 +12,9 @@ export default function NotFound() {
   return (
     <AppShell title="Not found" currentPath="/">
       <SurfaceCard className="text-center">
-        <h2 className="text-lg font-semibold">That screen does not exist</h2>
+        <h2 className="text-lg font-semibold">We can&apos;t find that screen</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Head back to the dashboard and keep building from there.
+          The link may be old, or the page moved. Head home and pick up from your dashboard.
         </p>
         <Link
           href="/"

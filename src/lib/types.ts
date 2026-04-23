@@ -92,7 +92,18 @@ export type GoalSkipInput = {
   strategy: GoalSkipStrategy;
 };
 
-export type SkipInput = CommitmentSkipInput | GoalSkipInput;
+export type IncomeSkipStrategy = "STANDALONE";
+
+/** Mirrors {@link CommitmentSkipInput} for pay events that do not occur (unpaid leave, etc.). */
+export type IncomeSkipInput = {
+  kind: "income";
+  skipId?: string;
+  incomeId: string;
+  originalDateIso: string;
+  strategy: IncomeSkipStrategy;
+};
+
+export type SkipInput = CommitmentSkipInput | GoalSkipInput | IncomeSkipInput;
 
 /** Pure preview / Ask payload: deltas vs baseline projection. */
 export type SkipPreview = {

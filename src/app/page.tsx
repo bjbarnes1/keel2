@@ -55,11 +55,13 @@ export default async function HomePage() {
 
       <SurfaceCard className="mt-6 flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm text-muted-foreground">Last updated {snapshot.balanceAsOf}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{snapshot.alert}</p>
+          <p className="text-sm font-medium text-foreground">Bank balance</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Last updated {snapshot.balanceAsOf}. {snapshot.alert}
+          </p>
         </div>
         <Link href="/balance" className="text-sm font-medium text-primary">
-          Update balance
+          Adjust
         </Link>
       </SurfaceCard>
 

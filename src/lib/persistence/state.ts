@@ -113,7 +113,8 @@ export function formatShortDate(isoDate: string) {
 function normalizeDemoState(raw: StoredKeelState): StoredKeelState {
   return {
     ...raw,
-    commitments: raw.commitments.filter((c) => !c.archivedAt),
+    /** Keep archived commitments in the document so archive/restore/file flows stay coherent. */
+    commitments: raw.commitments,
     incomes: raw.incomes.filter((i) => !i.archivedAt),
   };
 }

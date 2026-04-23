@@ -8,33 +8,47 @@
  * @module lib/persistence/skips
  */
 
+import { Prisma } from "@prisma/client";
+
 import { getPrismaClient } from "@/lib/prisma";
 import type {
   CommitmentSkipInput,
   CommitmentSkipStrategy,
   GoalSkipInput,
   GoalSkipStrategy,
+  IncomeSkipInput,
 } from "@/lib/types";
 
 import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
 
 function isCommitmentSkipStrategy(value: string): value is CommitmentSkipStrategy {
-  return value === "MAKE_UP_NEXT" || value === "SPREAD" || value === "MOVE_ON";
+  return (
+    value === "MAKE_UP_NEXT" ||
+    value === "SPREAD" ||
+    value === "MOVE_ON" ||
+    value === "STANDALONE"
+  );
 }
 
 function isGoalSkipStrategy(value: string): value is GoalSkipStrategy {
   return value === "EXTEND_DATE" || value === "REBALANCE";
 }
 
+/** Preview deploys often skip `migrate deploy`; treat missing `IncomeSkip` as zero rows. */
+function isMissingTableError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
+}
+
 export type ActiveSkipsBundle = {
   commitmentSkips: CommitmentSkipInput[];
   goalSkips: GoalSkipInput[];
+  incomeSkips: IncomeSkipInput[];
 };
 
 export async function getActiveSkipsForBudget(budgetId: string): Promise<ActiveSkipsBundle> {
   if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
-    return { commitmentSkips: [], goalSkips: [] };
+    return { commitmentSkips: [], goalSkips: [], incomeSkips: [] };
   }
 
   const prisma = getPrismaClient();
@@ -42,6 +56,22 @@ export async function getActiveSkipsForBudget(budgetId: string): Promise<ActiveS
     prisma.commitmentSkip.findMany({ where: { budgetId, revokedAt: null } }),
     prisma.goalSkip.findMany({ where: { budgetId, revokedAt: null } }),
   ]);
+
+  let incomeRows: Awaited<ReturnType<typeof prisma.incomeSkip.findMany>>;
+  try {
+    incomeRows = await prisma.incomeSkip.findMany({
+      where: { budgetId, revokedAt: null },
+    });
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      console.warn(
+        "[getActiveSkipsForBudget] IncomeSkip table missing (run migrations or set VERCEL_RUN_MIGRATIONS=1 on preview). Treating income skips as empty.",
+      );
+      incomeRows = [];
+    } else {
+      throw error;
+    }
+  }
 
   return {
     commitmentSkips: commitmentRows.flatMap((row) => {
@@ -72,7 +102,45 @@ export async function getActiveSkipsForBudget(budgetId: string): Promise<ActiveS
         strategy: row.strategy,
       }];
     }),
+    incomeSkips: incomeRows.map((row) => ({
+      kind: "income" as const,
+      skipId: row.id,
+      incomeId: row.incomeId,
+      originalDateIso: row.originalDate.toISOString().slice(0, 10),
+      strategy: "STANDALONE" as const,
+    })),
   };
+}
+
+/**
+ * Active income skips for a single income (for detail UI).
+ */
+export async function listActiveIncomeSkipsForIncome(incomeId: string) {
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    return [];
+  }
+  const { budget } = await getBudgetContext();
+  const prisma = getPrismaClient();
+  let rows: Awaited<ReturnType<typeof prisma.incomeSkip.findMany>>;
+  try {
+    rows = await prisma.incomeSkip.findMany({
+      where: { budgetId: budget.id, incomeId, revokedAt: null },
+      orderBy: { originalDate: "asc" },
+    });
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      console.warn(
+        "[listActiveIncomeSkipsForIncome] IncomeSkip table missing; returning [].",
+      );
+      return [];
+    }
+    throw error;
+  }
+  return rows.map((row) => ({
+    id: row.id,
+    originalDateIso: row.originalDate.toISOString().slice(0, 10),
+    createdAt: row.createdAt,
+  }));
 }
 
 export async function getSkipHistoryForCommitment(commitmentId: string) {

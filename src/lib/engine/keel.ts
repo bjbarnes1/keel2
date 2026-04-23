@@ -18,11 +18,18 @@
  * @module lib/engine/keel
  */
 
-import type { CommitmentFrequency, CommitmentSkipInput, PayFrequency, SkipInput } from "@/lib/types";
+import type {
+  CommitmentFrequency,
+  CommitmentSkipInput,
+  IncomeSkipInput,
+  PayFrequency,
+  SkipInput,
+} from "@/lib/types";
 
 import {
   applyGoalSkipsToGoal,
   applySkipsToEvents,
+  parseIncomeEventId,
   type ScheduledCashflowEvent,
 } from "@/lib/engine/skips";
 
@@ -86,6 +93,9 @@ export interface ProjectionEvent {
   amount: number;
   type: "income" | "bill";
   projectedAvailableMoney: number;
+  /** When set, this income pay was skipped (no credit applied to running balance). */
+  isSkipped?: boolean;
+  skipId?: string;
 }
 
 export interface PayPeriodWindow {
@@ -528,6 +538,13 @@ export function buildProjectionTimeline(input: {
   /** Commitment skips reshape bill amounts before the running balance walk; order matches `skips.ts` + `keel-store` timeline. */
   const commitmentSkips =
     input.skips?.filter((skip): skip is CommitmentSkipInput => skip.kind === "commitment") ?? [];
+  const incomeSkips =
+    input.skips?.filter((skip): skip is IncomeSkipInput => skip.kind === "income") ?? [];
+  const incomeSkipByKey = new Map<string, IncomeSkipInput>();
+  for (const skip of incomeSkips) {
+    incomeSkipByKey.set(`${skip.incomeId}:${skip.originalDateIso}`, skip);
+  }
+
   const cashflow = applySkipsToEvents(baseline, commitmentSkips);
 
   const cashflowBillAmountById = new Map(
@@ -541,15 +558,28 @@ export function buildProjectionTimeline(input: {
   const out: ProjectionEvent[] = [];
 
   for (const event of baseline) {
+    const incomeParts = event.type === "income" ? parseIncomeEventId(event.id) : null;
+    const incomeSkip =
+      incomeParts && incomeSkipByKey.has(`${incomeParts.incomeId}:${incomeParts.iso}`)
+        ? incomeSkipByKey.get(`${incomeParts.incomeId}:${incomeParts.iso}`)!
+        : undefined;
+    const incomeCredit =
+      event.type === "income" ? (incomeSkip ? 0 : roundCurrency(event.amount)) : 0;
+    const billDebit =
+      event.type === "bill" ? roundCurrency(cashflowBillAmountById.get(event.id) ?? 0) : 0;
+
     runningAvailableMoney =
       event.type === "income"
-        ? roundCurrency(runningAvailableMoney + event.amount)
-        : roundCurrency(runningAvailableMoney - (cashflowBillAmountById.get(event.id) ?? 0));
+        ? roundCurrency(runningAvailableMoney + incomeCredit)
+        : roundCurrency(runningAvailableMoney - billDebit);
 
     if (event.date >= startIso && event.date <= endIso) {
       out.push({
         ...event,
         projectedAvailableMoney: roundCurrency(runningAvailableMoney),
+        ...(incomeSkip
+          ? { isSkipped: true as const, skipId: incomeSkip.skipId }
+          : {}),
       });
     }
   }

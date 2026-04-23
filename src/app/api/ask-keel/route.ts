@@ -1,9 +1,10 @@
 /**
- * Ask Keel HTTP API: streaming-free JSON responses for the Ask panel.
+ * Ask Keel HTTP API: JSON responses and optional NDJSON streaming for quick answers.
  *
  * Route Handler (Node runtime by default): authenticates via Supabase session, rate limits,
- * then runs intent classification + either direct LLM answer or scenario projection using
- * `buildTimelineForTest` / skip overlays. Response shape validated by `askResponseSchema`.
+ * cost ceiling, tripwires, then runs intent classification + grounded Sonnet JSON,
+ * scenario projection (`buildTimelineForTest` / skip overlays), or capture classify+parse
+ * with a `capture_redirect` payload for the Capture sheet.
  *
  * **Security:** must stay in sync with middleware exemption — never assume edge middleware
  * authenticated this request.
@@ -12,74 +13,46 @@
  */
 
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
+import { buildAskSonnetAnswerSystemPrompt } from "@/lib/ai/ask-answer-prompt";
+import { buildAskContextSnapshot } from "@/lib/ai/ask-context";
+import { validateFreeformCitations } from "@/lib/ai/ask-citations";
+import { enforceAskResponseGrounding } from "@/lib/ai/ask-grounding";
+import { askResponseSchema, type AskKeelResponse } from "@/lib/ai/ask-keel-schema";
+import { createStreamingAskResponse } from "@/lib/ai/ask-stream";
 import { getAnthropicClient } from "@/lib/ai/client";
-import { classifyAskIntent, extractHypotheticalCommitmentSkips } from "@/lib/ai/classify-ask";
-import { formatDisplayDate, roundMoney } from "@/lib/utils";
-import { extractJsonObject } from "@/lib/ai/parse-capture";
-import { assertWithinAiRateLimit } from "@/lib/ai/rate-limit";
+import { classifyAskIntent } from "@/lib/ai/classify-ask";
+import { classifyCaptureSentence } from "@/lib/ai/classify-capture";
+import {
+  extractJsonObject,
+  parseAssetCapture,
+  parseCommitmentCapture,
+  parseIncomeCapture,
+} from "@/lib/ai/parse-capture";
+import {
+  assertWithinAiCostCeil,
+  assertWithinAiRateLimit,
+  defaultAiCostCeilingCentsAud,
+  trackAnthropicCompletion,
+} from "@/lib/ai/rate-limit";
+import { checkTripwires } from "@/lib/ai/tripwires";
 import { buildTimelineForTest } from "@/lib/engine/keel";
-import type { CommitmentSkipInput, SkipInput } from "@/lib/types";
+import { extractScenarioWhatIfModifications } from "@/lib/ai/scenario-whatif";
+import type { CommitmentSkipInput, IncomeSkipInput, SkipInput } from "@/lib/types";
 import { getProjectionEngineInput } from "@/lib/persistence/keel-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { formatDisplayDate, roundMoney } from "@/lib/utils";
 
-const chipSchema = z.union([
-  z.string(),
-  z.object({
-    text: z.string().min(1),
-    action: z.string().optional(),
-  }),
-]);
+export type { AskKeelResponse } from "@/lib/ai/ask-keel-schema";
 
-const askResponseSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("goal_projection"),
-    headline: z.string().min(1),
-    chart: z.object({
-      months: z.array(z.string()).min(1),
-      todayValue: z.number().finite(),
-      targetValue: z.number().finite(),
-      targetLabel: z.string().min(1),
-    }),
-    chips: z.array(chipSchema).optional(),
-  }),
-  z.object({
-    type: z.literal("spending_summary"),
-    headline: z.string().min(1),
-    breakdown: z.array(z.object({ label: z.string().min(1), amount: z.number().finite() })).min(1),
-    chips: z.array(chipSchema).optional(),
-  }),
-  z.object({
-    type: z.literal("scenario_whatif"),
-    headline: z.string().min(1),
-    body: z.string().optional(),
-    hypotheticalSkips: z
-      .array(
-        z.object({
-          kind: z.literal("commitment"),
-          commitmentId: z.string(),
-          originalDateIso: z.string(),
-          strategy: z.enum(["MAKE_UP_NEXT", "SPREAD", "MOVE_ON", "STANDALONE"]),
-          spreadOverN: z.number().optional(),
-        }),
-      )
-      .optional(),
-    deltas: z.object({
-      endProjectedAvailableMoney: z.number().finite(),
-      endAvailableMoneyDelta: z.number().finite(),
-    }),
-    chips: z.array(chipSchema).optional(),
-  }),
-  z.object({
-    type: z.literal("freeform"),
-    headline: z.string().min(1),
-    body: z.string().optional(),
-    chips: z.array(chipSchema).optional(),
-  }),
-]);
+const HAIKU_MODEL = "claude-3-5-haiku-20241022";
+const SONNET_MODEL = "claude-sonnet-4-20250514";
 
-export type AskKeelResponse = z.infer<typeof askResponseSchema>;
+const quotaResponse: AskKeelResponse = {
+  type: "freeform",
+  headline: "You've used Ask Keel's quota for today.",
+  body: "It'll refresh tomorrow.",
+};
 
 export async function POST(request: Request) {
   try {
@@ -94,10 +67,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     }
 
-    await assertWithinAiRateLimit({ userId: data.user.id, limit: 20, windowMs: 60 * 60 * 1000 });
+    const userId = data.user.id;
 
-    const body = (await request.json()) as { message?: string };
+    await assertWithinAiRateLimit({ userId, limit: 20, windowMs: 60 * 60 * 1000 });
+
+    const body = (await request.json()) as { message?: string; stream?: boolean };
     const message = String(body.message ?? "").trim();
+    const wantsStream = body.stream === true;
     if (!message) {
       return NextResponse.json({ error: "Message is required." }, { status: 400 });
     }
@@ -121,7 +97,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: fallback });
     }
 
+    const trip = checkTripwires(message);
+    if (!trip.ok) {
+      console.error("[ask-keel] tripwire", { userId, reason: trip.reason, length: message.length });
+      const refusal: AskKeelResponse = {
+        type: "freeform",
+        headline: "Can't use that message",
+        body: trip.userMessage,
+      };
+      return NextResponse.json({ data: refusal });
+    }
+
+    if (wantsStream) {
+      return createStreamingAskResponse({ client, userId, message });
+    }
+
+    const ceiling = defaultAiCostCeilingCentsAud();
+    if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
+      return NextResponse.json({ data: quotaResponse });
+    }
+
     const intent = await classifyAskIntent(client, message);
+    await trackAnthropicCompletion({ userId, model: HAIKU_MODEL, usage: intent.usage });
 
     if (intent.kind === "out_of_scope") {
       const dataOut: AskKeelResponse = {
@@ -132,28 +129,151 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: dataOut });
     }
 
-    if (intent.kind === "scenario_whatif") {
-      const { state, activeSkips } = await getProjectionEngineInput();
-      const commitmentIds = state.commitments.map((commitment) => commitment.id);
-      const hypothetical = await extractHypotheticalCommitmentSkips(client, message, commitmentIds);
+    if (intent.kind === "capture") {
+      if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
+        return NextResponse.json({ data: quotaResponse });
+      }
 
-      const incomes = state.incomes.map((income) => ({
-        id: income.id,
-        name: income.name,
-        amount: income.amount,
-        frequency: income.frequency,
-        nextPayDate: income.nextPayDate,
+      const { kind } = await classifyCaptureSentence(message, { userId });
+
+      if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
+        return NextResponse.json({ data: quotaResponse });
+      }
+
+      if (kind === "unknown") {
+        const dataOut: AskKeelResponse = {
+          type: "freeform",
+          headline: "Couldn’t route that capture",
+          body: "Describe a bill, pay, or asset more clearly, or open Capture from the menu.",
+        };
+        return NextResponse.json({ data: dataOut });
+      }
+
+      const cost = { userId };
+      try {
+        let dataOut: AskKeelResponse;
+        if (kind === "commitment") {
+          const payload = await parseCommitmentCapture(message, cost);
+          dataOut = {
+            type: "capture_redirect",
+            headline: `Opening capture for ${payload.name}…`,
+            sentence: message,
+            capture: { kind: "commitment", payload },
+          };
+        } else if (kind === "income") {
+          const payload = await parseIncomeCapture(message, cost);
+          dataOut = {
+            type: "capture_redirect",
+            headline: `Opening capture for ${payload.name}…`,
+            sentence: message,
+            capture: { kind: "income", payload },
+          };
+        } else {
+          const payload = await parseAssetCapture(message, cost);
+          dataOut = {
+            type: "capture_redirect",
+            headline: `Opening capture for ${payload.name}…`,
+            sentence: message,
+            capture: { kind: "asset", payload },
+          };
+        }
+        return NextResponse.json({ data: askResponseSchema.parse(dataOut) });
+      } catch (err) {
+        console.error("[ask-keel] capture parse", err);
+        const dataOut: AskKeelResponse = {
+          type: "freeform",
+          headline: "Couldn’t parse that",
+          body: "Edit your message or open Capture to enter details manually.",
+        };
+        return NextResponse.json({ data: dataOut });
+      }
+    }
+
+    if (intent.kind === "scenario_whatif") {
+      if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
+        return NextResponse.json({ data: quotaResponse });
+      }
+
+      const { state, activeSkips } = await getProjectionEngineInput();
+      const commitmentIds = state.commitments.filter((c) => !c.archivedAt).map((c) => c.id);
+      const incomeIds = state.incomes.filter((i) => !i.archivedAt).map((i) => i.id);
+      const goalBrief = state.goals.map((g) => ({
+        id: g.id,
+        name: g.name,
+        contributionPerPay: g.contributionPerPay,
       }));
-      const commitments = state.commitments.map((commitment) => ({
-        id: commitment.id,
-        name: commitment.name,
-        amount: commitment.amount,
-        frequency: commitment.frequency,
-        nextDueDate: commitment.nextDueDate,
-        fundedByIncomeId: commitment.fundedByIncomeId,
-        category: commitment.category,
+
+      const { data: scenarioMods, usage: hypUsage } = await extractScenarioWhatIfModifications(client, message, {
+        allowedCommitmentIds: commitmentIds,
+        allowedIncomeIds: incomeIds,
+        goals: goalBrief,
+      });
+      await trackAnthropicCompletion({ userId, model: HAIKU_MODEL, usage: hypUsage });
+
+      const incomes = state.incomes
+        .filter((income) => !income.archivedAt)
+        .map((income) => ({
+          id: income.id,
+          name: income.name,
+          amount: income.amount,
+          frequency: income.frequency,
+          nextPayDate: income.nextPayDate,
+        }));
+      const commitmentsBase = state.commitments
+        .filter((c) => !c.archivedAt)
+        .map((commitment) => ({
+          id: commitment.id,
+          name: commitment.name,
+          amount: commitment.amount,
+          frequency: commitment.frequency,
+          nextDueDate: commitment.nextDueDate,
+          fundedByIncomeId: commitment.fundedByIncomeId,
+          category: commitment.category,
+        }));
+      let commitments = commitmentsBase.slice();
+      const SYN = "__ask_scenario_commitment__";
+      if (scenarioMods.syntheticCommitment) {
+        const s = scenarioMods.syntheticCommitment;
+        commitments = [
+          ...commitments,
+          {
+            id: SYN,
+            name: s.name,
+            amount: s.amount,
+            frequency: s.frequency,
+            nextDueDate: s.nextDueDate,
+            fundedByIncomeId: state.primaryIncomeId,
+            category: s.category,
+          },
+        ];
+      }
+
+      let goals = state.goals.map((goal) => ({
+        id: goal.id,
+        name: goal.name,
+        contributionPerPay: goal.contributionPerPay,
+        fundedByIncomeId: goal.fundedByIncomeId,
+        currentBalance: goal.currentBalance,
+        targetAmount: goal.targetAmount,
+        targetDate: goal.targetDate,
       }));
-      const goals = state.goals.map((goal) => ({
+      if (scenarioMods.goalContributionChange) {
+        const ch = scenarioMods.goalContributionChange;
+        goals = goals.map((g) =>
+          g.id === ch.goalId ? { ...g, contributionPerPay: ch.newContributionPerPay } : g,
+        );
+      }
+
+      const persisted: SkipInput[] = [
+        ...activeSkips.commitmentSkips,
+        ...activeSkips.goalSkips,
+        ...activeSkips.incomeSkips,
+      ];
+      const hypotheticalCommitment = scenarioMods.commitmentSkips;
+      const hypotheticalIncome = scenarioMods.incomeSkips;
+      const combined: SkipInput[] = [...persisted, ...hypotheticalCommitment, ...hypotheticalIncome];
+
+      const goalsBaseline = state.goals.map((goal) => ({
         id: goal.id,
         name: goal.name,
         contributionPerPay: goal.contributionPerPay,
@@ -163,16 +283,13 @@ export async function POST(request: Request) {
         targetDate: goal.targetDate,
       }));
 
-      const persisted: SkipInput[] = [...activeSkips.commitmentSkips, ...activeSkips.goalSkips];
-      const combined: SkipInput[] = [...persisted, ...hypothetical];
-
       const baseTimeline = buildTimelineForTest({
         asOfIso: state.user.balanceAsOf,
         bankBalance: state.user.bankBalance,
         incomes,
         primaryIncomeId: state.primaryIncomeId,
-        commitments,
-        goals,
+        commitments: commitmentsBase,
+        goals: goalsBaseline,
         skips: persisted,
         horizonDays: 42,
       });
@@ -198,29 +315,48 @@ export async function POST(request: Request) {
       const delta = roundMoney(endHyp - endBase);
 
       const nameById = new Map(state.commitments.map((commitment) => [commitment.id, commitment.name]));
+      const incomeNameById = new Map(state.incomes.map((income) => [income.id, income.name]));
       const chips: Array<string | { text: string; action?: string }> = [];
-      for (const skip of hypothetical) {
-        const label = nameById.get(skip.commitmentId) ?? "Bill";
+      for (const skip of hypotheticalCommitment) {
+        const label = nameById.get(skip.commitmentId) ?? "Commitment";
         chips.push({
           text: `Open skip · ${label} · ${formatDisplayDate(skip.originalDateIso, "short-day")}`,
           action: `skip_commitment:${skip.commitmentId}:${skip.originalDateIso}`,
         });
       }
+      for (const skip of hypotheticalIncome) {
+        const label = incomeNameById.get(skip.incomeId) ?? "Income";
+        chips.push({
+          text: `Open income · ${label} · ${formatDisplayDate(skip.originalDateIso, "short-day")}`,
+          action: `skip_income:${skip.incomeId}:${skip.originalDateIso}`,
+        });
+      }
+
+      const hasScenario =
+        hypotheticalCommitment.length > 0 ||
+        hypotheticalIncome.length > 0 ||
+        Boolean(scenarioMods.syntheticCommitment) ||
+        Boolean(scenarioMods.goalContributionChange);
+
+      const detailLines: string[] = [];
+      detailLines.push(`Baseline end (6 weeks): ${roundMoney(endBase)}`);
+      detailLines.push(`Scenario end (6 weeks): ${roundMoney(endHyp)}`);
+      detailLines.push(`Delta: ${delta >= 0 ? "+" : ""}${delta}`);
 
       const dataOut: AskKeelResponse = {
         type: "scenario_whatif",
-        headline:
-          hypothetical.length === 0
-            ? "I couldn’t pin down a specific bill skip."
-            : "Here’s how that skip could move your 6‑week projection.",
-        body:
-          hypothetical.length === 0
-            ? "Name the bill and the payment date (YYYY‑MM‑DD), or pick a bill from Bills and use Skip payment."
-            : `Projected available at end of horizon: ${roundMoney(endHyp)} (delta ${delta >= 0 ? "+" : ""}${delta} vs your current plan).`,
-        hypotheticalSkips: hypothetical as CommitmentSkipInput[],
+        headline: hasScenario
+          ? "Here’s how that scenario could move your 6‑week projection."
+          : "I couldn’t pin down a specific change.",
+        body: hasScenario
+          ? `${detailLines.join("\n")}\n\nTap a chip to open the right screen when it’s a skip.`
+          : "Name the commitment or income and the date (YYYY‑MM‑DD), add a bit more detail, or adjust from Timeline.",
+        hypotheticalSkips: hypotheticalCommitment.length ? (hypotheticalCommitment as CommitmentSkipInput[]) : undefined,
+        hypotheticalIncomeSkips: hypotheticalIncome.length ? (hypotheticalIncome as IncomeSkipInput[]) : undefined,
         deltas: {
           endProjectedAvailableMoney: roundMoney(endHyp),
           endAvailableMoneyDelta: delta,
+          baselineEndProjectedAvailableMoney: roundMoney(endBase),
         },
         chips: chips.length ? chips : undefined,
       };
@@ -228,30 +364,43 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: askResponseSchema.parse(dataOut) });
     }
 
+    if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
+      return NextResponse.json({ data: quotaResponse });
+    }
+
+    const snapshot = await buildAskContextSnapshot({ userId });
+
     const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: SONNET_MODEL,
       max_tokens: 700,
-      system: `You are Keel's assistant for Australian household cashflow.
-
-Return only valid JSON for one of these shapes (discriminate with "type"):
-1) { "type":"goal_projection", "headline": string, "chart": { "months": string[], "todayValue": number, "targetValue": number, "targetLabel": string }, "chips"?: (string | { "text": string, "action"?: string })[] }
-2) { "type":"spending_summary", "headline": string, "breakdown": { "label": string, "amount": number }[], "chips"?: (string | { "text": string, "action"?: string })[] }
-3) { "type":"freeform", "headline": string, "body"?: string, "chips"?: (string | { "text": string, "action"?: string })[] }
-
-Rules:
-- Prefer structured types when the user question clearly matches
-- Use AUD thinking; amounts are numbers (not strings)
-- Keep headline short; body optional and concise
-- Chips may include optional "action" for deep links (e.g. skip_commitment:id:yyyy-mm-dd)`,
+      system: buildAskSonnetAnswerSystemPrompt(snapshot),
       messages: [{ role: "user", content: message }],
     });
+
+    await trackAnthropicCompletion({ userId, model: SONNET_MODEL, usage: response.usage });
 
     const textBlock = response.content.find((item) => item.type === "text");
     const text = textBlock?.type === "text" ? textBlock.text : "";
     const parsed = JSON.parse(extractJsonObject(text));
-    const dataOut = askResponseSchema.parse(parsed);
+    const parsedOut = askResponseSchema.parse(parsed);
+    const grounded = enforceAskResponseGrounding(parsedOut, snapshot);
 
-    return NextResponse.json({ data: dataOut });
+    if (grounded.type === "freeform") {
+      const cite = validateFreeformCitations(grounded.citations, snapshot);
+      if (!cite.ok) {
+        console.error("[ask-keel] citation validation", { userId, reasons: cite.reasons });
+        const fallback = askResponseSchema.parse({
+          type: "freeform",
+          headline: "I'm having trouble matching that to your data.",
+          body: "Try rephrasing, or check Timeline for the exact figures.",
+          answerValidationFailed: true,
+          confidence: "low",
+        });
+        return NextResponse.json({ data: fallback });
+      }
+    }
+
+    return NextResponse.json({ data: askResponseSchema.parse(grounded) });
   } catch (error) {
     if (error instanceof Error && error.message === "RATE_LIMITED") {
       return NextResponse.json({ error: "You’ve hit the hourly Ask limit. Try again soon." }, { status: 429 });

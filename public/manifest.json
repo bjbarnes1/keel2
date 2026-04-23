@@ -1,0 +1,17 @@
+{
+  "name": "Keel",
+  "short_name": "Keel",
+  "description": "See what you actually have — commitments, goals, and cashflow in one calm view.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#141a17",
+  "theme_color": "#141a17",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
