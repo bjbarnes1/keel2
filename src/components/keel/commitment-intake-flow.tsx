@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * AI + manual bill intake (`createCommitmentAction`), optional `/api/parse-bill` assist.
+ * AI + manual commitment intake (`createCommitmentAction`), optional `/api/parse-bill` assist.
  *
- * @module components/keel/bill-intake-flow
+ * @module components/keel/commitment-intake-flow
  */
 
 import Link from "next/link";
@@ -29,7 +29,7 @@ type ParsedBillResponse = {
   perPay: number;
 };
 
-type BillDraft = {
+type CommitmentDraft = {
   name: string;
   amount: number;
   frequency: CommitmentFrequency;
@@ -96,7 +96,7 @@ const examples = [
 
 type FlowState = "input" | "thinking" | "confirm";
 
-function SubmitBillButton({ disabled }: { disabled: boolean }) {
+function SubmitCommitmentButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
     <SubmitButton
@@ -114,7 +114,7 @@ function fieldClassName(extra?: string) {
   );
 }
 
-export function BillIntakeFlow({
+export function CommitmentIntakeFlow({
   incomes,
   primaryIncomeId,
   categories,
@@ -125,7 +125,7 @@ export function BillIntakeFlow({
 }) {
   const [text, setText] = useState("");
   const [flowState, setFlowState] = useState<FlowState>("input");
-  const [draft, setDraft] = useState<BillDraft | null>(null);
+  const [draft, setDraft] = useState<CommitmentDraft | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const canSubmit = text.trim().length > 5;
@@ -500,7 +500,7 @@ export function BillIntakeFlow({
             </div>
 
             <div className="space-y-3">
-              <SubmitBillButton disabled={!canSave} />
+              <SubmitCommitmentButton disabled={!canSave} />
               <button
                 type="button"
                 onClick={reset}
