@@ -18,16 +18,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Module-level — Intl.NumberFormat construction is measurably expensive and this function
+// is called on every list render (projection rows, legend rows, goal cards, etc.).
+const AUD_FORMATTER = new Intl.NumberFormat("en-AU", {
+  style: "currency",
+  currency: "AUD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
 /** Formats a number as Australian dollars for UI copy (not for persisted amounts). */
 export function formatAud(amount: number) {
-  const formatter = new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-
-  return formatter.format(amount);
+  return AUD_FORMATTER.format(amount);
 }
 
 export function sentenceCaseFrequency(value: string) {

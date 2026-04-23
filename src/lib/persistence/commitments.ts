@@ -10,6 +10,7 @@
 
 import { randomUUID } from "node:crypto";
 
+import { Prisma } from "@prisma/client";
 import { unstable_noStore as noStore } from "next/cache";
 
 import { pickCommitmentVersionAt } from "@/lib/commitment-version";
@@ -21,28 +22,20 @@ import { getBudgetContext } from "./auth";
 import { hasConfiguredDatabase, hasSupabaseAuthConfigured } from "./config";
 import { narrowCommitmentFrequency, readState, writeState, type StoredCommitment } from "./state";
 
-export async function getCommitmentForEdit(id: string) {
-  noStore();
+const commitmentEditInclude = {
+  categoryRef: true,
+  subcategoryRef: true,
+  versions: { orderBy: { effectiveFrom: "desc" } },
+} as const satisfies Prisma.CommitmentInclude;
 
-  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
-    const state = await readState();
-    return state.commitments.find((commitment) => commitment.id === id) ?? null;
-  }
+type CommitmentEditPrismaRow = Prisma.CommitmentGetPayload<{
+  include: typeof commitmentEditInclude;
+}>;
 
-  const prisma = getPrismaClient();
-  const { budget } = await getBudgetContext();
-
-  const commitment = await prisma.commitment.findFirst({
-    where: { id, budgetId: budget.id },
-    include: {
-      categoryRef: true,
-      subcategoryRef: true,
-      versions: { orderBy: { effectiveFrom: "desc" } },
-    },
-  });
-  if (!commitment) return null;
-
-  const asOfIso = toIsoDate(new Date());
+function projectCommitmentEditRow(
+  commitment: CommitmentEditPrismaRow,
+  asOfIso: string,
+): StoredCommitment {
   const slices =
     commitment.versions?.map((v) => ({
       effectiveFrom: v.effectiveFrom,
@@ -60,7 +53,7 @@ export async function getCommitmentForEdit(id: string) {
   const categoryId = picked?.categoryId ?? commitment.categoryId;
   const subcategoryId = picked?.subcategoryId ?? commitment.subcategoryId ?? null;
 
-  const result: StoredCommitment = {
+  return {
     id: commitment.id,
     name: picked?.name ?? commitment.name,
     amount: picked ? picked.amount : Number(commitment.amount),
@@ -76,7 +69,61 @@ export async function getCommitmentForEdit(id: string) {
       picked?.fundedByIncomeId ?? commitment.fundedByIncomeId ?? undefined,
     archivedAt: commitment.archivedAt ? commitment.archivedAt.toISOString() : undefined,
   };
-  return result;
+}
+
+export async function getCommitmentForEdit(id: string) {
+  noStore();
+
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    const state = await readState();
+    return state.commitments.find((commitment) => commitment.id === id) ?? null;
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const commitment = await prisma.commitment.findFirst({
+    where: { id, budgetId: budget.id },
+    include: commitmentEditInclude,
+  });
+  if (!commitment) return null;
+
+  return projectCommitmentEditRow(commitment, toIsoDate(new Date()));
+}
+
+/**
+ * Batch variant of {@link getCommitmentForEdit}. One DB round-trip regardless of how many
+ * ids are passed; returns a map keyed by id with `null` for ids that don't belong to the
+ * caller's budget. Used by `/commitments` to avoid an N+1 when rendering edit payloads
+ * for every visible row.
+ */
+export async function getCommitmentsForEditBatch(
+  ids: readonly string[],
+): Promise<Record<string, StoredCommitment | null>> {
+  noStore();
+
+  if (ids.length === 0) return {};
+
+  if (!hasConfiguredDatabase() || !hasSupabaseAuthConfigured()) {
+    const state = await readState();
+    const byId = new Map(state.commitments.map((c) => [c.id, c]));
+    return Object.fromEntries(ids.map((id) => [id, byId.get(id) ?? null]));
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const rows = await prisma.commitment.findMany({
+    where: { id: { in: [...ids] }, budgetId: budget.id },
+    include: commitmentEditInclude,
+  });
+
+  const asOfIso = toIsoDate(new Date());
+  const projected = new Map<string, StoredCommitment>(
+    rows.map((row) => [row.id, projectCommitmentEditRow(row, asOfIso)]),
+  );
+
+  return Object.fromEntries(ids.map((id) => [id, projected.get(id) ?? null]));
 }
 
 export async function createCommitment(input: {

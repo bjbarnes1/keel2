@@ -49,6 +49,17 @@ export type { AskKeelResponse } from "@/lib/ai/ask-keel-schema";
 const HAIKU_MODEL = "claude-3-5-haiku-20241022";
 const SONNET_MODEL = "claude-sonnet-4-20250514";
 
+// Every response on this route is per-user and sensitive. Set explicit no-store headers
+// so a misconfigured CDN or reverse proxy can't cache one user's Ask response and serve
+// it to another.
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, private",
+} as const;
+
+function privateJson(body: unknown, init?: { status?: number }): NextResponse {
+  return NextResponse.json(body, { ...init, headers: NO_STORE_HEADERS });
+}
+
 const quotaResponse: AskKeelResponse = {
   type: "freeform",
   headline: "You've used Ask Keel's quota for today.",
@@ -61,11 +72,11 @@ export async function POST(request: Request) {
     const { data, error } = await supabase.auth.getUser();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 401 });
+      return privateJson({ error: error.message }, { status: 401 });
     }
 
     if (!data.user) {
-      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+      return privateJson({ error: "Not authenticated." }, { status: 401 });
     }
 
     const userId = data.user.id;
@@ -76,7 +87,7 @@ export async function POST(request: Request) {
     const message = String(body.message ?? "").trim();
     const wantsStream = body.stream === true;
     if (!message) {
-      return NextResponse.json({ error: "Message is required." }, { status: 400 });
+      return privateJson({ error: "Message is required." }, { status: 400 });
     }
 
     if (process.env.KEEL_AI_ENABLED !== "true") {
@@ -85,7 +96,7 @@ export async function POST(request: Request) {
         headline: "Ask is offline right now.",
         body: "Keel AI is disabled for this environment.",
       };
-      return NextResponse.json({ data: fallback });
+      return privateJson({ data: fallback });
     }
 
     const client = getAnthropicClient();
@@ -95,7 +106,7 @@ export async function POST(request: Request) {
         headline: "Ask is offline right now.",
         body: "Anthropic is not configured.",
       };
-      return NextResponse.json({ data: fallback });
+      return privateJson({ data: fallback });
     }
 
     const trip = checkTripwires(message);
@@ -106,7 +117,7 @@ export async function POST(request: Request) {
         headline: "Can't use that message",
         body: trip.userMessage,
       };
-      return NextResponse.json({ data: refusal });
+      return privateJson({ data: refusal });
     }
 
     if (wantsStream) {
@@ -115,7 +126,7 @@ export async function POST(request: Request) {
 
     const ceiling = defaultAiCostCeilingCentsAud();
     if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
-      return NextResponse.json({ data: quotaResponse });
+      return privateJson({ data: quotaResponse });
     }
 
     const intent = await classifyAskIntent(client, message);
@@ -127,18 +138,18 @@ export async function POST(request: Request) {
         headline: "Keel focuses on cashflow.",
         body: "Ask about income, bills, goals, or what‑if skips in your budget.",
       };
-      return NextResponse.json({ data: dataOut });
+      return privateJson({ data: dataOut });
     }
 
     if (intent.kind === "capture") {
       if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
-        return NextResponse.json({ data: quotaResponse });
+        return privateJson({ data: quotaResponse });
       }
 
       const { kind } = await classifyCaptureSentence(message, { userId });
 
       if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
-        return NextResponse.json({ data: quotaResponse });
+        return privateJson({ data: quotaResponse });
       }
 
       if (kind === "unknown") {
@@ -147,7 +158,7 @@ export async function POST(request: Request) {
           headline: "Couldn’t route that capture",
           body: "Describe a bill, pay, or asset more clearly, or open Capture from the menu.",
         };
-        return NextResponse.json({ data: dataOut });
+        return privateJson({ data: dataOut });
       }
 
       const cost = { userId };
@@ -178,7 +189,7 @@ export async function POST(request: Request) {
             capture: { kind: "asset", payload },
           };
         }
-        return NextResponse.json({ data: askResponseSchema.parse(dataOut) });
+        return privateJson({ data: askResponseSchema.parse(dataOut) });
       } catch (err) {
         console.error("[ask-keel] capture parse", err);
         const dataOut: AskKeelResponse = {
@@ -186,13 +197,13 @@ export async function POST(request: Request) {
           headline: "Couldn’t parse that",
           body: "Edit your message or open Capture to enter details manually.",
         };
-        return NextResponse.json({ data: dataOut });
+        return privateJson({ data: dataOut });
       }
     }
 
     if (intent.kind === "scenario_whatif") {
       if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
-        return NextResponse.json({ data: quotaResponse });
+        return privateJson({ data: quotaResponse });
       }
 
       const { state, activeSkips } = await getProjectionEngineInput();
@@ -362,11 +373,11 @@ export async function POST(request: Request) {
         chips: chips.length ? chips : undefined,
       };
 
-      return NextResponse.json({ data: askResponseSchema.parse(dataOut) });
+      return privateJson({ data: askResponseSchema.parse(dataOut) });
     }
 
     if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
-      return NextResponse.json({ data: quotaResponse });
+      return privateJson({ data: quotaResponse });
     }
 
     const snapshot = await buildAskContextSnapshot({ userId });
@@ -409,14 +420,14 @@ export async function POST(request: Request) {
           answerValidationFailed: true,
           confidence: "low",
         });
-        return NextResponse.json({ data: fallback });
+        return privateJson({ data: fallback });
       }
     }
 
-    return NextResponse.json({ data: askResponseSchema.parse(grounded) });
+    return privateJson({ data: askResponseSchema.parse(grounded) });
   } catch (error) {
     if (error instanceof Error && error.message === "RATE_LIMITED") {
-      return NextResponse.json({ error: "You’ve hit the hourly Ask limit. Try again soon." }, { status: 429 });
+      return privateJson({ error: "You’ve hit the hourly Ask limit. Try again soon." }, { status: 429 });
     }
 
     console.error("[ask-keel] unhandled error", error);
@@ -424,6 +435,6 @@ export async function POST(request: Request) {
       type: "freeform",
       headline: "Ask is offline right now.",
     };
-    return NextResponse.json({ data: fallback });
+    return privateJson({ data: fallback });
   }
 }

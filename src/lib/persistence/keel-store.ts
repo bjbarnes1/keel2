@@ -36,6 +36,7 @@ export {
 } from "./income";
 export {
   getCommitmentForEdit,
+  getCommitmentsForEditBatch,
   createCommitment,
   updateCommitment,
   updateCommitmentFuture,

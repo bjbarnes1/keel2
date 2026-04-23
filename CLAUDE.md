@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working principles
+
+**Speed is a feature.** Every change, every audit, every review keeps perceived and actual performance at the front of mind. Before shipping a change, check: does this add a database round-trip that could be parallel? Does it sit in a hot render path without memoisation? Does it block the server's first byte on data the page doesn't need above the fold? Could the user see something, anything, sooner? Apply the same lens when the user asks for an unrelated change — spot the speed win alongside the feature, and mention it. Defaults: `Promise.all` over sequential awaits, batched DB reads over loops, optimistic UI over waiting for the round-trip, `React.memo` / stable callback refs on list rows, streamed Suspense boundaries over monolithic page renders, Anthropic prompt caching on any reusable system-prompt block.
+
 ## Commands
 
 ```bash

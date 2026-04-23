@@ -1,13 +1,19 @@
 /**
  * Commitments index: server-loads snapshot, archived rows, edit payloads, skip preview.
  *
+ * Performance notes:
+ *  - `getDashboardSnapshot`, `listArchivedCommitmentsForBrowse`, and `getCategoryOptions`
+ *    are independent reads and run in parallel via `Promise.all`.
+ *  - Edit payloads for every visible row are loaded in a single batch query
+ *    (`getCommitmentsForEditBatch`) — previously this was an N+1 loop.
+ *
  * @module app/commitments/page
  */
 
 import { annualizeAmount } from "@/lib/engine/keel";
 import {
   getCategoryOptions,
-  getCommitmentForEdit,
+  getCommitmentsForEditBatch,
   getCommitmentSkipPreviewBundle,
   getDashboardSnapshot,
   listArchivedCommitmentsForBrowse,
@@ -19,7 +25,9 @@ import { CommitmentsBrowseClient } from "@/components/keel/commitments-browse-cl
 export const dynamic = "force-dynamic";
 
 function mapStoredToEditFields(
-  row: NonNullable<Awaited<ReturnType<typeof getCommitmentForEdit>>>,
+  row: NonNullable<
+    Awaited<ReturnType<typeof getCommitmentsForEditBatch>>[string]
+  >,
 ): CommitmentFields {
   return {
     name: row.name,
@@ -33,20 +41,27 @@ function mapStoredToEditFields(
 }
 
 export default async function CommitmentsPage() {
-  const snapshot = await getDashboardSnapshot();
+  // Three independent reads in flight at once; the page is gated on the slowest, not the sum.
+  const [snapshot, archived, categories] = await Promise.all([
+    getDashboardSnapshot(),
+    listArchivedCommitmentsForBrowse(),
+    getCategoryOptions(),
+  ]);
+
+  // Skip-preview derives purely from the snapshot (no I/O) — can only run after it resolves.
   const skipPreview = await getCommitmentSkipPreviewBundle(snapshot);
+
   const goals = snapshot.goals.map((goal) => ({ id: goal.id, name: goal.name }));
   const summaryAnnualized = snapshot.commitments.reduce(
     (sum, c) => sum + annualizeAmount(c.amount, c.frequency),
     0,
   );
-  const archived = await listArchivedCommitmentsForBrowse();
-  const categories = await getCategoryOptions();
 
   const editIds = [...snapshot.commitments, ...archived].map((c) => c.id);
+  const editRows = await getCommitmentsForEditBatch(editIds);
   const editPayloadsById: Record<string, CommitmentFields | null> = {};
   for (const id of editIds) {
-    const row = await getCommitmentForEdit(id);
+    const row = editRows[id];
     editPayloadsById[id] = row ? mapStoredToEditFields(row) : null;
   }
 

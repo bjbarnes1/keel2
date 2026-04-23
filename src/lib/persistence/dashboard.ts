@@ -402,20 +402,26 @@ function toDashboardSnapshot(
 /**
  * Loads the current budget state, optional spend rollups, active skips, and returns {@link toDashboardSnapshot}.
  * Calls `unstable_noStore` so Next does not cache per-user numbers.
+ *
+ * Performance note: `fetchSpendAttributionRollups` and `getActiveSkipsForBudget` both
+ * depend only on `state.budget.id` — once state resolves, they run in parallel so the
+ * home page is gated on `max(readState, rollups, skips)`, not the sum.
  */
 export async function getDashboardSnapshot() {
   noStore();
   const state = await readState();
 
-  const spendRollups =
-    hasConfiguredDatabase() && hasSupabaseAuthConfigured()
-      ? await fetchSpendAttributionRollups({ budgetId: state.budget.id })
-      : {
-          annualSpendActualToDate: 0,
-          spendByCommitment: [] as DashboardSnapshot["spendByCommitment"],
-        };
+  const emptyRollups = {
+    annualSpendActualToDate: 0,
+    spendByCommitment: [] as DashboardSnapshot["spendByCommitment"],
+  };
 
-  const activeSkips = await getActiveSkipsForBudget(state.budget.id);
+  const [spendRollups, activeSkips] = await Promise.all([
+    hasConfiguredDatabase() && hasSupabaseAuthConfigured()
+      ? fetchSpendAttributionRollups({ budgetId: state.budget.id })
+      : Promise.resolve(emptyRollups),
+    getActiveSkipsForBudget(state.budget.id),
+  ]);
 
   return toDashboardSnapshot(state, spendRollups, activeSkips);
 }

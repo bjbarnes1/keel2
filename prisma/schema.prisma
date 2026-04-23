@@ -209,6 +209,8 @@ model Goal {
   updatedAt          DateTime  @updatedAt
 
   skips GoalSkip[]
+
+  @@index([budgetId])
 }
 
 model CommitmentSkip {
@@ -389,6 +391,10 @@ model SpendTransaction {
   @@unique([budgetId, dedupeKey])
   @@index([budgetId, postedOn])
   @@index([accountId, postedOn])
+  // Covers `fetchSpendAttributionRollups` groupBy: filters by (budgetId, commitmentId)
+  // over a postedOn range. Without it Postgres uses (budgetId, postedOn) and filters
+  // commitmentId in memory, which scales poorly as the table grows.
+  @@index([budgetId, commitmentId, postedOn])
 }
 
 // ─── Plan 11: AI Context — Layer B (Learned Patterns) ────────────────────────

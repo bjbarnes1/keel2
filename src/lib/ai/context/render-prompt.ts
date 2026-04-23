@@ -1,33 +1,33 @@
 /**
- * Renders the Plan 11 composed context as the `LAYERED_CONTEXT` system-prompt section
- * that Sonnet receives on every Ask Keel grounded answer.
+ * Renders the Plan 11 composed context into **two** prompt segments, ordered for
+ * Anthropic prompt caching:
  *
- * The rendered block is inlined into {@link buildAskSonnetAnswerSystemPrompt} alongside
- * the short-horizon ref-based snapshot. Structuring it as a dedicated block (with clear
- * authority rules) lets the model reason about:
- *   - Short-horizon facts → Layer A
- *   - Behavioural "how do I usually..." → Layer B (or honestly admit no data)
- *   - Long-horizon projections (>12 months) → Layer A starting point + Layer B drift
- *     + Layer C inflation / wage / return assumptions, always citing confidence levels
+ *   1. Stable — the authority rules + Layer C (structural assumptions). Identical
+ *      across every user and every request. Placed first so it sits at the beginning
+ *      of the system prefix where `cache_control: { type: "ephemeral" }` can cache it.
+ *   2. Volatile — Layer A (user's current state) + Layer B (their learned patterns).
+ *      Varies per user per request; placed after the cached prefix.
  *
- * Keep the rendered JSON terse — we are already spending a few KB on the snapshot. Do
- * not pretty-print with `JSON.stringify(x, null, 2)` for the structural-assumptions blob;
- * compact form is enough and halves the tokens.
+ * Callers (see {@link buildAskSonnetAnswerSystemPrompt}) emit the stable block first,
+ * with `cache_control` attached, then the volatile block unmarked. The prefix match
+ * means the tools + stable-system segment serve from cache on every subsequent call,
+ * at ~0.1× the per-token cost.
+ *
+ * Keep the rendered JSON terse — whitespace eats tokens. Do not pretty-print.
  *
  * @module lib/ai/context/render-prompt
  */
 
 import type { ComposedContext } from "./schemas/composed-context";
 
-/**
- * Compact JSON rendering with a single-line key grouping that stays under ~5KB for a
- * typical user. Uses `JSON.stringify` with no indent so whitespace does not eat tokens.
- */
 function compactJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** The fixed rules block — same wording for every request so caching is effective. */
+/**
+ * Identical wording for every request; ordered at the start of the system prefix so
+ * Anthropic's prompt cache can return it at ~0.1× cost on repeat calls.
+ */
 const LAYERED_AUTHORITY_RULES = `LAYERED_CONTEXT authority:
 1. userContext (Layer A) — observed truth. Cite specific numbers from here for any
    question about the user's actual money. These are facts, not estimates.
@@ -50,10 +50,38 @@ Long-horizon rules (>12 months):
 If the question requires data that none of the three layers contains, reply with a
 freeform response that explicitly names what is missing. Do not invent numbers.`;
 
-/** Builds the prompt block. Called from the Sonnet answer prompt builder. */
-export function renderLayeredContextPrompt(context: ComposedContext): string {
-  return `LAYERED_CONTEXT_JSON:
-${compactJson(context)}
+/**
+ * The stable half of the layered context — Layer C + authority rules. Designed to be
+ * byte-identical across every user and every request so the cached prefix survives.
+ */
+export function renderStableLayeredPrompt(context: ComposedContext): string {
+  return `STRUCTURAL_ASSUMPTIONS_JSON:
+${compactJson(context.structuralAssumptions)}
 
 ${LAYERED_AUTHORITY_RULES}`;
+}
+
+/**
+ * The volatile half — Layer A (observed) + Layer B (learned). Must come AFTER the
+ * stable block in the system array or caching won't take effect.
+ */
+export function renderVolatileLayeredPrompt(context: ComposedContext): string {
+  return `USER_CONTEXT_JSON (Layer A — observed truth):
+${compactJson(context.userContext)}
+
+LEARNED_PATTERNS_JSON (Layer B — behavioural signals):
+${compactJson(context.learnedPatterns)}
+
+LAYERED_CONTEXT_META:
+${compactJson({ version: context.version, generatedAt: context.generatedAt })}`;
+}
+
+/**
+ * Single-block fallback for legacy callers that can't pass system blocks as an array.
+ * Do not use for the main Ask Keel path — it defeats prompt caching.
+ */
+export function renderLayeredContextPrompt(context: ComposedContext): string {
+  return `${renderStableLayeredPrompt(context)}
+
+${renderVolatileLayeredPrompt(context)}`;
 }
