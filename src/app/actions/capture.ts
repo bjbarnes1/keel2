@@ -12,6 +12,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { invalidateLayerACache } from "@/lib/ai/context/generators/build-layer-a";
 import { commitmentCaptureSchema, incomeCaptureSchema, assetCaptureSchema } from "@/lib/ai/parse-capture";
 import { assertWithinAiRateLimit } from "@/lib/ai/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -75,6 +76,7 @@ export async function createCommitmentFromCapture(input: unknown) {
   revalidatePath("/timeline");
   revalidatePath("/");
   revalidatePath("/commitments");
+  invalidateLayerACache(userId);
 }
 
 export async function createIncomeFromCapture(input: unknown) {
@@ -96,6 +98,7 @@ export async function createIncomeFromCapture(input: unknown) {
   revalidatePath("/timeline");
   revalidatePath("/");
   revalidatePath("/incomes");
+  invalidateLayerACache(userId);
 }
 
 export async function createAssetFromCapture(input: unknown) {
@@ -118,4 +121,5 @@ export async function createAssetFromCapture(input: unknown) {
   revalidatePath("/timeline");
   revalidatePath("/");
   revalidatePath("/wealth");
+  invalidateLayerACache(userId);
 }

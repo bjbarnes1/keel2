@@ -1,0 +1,41 @@
+{
+  "version": "2026.04",
+  "lastReviewed": "2026-04-22",
+  "reviewIntervalDays": 90,
+  "nextReviewDue": "2026-07-22",
+  "cpi": {
+    "currentAnnualRate": 0.032,
+    "rbaTarget": [0.02, 0.03],
+    "fiveYearAssumption": 0.029,
+    "tenYearAssumption": 0.028,
+    "source": "RBA Statement on Monetary Policy, Feb 2026",
+    "confidence": "medium"
+  },
+  "wageGrowth": {
+    "currentAnnualRate": 0.037,
+    "fiveYearAssumption": 0.035,
+    "source": "ABS Wage Price Index, Dec 2025 quarter",
+    "confidence": "medium"
+  },
+  "interestRates": {
+    "cashRateCurrent": 0.041,
+    "mortgageRateCurrent": 0.063,
+    "mortgageRateFiveYearAssumption": 0.058,
+    "source": "RBA cash rate target, major-bank standard variable averages",
+    "confidence": "low"
+  },
+  "assetReturns": {
+    "asx200LongRunAnnualNominal": 0.089,
+    "asx200LongRunAnnualReal": 0.061,
+    "cashSavingsAnnual": 0.042,
+    "bitcoinVolatilityNote": "Keel does not assume any specific BTC return trajectory. Use the user's current holding value for short-term answers; flag uncertainty explicitly for any long-horizon answer involving crypto.",
+    "source": "ASX 200 accumulation index, 1986-2025 annualised; RBA household deposit averages",
+    "confidence": "low"
+  },
+  "propertyAssumptions": {
+    "nationalFiveYearGrowthAssumption": 0.045,
+    "propertyGrowthNote": "Significant regional and segment variation. Do not project individual property values beyond two years without explicit user-supplied data.",
+    "source": "CoreLogic Home Value Index, national dwelling series 2015-2025",
+    "confidence": "very-low"
+  }
+}

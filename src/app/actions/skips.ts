@@ -15,6 +15,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { invalidateLayerACache } from "@/lib/ai/context/generators/build-layer-a";
 import { getPrismaClient } from "@/lib/prisma";
 import {
   getBudgetContext,
@@ -57,11 +58,12 @@ function parseGoalRedirect(redirectTo: string | null | undefined) {
   return redirectTo.slice("goal:".length);
 }
 
-function revalidateSkipPaths() {
+function revalidateSkipPaths(userId?: string) {
   revalidatePath("/");
   revalidatePath("/timeline");
   revalidatePath("/commitments");
   revalidatePath("/goals");
+  if (userId) invalidateLayerACache(userId);
 }
 
 export async function createCommitmentSkip(input: unknown) {
@@ -145,7 +147,7 @@ export async function createCommitmentSkip(input: unknown) {
     }
   });
 
-  revalidateSkipPaths();
+  revalidateSkipPaths(authedUser?.id);
 }
 
 export async function createGoalSkip(input: unknown) {
@@ -201,13 +203,13 @@ export async function createGoalSkip(input: unknown) {
     }
   });
 
-  revalidateSkipPaths();
+  revalidateSkipPaths(authedUser?.id);
 }
 
 export async function revokeCommitmentSkip(input: unknown) {
   assertSkipsPersistence();
   const payload = revokeByIdSchema.parse(input);
-  const { budget } = await getBudgetContext();
+  const { authedUser, budget } = await getBudgetContext();
   const prisma = getPrismaClient();
 
   await prisma.$transaction(async (tx) => {
@@ -233,13 +235,13 @@ export async function revokeCommitmentSkip(input: unknown) {
     });
   });
 
-  revalidateSkipPaths();
+  revalidateSkipPaths(authedUser?.id);
 }
 
 export async function revokeGoalSkip(input: unknown) {
   assertSkipsPersistence();
   const payload = revokeByIdSchema.parse(input);
-  const { budget } = await getBudgetContext();
+  const { authedUser, budget } = await getBudgetContext();
   const prisma = getPrismaClient();
 
   // Fix #24: wrap in a transaction so any future compensating writes remain atomic.
@@ -255,5 +257,5 @@ export async function revokeGoalSkip(input: unknown) {
     });
   });
 
-  revalidateSkipPaths();
+  revalidateSkipPaths(authedUser?.id);
 }

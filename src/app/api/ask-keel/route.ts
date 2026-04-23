@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 import { buildAskSonnetAnswerSystemPrompt } from "@/lib/ai/ask-answer-prompt";
 import { buildAskContextSnapshot } from "@/lib/ai/ask-context";
 import { validateFreeformCitations } from "@/lib/ai/ask-citations";
+import { composeAskContext } from "@/lib/ai/context/generators/compose-context";
 import { enforceAskResponseGrounding } from "@/lib/ai/ask-grounding";
 import { askResponseSchema, type AskKeelResponse } from "@/lib/ai/ask-keel-schema";
 import { createStreamingAskResponse } from "@/lib/ai/ask-stream";
@@ -370,10 +371,22 @@ export async function POST(request: Request) {
 
     const snapshot = await buildAskContextSnapshot({ userId });
 
+    // Plan 11 — compose the three-layer context (A: observed, B: learned, C: structural).
+    // Failing to compose must not break short-horizon answers, so we degrade gracefully.
+    let layered: Awaited<ReturnType<typeof composeAskContext>> | undefined;
+    try {
+      layered = await composeAskContext(userId);
+    } catch (err) {
+      console.error("[ask-keel] compose-context failed; falling back to snapshot-only prompt", {
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     const response = await client.messages.create({
       model: SONNET_MODEL,
       max_tokens: 700,
-      system: buildAskSonnetAnswerSystemPrompt(snapshot),
+      system: buildAskSonnetAnswerSystemPrompt(snapshot, layered),
       messages: [{ role: "user", content: message }],
     });
 

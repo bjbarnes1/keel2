@@ -1,11 +1,18 @@
 /**
  * Sonnet system prompt for Ask Keel structured JSON answers (non-streaming path).
  *
+ * Accepts an optional Plan 11 `ComposedContext` — when provided, the prompt carries the
+ * full three-layer context (observed / learned / structural) under a
+ * `LAYERED_CONTEXT_JSON` block, in addition to the short-horizon ref allow-list. The
+ * model is directed to cite Layer C confidence levels for any long-horizon claim.
+ *
  * @module lib/ai/ask-answer-prompt
  */
 
 import type { AskContextSnapshot } from "@/lib/ai/ask-context";
 import { formatAskSnapshotForPrompt } from "@/lib/ai/ask-context";
+import type { ComposedContext } from "@/lib/ai/context/schemas/composed-context";
+import { renderLayeredContextPrompt } from "@/lib/ai/context/render-prompt";
 
 /** Allowed `citations[].ref` values the model may cite (validated in {@link validateFreeformCitations}). */
 export function buildCitationRefAllowList(snapshot: AskContextSnapshot): string[] {
@@ -32,10 +39,14 @@ export function buildCitationRefAllowList(snapshot: AskContextSnapshot): string[
   return refs;
 }
 
-export function buildAskSonnetAnswerSystemPrompt(snapshot: AskContextSnapshot): string {
+export function buildAskSonnetAnswerSystemPrompt(
+  snapshot: AskContextSnapshot,
+  layered?: ComposedContext,
+): string {
   const snapshotPrompt = formatAskSnapshotForPrompt(snapshot);
   const refList = buildCitationRefAllowList(snapshot).join(", ");
-  return `${snapshotPrompt}
+  const layeredBlock = layered ? `\n\n${renderLayeredContextPrompt(layered)}` : "";
+  return `${snapshotPrompt}${layeredBlock}
 
 You are Keel's assistant for Australian household cashflow.
 

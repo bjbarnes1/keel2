@@ -86,6 +86,15 @@ export interface AvailableMoneyResult {
   commitmentReserves: CommitmentReserve[];
 }
 
+/**
+ * A single dated cashflow event in the projection timeline.
+ *
+ * **Vocabulary note:** the `type` discriminant uses `"bill"` as the internal identifier
+ * for an outgoing commitment event — this reflects the cashflow direction (money out) and
+ * is shared with {@link ScheduledCashflowEvent} from `skips.ts`. User-facing strings across
+ * the product use "commitment" (Plan 4 vocabulary audit). Do not rename the discriminant
+ * without updating every call site, test fixture, and persisted snapshot payload.
+ */
 export interface ProjectionEvent {
   id: string;
   date: string;

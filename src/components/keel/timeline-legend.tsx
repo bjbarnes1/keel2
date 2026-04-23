@@ -137,8 +137,9 @@ export function TimelineLegend({
     if (node) {
       const containerRect = container.getBoundingClientRect();
       const nodeRect = node.getBoundingClientRect();
-      const delta = nodeRect.top - containerRect.top - 8;
-      container.scrollBy({ top: delta, behavior: "smooth" });
+      // Instant assignment avoids queued smooth scrolls stacking up during continuous
+      // chart drags, which would cause visible jitter in the legend.
+      container.scrollTop += nodeRect.top - containerRect.top - 8;
     }
     const releaseId = setTimeout(() => {
       suppressEmitRef.current = false;
@@ -155,8 +156,10 @@ export function TimelineLegend({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
-      className="hide-scrollbar flex-1 overflow-y-auto"
-      style={{ WebkitOverflowScrolling: "touch" }}
+      className="hide-scrollbar overflow-y-auto"
+      // ~10 rows × 40px each; caps the legend so it doesn't fill the whole screen
+      // and makes the scroll container bounded so auto-scroll and scroll→chart sync work.
+      style={{ WebkitOverflowScrolling: "touch", maxHeight: 400 }}
     >
       {todays.length > 0 ? (
         <section className="mb-4">
