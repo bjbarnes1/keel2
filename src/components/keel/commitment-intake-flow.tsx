@@ -350,26 +350,29 @@ export function CommitmentIntakeFlow({
 
               <label className="block space-y-2">
                 <span className="text-xs text-muted-foreground">Amount (per occurrence)</span>
-                <input
-                  name="amount"
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="0.01"
-                  required
-                  value={Number.isFinite(draft.amount) ? draft.amount : 0}
-                  onChange={(event) =>
-                    setDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            amount: Number.parseFloat(event.target.value) || 0,
-                          }
-                        : current,
-                    )
-                  }
-                  className={cn(fieldClassName(), "font-mono")}
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm text-muted-foreground">$</span>
+                  <input
+                    name="amount"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.01"
+                    required
+                    value={Number.isFinite(draft.amount) ? draft.amount : 0}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              amount: Number.parseFloat(event.target.value) || 0,
+                            }
+                          : current,
+                      )
+                    }
+                    className={cn(fieldClassName(), "pl-8 font-mono")}
+                  />
+                </div>
               </label>
 
               <label className="block space-y-2">

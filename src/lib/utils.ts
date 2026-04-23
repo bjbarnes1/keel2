@@ -32,6 +32,18 @@ export function formatAud(amount: number) {
   return AUD_FORMATTER.format(amount);
 }
 
+const AUD_FIXED_FORMATTER = new Intl.NumberFormat("en-AU", {
+  style: "currency",
+  currency: "AUD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Formats a number as AUD always with exactly two decimal places (e.g. receipt/confirmation views). */
+export function formatAudFixed(amount: number) {
+  return AUD_FIXED_FORMATTER.format(amount);
+}
+
 export function sentenceCaseFrequency(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }

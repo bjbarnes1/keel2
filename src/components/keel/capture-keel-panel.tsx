@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * Capture page panel: calls `/api/capture` + Server Actions to persist parsed entities.
+ * Capture panel: the user describes something in plain language; Keel parses it and
+ * presents a receipt-style confirmation card. Seven fields collapse into typography.
+ * One primary action. The user confirms rather than completing.
  *
  * @module components/keel/capture-keel-panel
  */
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -15,9 +16,10 @@ import {
   createCommitmentFromCapture,
   createIncomeFromCapture,
 } from "@/app/actions/capture";
+import { KeelSelect } from "@/components/keel/keel-select";
 import { decodeCapturePrefillParam } from "@/lib/ai/capture-prefill";
 import type { AssetCapturePayload, CommitmentCapturePayload, IncomeCapturePayload } from "@/lib/ai/capture-schemas";
-import { cn, formatAud } from "@/lib/utils";
+import { cn, formatAudFixed, formatDisplayDate } from "@/lib/utils";
 
 type CaptureApiResponse =
   | { kind: "unknown" }
@@ -27,10 +29,30 @@ type CaptureApiResponse =
 
 type CategoryOption = { id: string; name: string; subcategories: Array<{ id: string; name: string }> };
 
+// --- Format helpers -----------------------------------------------------------
+
+function frequencyPhrase(f: string): string {
+  const map: Record<string, string> = {
+    weekly: "every week",
+    fortnightly: "every fortnight",
+    monthly: "every month",
+    quarterly: "every quarter",
+    annual: "annually",
+  };
+  return map[f] ?? f;
+}
+
+function buildDetailLine(amount: number, frequency: string, nextDate: string | null): string {
+  const parts = [`${formatAudFixed(amount)} ${frequencyPhrase(frequency)}`];
+  if (nextDate) parts.push(`starts ${formatDisplayDate(nextDate, "short-day")}`);
+  return parts.join(" · ");
+}
+
+// --- Main component -----------------------------------------------------------
+
 export function CaptureKeelPanel({ categories = [] }: { categories?: CategoryOption[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  /** Dedupes React Strict Mode double-invoke and re-navigation with the same Ask → Capture payload. */
   const prefillDigestApplied = useRef<string | null>(null);
   const forcedKindParam = searchParams.get("kind");
   const forcedKind =
@@ -39,32 +61,24 @@ export function CaptureKeelPanel({ categories = [] }: { categories?: CategoryOpt
       : undefined;
 
   const [sentence, setSentence] = useState("");
-  const [draftSentence, setDraftSentence] = useState("");
+  const [submittedSentence, setSubmittedSentence] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<CaptureApiResponse | null>(null);
-  const [preferForm, setPreferForm] = useState(false);
 
   const canSubmit = useMemo(() => sentence.trim().length > 0 && !pending, [sentence, pending]);
 
   useEffect(() => {
     const raw = searchParams.get("prefill");
-    if (!raw) {
-      return;
-    }
+    if (!raw) return;
     const decoded = decodeCapturePrefillParam(raw);
-    if (!decoded) {
-      return;
-    }
+    if (!decoded) return;
     const digest = `${decoded.sentence}::${decoded.capture.kind}::${decoded.capture.payload.name}`;
-    if (prefillDigestApplied.current === digest) {
-      return;
-    }
+    if (prefillDigestApplied.current === digest) return;
     prefillDigestApplied.current = digest;
-    setPreferForm(false);
     setError(null);
     setSentence(decoded.sentence);
-    setDraftSentence(decoded.sentence);
+    setSubmittedSentence(decoded.sentence);
     setPreview(decoded.capture);
     router.replace("/capture", { scroll: false });
   }, [router, searchParams]);
@@ -81,30 +95,22 @@ export function CaptureKeelPanel({ categories = [] }: { categories?: CategoryOpt
       const res = await fetch("/api/capture", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          sentence: trimmed,
-          ...(forcedKind ? { forcedKind } : {}),
-        }),
+        body: JSON.stringify({ sentence: trimmed, ...(forcedKind ? { forcedKind } : {}) }),
       });
 
       const json = (await res.json()) as CaptureApiResponse & { error?: string };
 
       if (!res.ok) {
-        if (res.status === 503) {
-          setError("Capture is offline right now.");
-          return;
-        }
-        setError(json.error ?? "Unable to capture.");
+        setError(res.status === 503 ? "Capture is offline right now." : (json.error ?? "Unable to capture."));
         return;
       }
-
       if ("error" in json && json.error) {
         setError(json.error);
         return;
       }
 
+      setSubmittedSentence(trimmed);
       setPreview(json as CaptureApiResponse);
-      setDraftSentence(trimmed);
     } catch {
       setError("Unable to capture.");
     } finally {
@@ -112,88 +118,25 @@ export function CaptureKeelPanel({ categories = [] }: { categories?: CategoryOpt
     }
   }
 
+  const showReceipt = preview && preview.kind !== "unknown";
+
   return (
     <div className="pb-28">
-      <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/15" aria-hidden="true" />
-
-      <div className="mb-4 flex items-center justify-end">
-        <Link href="/ask" className="text-xs font-medium text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]">
-          Ask
-        </Link>
-      </div>
-
-      <div
-        className="mb-4 inline-flex w-full rounded-[var(--radius-pill)] p-0.5 glass-clear"
-        role="tablist"
-        aria-label="Capture mode"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={!preferForm}
-          onClick={() => setPreferForm(false)}
-          className={cn(
-            "flex-1 rounded-[calc(var(--radius-pill)-2px)] px-3 py-2 text-xs font-medium transition-colors",
-            !preferForm
-              ? "glass-tint-safe text-[color:var(--keel-ink)]"
-              : "text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]",
-          )}
-        >
-          Describe it
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={preferForm}
-          onClick={() => setPreferForm(true)}
-          className={cn(
-            "flex-1 rounded-[calc(var(--radius-pill)-2px)] px-3 py-2 text-xs font-medium transition-colors",
-            preferForm
-              ? "glass-tint-safe text-[color:var(--keel-ink)]"
-              : "text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]",
-          )}
-        >
-          Prefer a form
-        </button>
-      </div>
-
-      {preferForm ? (
-        <div className="glass-clear rounded-[var(--radius-lg)] p-4 text-sm leading-6 text-[color:var(--keel-ink-2)]">
-          <p className="text-[color:var(--keel-ink)]">Structured forms</p>
-          <p className="mt-2 text-[color:var(--keel-ink-3)]">
-            Conversational capture is the default—switch back anytime. Forms are here when you want fields
-            instead of a sentence.
-          </p>
-          <ul className="mt-4 space-y-2">
-            {(!forcedKind || forcedKind === "commitment") && (
-              <li>
-                <Link
-                  href="/commitments/new/manual"
-                  className="font-medium text-[color:var(--keel-safe-soft)] hover:underline"
-                >
-                  Add commitment (form)
-                </Link>
-              </li>
-            )}
-            {(!forcedKind || forcedKind === "income") && (
-              <li>
-                <Link
-                  href="/incomes/new"
-                  className="font-medium text-[color:var(--keel-safe-soft)] hover:underline"
-                >
-                  Add income (form)
-                </Link>
-              </li>
-            )}
-            {(!forcedKind || forcedKind === "asset") && (
-              <li>
-                <Link href="/wealth/new" className="font-medium text-[color:var(--keel-safe-soft)] hover:underline">
-                  Add holding (form)
-                </Link>
-              </li>
-            )}
-          </ul>
-        </div>
+      {showReceipt ? (
+        <ReceiptCard
+          preview={preview as Extract<CaptureApiResponse, { kind: "commitment" | "income" | "asset" }>}
+          sentence={submittedSentence}
+          categories={categories}
+          onReset={() => {
+            setSentence(submittedSentence);
+            setPreview(null);
+          }}
+          onCommitted={() => {
+            setSentence("");
+            setPreview(null);
+            setSubmittedSentence("");
+          }}
+        />
       ) : (
         <>
           <label className="block">
@@ -201,9 +144,15 @@ export function CaptureKeelPanel({ categories = [] }: { categories?: CategoryOpt
             <textarea
               value={sentence}
               onChange={(e) => setSentence(e.target.value)}
-              placeholder="Tell Keel what you want to add"
+              placeholder="Tell Keel, in your own words"
               rows={3}
               className="glass-clear w-full resize-none rounded-[var(--radius-lg)] px-3 py-3 text-sm text-[color:var(--keel-ink)] outline-none placeholder:text-[color:var(--keel-ink-4)]"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (canSubmit) void runCapture(sentence);
+                }
+              }}
             />
           </label>
 
@@ -216,7 +165,7 @@ export function CaptureKeelPanel({ categories = [] }: { categories?: CategoryOpt
               canSubmit ? "glass-tint-safe text-[color:var(--keel-ink)]" : "glass-clear opacity-40",
             )}
           >
-            Capture
+            {pending ? "Understanding…" : "Capture"}
           </button>
 
           {error ? <p className="mt-3 text-sm text-[color:var(--keel-attend)]">{error}</p> : null}
@@ -226,58 +175,51 @@ export function CaptureKeelPanel({ categories = [] }: { categories?: CategoryOpt
               I can help with commitments, income, and assets — try &apos;my electricity is $240 a quarter&apos;
             </div>
           ) : null}
-
-          {preview && preview.kind !== "unknown" ? (
-            <PreviewCard
-              preview={preview}
-              categories={categories}
-              onReset={() => {
-                setSentence(draftSentence);
-                setPreview(null);
-              }}
-              onCommitted={() => {
-                setSentence("");
-                setPreview(null);
-                setDraftSentence("");
-              }}
-            />
-          ) : null}
         </>
       )}
     </div>
   );
 }
 
-function PreviewCard({
+// --- Receipt card -------------------------------------------------------------
+
+function ReceiptCard({
   preview,
+  sentence,
   categories,
   onReset,
   onCommitted,
 }: {
   preview: Extract<CaptureApiResponse, { kind: "commitment" | "income" | "asset" }>;
+  sentence: string;
   categories: CategoryOption[];
   onReset: () => void;
   onCommitted: () => void;
 }) {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [commitment, setCommitment] = useState<CommitmentCapturePayload | null>(
-    preview.kind === "commitment" ? preview.payload : null,
+  const [category, setCategory] = useState(
+    preview.kind === "commitment" ? preview.payload.category : "",
   );
-  const [income, setIncome] = useState<IncomeCapturePayload | null>(preview.kind === "income" ? preview.payload : null);
-  const [asset, setAsset] = useState<AssetCapturePayload | null>(preview.kind === "asset" ? preview.payload : null);
+
+  const categoryOptions = useMemo(
+    () => categories.map((c) => ({ value: c.name, label: c.name })),
+    [categories],
+  );
+
+  const isNewCategory = category !== "" && categories.length > 0 &&
+    !categories.some((c) => c.name.toLowerCase() === category.toLowerCase());
 
   async function commit() {
     setWorking(true);
     setError(null);
     try {
-      if (preview.kind === "commitment" && commitment) {
-        await createCommitmentFromCapture(commitment);
-      } else if (preview.kind === "income" && income) {
-        await createIncomeFromCapture(income);
-      } else if (preview.kind === "asset" && asset) {
-        await createAssetFromCapture(asset);
+      if (preview.kind === "commitment") {
+        await createCommitmentFromCapture({ ...preview.payload, category });
+      } else if (preview.kind === "income") {
+        await createIncomeFromCapture(preview.payload);
+      } else if (preview.kind === "asset") {
+        await createAssetFromCapture(preview.payload);
       }
       onCommitted();
     } catch (e) {
@@ -289,207 +231,194 @@ function PreviewCard({
   }
 
   const ctaLabel =
-    preview.kind === "commitment" ? "Add to Commitments" : preview.kind === "income" ? "Add as Income" : "Add to Wealth";
+    preview.kind === "commitment"
+      ? "Add to commitments"
+      : preview.kind === "income"
+        ? "Add as income"
+        : "Add to wealth";
 
   return (
-    <section className="glass-clear mt-5 rounded-[var(--radius-xl)] p-4">
-      <div className="space-y-3">
-        {preview.kind === "commitment" && commitment ? (
-          <>
-            <Field label="Name" value={commitment.name} onChange={(v) => setCommitment({ ...commitment, name: v })} />
-            <Field
-              label="Amount"
-              value={String(commitment.amount)}
-              onChange={(v) => setCommitment({ ...commitment, amount: Number.parseFloat(v || "0") })}
-            />
-            <Field
-              label="Frequency"
-              value={commitment.frequency}
-              onChange={(v) =>
-                setCommitment({ ...commitment, frequency: v as CommitmentCapturePayload["frequency"] })
-              }
-            />
-            <Field
-              label="Next due"
-              value={commitment.nextDueDate ?? ""}
-              onChange={(v) => setCommitment({ ...commitment, nextDueDate: v ? v : null })}
-            />
-            <CategoryField
-              label="Category"
-              value={commitment.category}
-              categories={categories}
-              onChange={(v) => setCommitment({ ...commitment, category: v })}
-            />
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-[color:var(--keel-ink-3)]">Per-pay reserve</span>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm tabular-nums text-[color:var(--keel-ink)]">{formatAud(commitment.perPay)}</span>
-                {commitment.perPayAuto ? (
-                  <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] font-semibold text-[color:var(--keel-ink-3)]">
-                    Auto
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </>
-        ) : null}
+    <div className="space-y-3">
+      {/* "You said" anchor */}
+      {sentence ? (
+        <div className="glass-clear rounded-[var(--radius-lg)] px-4 py-3">
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--keel-ink-4)]">
+            You said
+          </p>
+          <p className="text-sm leading-6 text-[color:var(--keel-ink-2)]">{sentence}</p>
+        </div>
+      ) : null}
 
-        {preview.kind === "income" && income ? (
-          <>
-            <Field label="Name" value={income.name} onChange={(v) => setIncome({ ...income, name: v })} />
-            <Field
-              label="Amount"
-              value={String(income.amount)}
-              onChange={(v) => setIncome({ ...income, amount: Number.parseFloat(v || "0") })}
-            />
-            <Field
-              label="Frequency"
-              value={income.frequency}
-              onChange={(v) => setIncome({ ...income, frequency: v as IncomeCapturePayload["frequency"] })}
-            />
-            <Field
-              label="Next pay"
-              value={income.nextPayDate ?? ""}
-              onChange={(v) => setIncome({ ...income, nextPayDate: v ? v : null })}
-            />
-            <label className="flex items-center justify-between gap-3 text-sm text-[color:var(--keel-ink-2)]">
-              <span>Primary income</span>
-              <input
-                type="checkbox"
-                checked={Boolean(income.isPrimary)}
-                onChange={(e) => setIncome({ ...income, isPrimary: e.target.checked })}
-                aria-label="Use as primary income for goals"
-              />
-            </label>
-          </>
-        ) : null}
+      {/* Receipt card */}
+      <section className="glass-clear rounded-[var(--radius-xl)] p-4">
+        <p className="mb-3 text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--keel-safe-soft)]">
+          Here&apos;s what I heard
+        </p>
 
-        {preview.kind === "asset" && asset ? (
-          <>
-            <Field label="Name" value={asset.name} onChange={(v) => setAsset({ ...asset, name: v })} />
-            <Field label="Type" value={asset.assetType} onChange={(v) => setAsset({ ...asset, assetType: v })} />
-            <Field label="Symbol" value={asset.symbol ?? ""} onChange={(v) => setAsset({ ...asset, symbol: v || null })} />
-            <Field
-              label="Quantity"
-              value={String(asset.quantity)}
-              onChange={(v) => setAsset({ ...asset, quantity: Number.parseFloat(v || "0") })}
-            />
-            <Field
-              label="Unit price"
-              value={asset.unitPrice == null ? "" : String(asset.unitPrice)}
-              onChange={(v) => setAsset({ ...asset, unitPrice: v ? Number.parseFloat(v) : null })}
-            />
-            <Field
-              label="Value override"
-              value={asset.valueOverride == null ? "" : String(asset.valueOverride)}
-              onChange={(v) => setAsset({ ...asset, valueOverride: v ? Number.parseFloat(v) : null })}
-            />
-          </>
-        ) : null}
-      </div>
-
-      {error ? <p className="mt-3 text-sm text-[color:var(--keel-attend)]">{error}</p> : null}
-
-      <button
-        type="button"
-        disabled={working}
-        onClick={() => void commit()}
-        className="glass-tint-safe mt-4 w-full rounded-[var(--radius-pill)] px-4 py-3 text-sm font-semibold text-[color:var(--keel-ink)] disabled:opacity-40"
-      >
-        {ctaLabel}
-      </button>
-
-      <button type="button" className="mt-3 w-full text-sm text-[color:var(--keel-ink-3)]" onClick={onReset}>
-        Not quite right — tell Keel more
-      </button>
-    </section>
-  );
-}
-
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) {
-  return (
-    <label className="block">
-      <span className="text-[11px] font-medium text-[color:var(--keel-ink-4)]">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-sm text-[color:var(--keel-ink)] outline-none ring-1 ring-white/10"
-      />
-    </label>
-  );
-}
-
-function CategoryField({
-  label,
-  value,
-  categories,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  categories: CategoryOption[];
-  onChange: (next: string) => void;
-}) {
-  const [customMode, setCustomMode] = useState(false);
-
-  // If the AI returned a name not in the list, start in custom mode so the user
-  // can see the suggested value and change it or pick from the dropdown.
-  const matchedInList = categories.some((c) => c.name.toLowerCase() === value.toLowerCase());
-
-  if (customMode || (!matchedInList && categories.length > 0)) {
-    return (
-      <label className="block">
-        <span className="text-[11px] font-medium text-[color:var(--keel-ink-4)]">{label}</span>
-        <div className="mt-1 flex gap-2">
-          <input
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="New category name"
-            className="min-w-0 flex-1 rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-sm text-[color:var(--keel-ink)] outline-none ring-1 ring-white/10"
+        {preview.kind === "commitment" && (
+          <CommitmentReceipt
+            payload={preview.payload}
+            category={category}
+            isNewCategory={isNewCategory}
+            categoryOptions={categoryOptions}
+            onCategoryChange={setCategory}
           />
-          {categories.length > 0 && (
+        )}
+
+        {preview.kind === "income" && <IncomeReceipt payload={preview.payload} />}
+
+        {preview.kind === "asset" && <AssetReceipt payload={preview.payload} />}
+
+        {error ? <p className="mt-3 text-sm text-[color:var(--keel-attend)]">{error}</p> : null}
+
+        <button
+          type="button"
+          disabled={working}
+          onClick={() => void commit()}
+          className="mt-5 w-full rounded-[var(--radius-pill)] px-4 py-3 text-sm font-semibold text-[color:var(--keel-ink)] glass-tint-safe disabled:opacity-40"
+        >
+          {working ? "Adding…" : ctaLabel}
+        </button>
+
+        <button
+          type="button"
+          className="mt-3 w-full text-sm text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]"
+          onClick={onReset}
+        >
+          Not quite right — tell Keel more
+        </button>
+      </section>
+    </div>
+  );
+}
+
+// --- Receipt sub-views --------------------------------------------------------
+
+function CommitmentReceipt({
+  payload,
+  category,
+  isNewCategory,
+  categoryOptions,
+  onCategoryChange,
+}: {
+  payload: CommitmentCapturePayload;
+  category: string;
+  isNewCategory: boolean;
+  categoryOptions: { value: string; label: string }[];
+  onCategoryChange: (v: string) => void;
+}) {
+  const [editingCategory, setEditingCategory] = useState(false);
+
+  return (
+    <>
+      <h2 className="text-2xl font-bold text-[color:var(--keel-ink)]">{payload.name}</h2>
+      <p className="mt-1 text-sm text-[color:var(--keel-ink-3)]">
+        {buildDetailLine(payload.amount, payload.frequency, payload.nextDueDate)}
+      </p>
+
+      <div className="my-4 border-t border-white/10" />
+
+      <div className="space-y-3">
+        {/* Category */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-[color:var(--keel-ink-3)]">Category</span>
+          {editingCategory && categoryOptions.length > 0 ? (
+            <div className="w-44">
+              <KeelSelect
+                value={category}
+                options={categoryOptions}
+                onChange={(v) => {
+                  onCategoryChange(v);
+                  setEditingCategory(false);
+                }}
+                footer={
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink)]"
+                    onClick={() => setEditingCategory(false)}
+                  >
+                    <span className="text-[color:var(--keel-safe-soft)]">+</span> New category
+                  </button>
+                }
+              />
+            </div>
+          ) : (
             <button
               type="button"
-              onClick={() => {
-                setCustomMode(false);
-                onChange(categories[0]?.name ?? "");
-              }}
-              className="shrink-0 rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-xs text-[color:var(--keel-ink-3)] ring-1 ring-white/10"
+              onClick={() => categoryOptions.length > 0 && setEditingCategory(true)}
+              className={cn(
+                "keel-chip text-xs",
+                categoryOptions.length > 0 && "cursor-pointer hover:bg-white/10",
+              )}
             >
-              Pick existing
+              {category || "Uncategorised"}
+              {isNewCategory && (
+                <span className="ml-1 text-[color:var(--keel-safe-soft)]">&middot; new</span>
+              )}
             </button>
           )}
         </div>
-        <p className="mt-1 text-[10px] text-[color:var(--keel-ink-4)]">
-          This will create a new category in your budget.
-        </p>
-      </label>
-    );
-  }
 
-  return (
-    <label className="block">
-      <span className="text-[11px] font-medium text-[color:var(--keel-ink-4)]">{label}</span>
-      <div className="mt-1 flex gap-2">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="min-w-0 flex-1 rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-sm text-[color:var(--keel-ink)] outline-none ring-1 ring-white/10"
-        >
-          {categories.map((c) => (
-            <option key={c.id} value={c.name}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={() => setCustomMode(true)}
-          className="shrink-0 rounded-[var(--radius-md)] bg-black/25 px-3 py-2 text-xs text-[color:var(--keel-ink-3)] ring-1 ring-white/10"
-        >
-          + New
-        </button>
+        {/* Per-pay reserve */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-[color:var(--keel-ink-3)]">Per-pay reserve</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-sm tabular-nums text-[color:var(--keel-ink)]">
+              {formatAudFixed(payload.perPay)}
+            </span>
+            {payload.perPayAuto && (
+              <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-[color:var(--keel-ink-3)]">
+                auto
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Funded from (default) */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-[color:var(--keel-ink-3)]">Funded from</span>
+          <span className="text-sm text-[color:var(--keel-ink-2)]">Primary income</span>
+        </div>
       </div>
-    </label>
+    </>
+  );
+}
+
+function IncomeReceipt({ payload }: { payload: IncomeCapturePayload }) {
+  return (
+    <>
+      <h2 className="text-2xl font-bold text-[color:var(--keel-ink)]">{payload.name}</h2>
+      <p className="mt-1 text-sm text-[color:var(--keel-ink-3)]">
+        {buildDetailLine(payload.amount, payload.frequency, payload.nextPayDate)}
+      </p>
+      {payload.isPrimary && (
+        <div className="mt-4">
+          <span className="keel-chip text-xs text-[color:var(--keel-safe-soft)]">Primary income</span>
+        </div>
+      )}
+    </>
+  );
+}
+
+function AssetReceipt({ payload }: { payload: AssetCapturePayload }) {
+  const value = payload.valueOverride ?? (payload.unitPrice != null ? payload.quantity * payload.unitPrice : null);
+  return (
+    <>
+      <h2 className="text-2xl font-bold text-[color:var(--keel-ink)]">{payload.name}</h2>
+      <p className="mt-1 text-sm text-[color:var(--keel-ink-3)]">
+        {payload.assetType}
+        {payload.symbol ? ` · ${payload.symbol}` : ""}
+        {value != null ? ` · ${formatAudFixed(value)}` : ""}
+      </p>
+      {payload.quantity !== 1 && (
+        <div className="my-4 border-t border-white/10" />
+      )}
+      {payload.quantity !== 1 && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-[color:var(--keel-ink-3)]">Quantity</span>
+          <span className="font-mono text-sm text-[color:var(--keel-ink)]">{payload.quantity}</span>
+        </div>
+      )}
+    </>
   );
 }
