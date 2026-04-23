@@ -49,6 +49,9 @@ export function buildCitationRefAllowList(snapshot: AskContextSnapshot): string[
     if (g.targetAmount != null) refs.push(`goal:${g.id}:targetAmount`);
     if (g.targetDate) refs.push(`goal:${g.id}:targetDate`);
   }
+  for (const cat of snapshot.categoryTotals ?? []) {
+    refs.push(`category:${cat.category}:annual_total`);
+  }
   return refs;
 }
 

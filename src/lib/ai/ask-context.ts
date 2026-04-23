@@ -26,7 +26,7 @@ export type AskContextSnapshot = {
     totalReserved: number;
     totalGoalContributions: number;
   };
-  /** Next slice of projection events for “when is my next pay” style questions. */
+  /** Next slice of projection events for "when is my next pay" style questions. */
   upcomingEvents: Array<{
     date: string;
     type: "income" | "bill";
@@ -61,6 +61,12 @@ export type AskContextSnapshot = {
     currentBalance: number;
     targetAmount?: number;
     targetDate?: string;
+  }>;
+  /** Annual spending totals grouped by category — lets the AI answer "what does X cost?" questions. */
+  categoryTotals?: Array<{
+    category: string;
+    annualTotal: number;
+    commitmentIds: string[];
   }>;
 };
 
@@ -138,6 +144,25 @@ export async function buildAskContextSnapshot(opts?: { userId?: string }): Promi
     annualCommitmentsTotal += annualizeAmount(c.amount, c.frequency as CommitmentFrequency);
   }
 
+  // Group commitments by category and compute annual totals for category-level Q&A.
+  const categoryMap = new Map<string, { annualTotal: number; commitmentIds: string[] }>();
+  for (const c of activeCommitments) {
+    const cat = c.category || "Uncategorised";
+    const annual = annualizeAmount(c.amount, c.frequency as CommitmentFrequency);
+    const existing = categoryMap.get(cat);
+    if (existing) {
+      existing.annualTotal += annual;
+      existing.commitmentIds.push(c.id);
+    } else {
+      categoryMap.set(cat, { annualTotal: annual, commitmentIds: [c.id] });
+    }
+  }
+  const categoryTotals = Array.from(categoryMap.entries()).map(([category, data]) => ({
+    category,
+    annualTotal: roundMoney(data.annualTotal),
+    commitmentIds: data.commitmentIds,
+  }));
+
   const snapshot: AskContextSnapshot = {
     balanceAsOf: state.user.balanceAsOf,
     bankBalance: state.user.bankBalance,
@@ -175,6 +200,7 @@ export async function buildAskContextSnapshot(opts?: { userId?: string }): Promi
       targetAmount: g.targetAmount,
       targetDate: g.targetDate,
     })),
+    categoryTotals: categoryTotals.length > 0 ? categoryTotals : undefined,
   };
 
   if (userId) {

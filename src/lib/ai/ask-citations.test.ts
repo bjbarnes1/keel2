@@ -12,8 +12,13 @@ const snapshot: AskContextSnapshot = {
   incomes: [{ id: "i1", name: "Salary", amount: 4000, frequency: "fortnightly", nextPayDate: "2025-01-10" }],
   commitments: [
     { id: "c1", name: "Rent", amount: 500, frequency: "weekly", nextDueDate: "2025-01-05", category: "Housing" },
+    { id: "c2", name: "Physio", amount: 100, frequency: "monthly", nextDueDate: "2025-01-15", category: "Health" },
   ],
   goals: [{ id: "g1", name: "Holiday", contributionPerPay: 50, currentBalance: 200, targetAmount: 2000 }],
+  categoryTotals: [
+    { category: "Housing", annualTotal: 26000, commitmentIds: ["c1"] },
+    { category: "Health", annualTotal: 1200, commitmentIds: ["c2"] },
+  ],
 };
 
 describe("buildCitationRefMap", () => {
@@ -23,6 +28,12 @@ describe("buildCitationRefMap", () => {
     expect(m.get("income:i1:amount")?.amount).toBe(4000);
     expect(m.get("commitment:c1:nextDueDate")?.dateIso).toBe("2025-01-05");
     expect(m.get("goal:g1:currentBalance")?.amount).toBe(200);
+  });
+
+  it("includes category annual total refs", () => {
+    const m = buildCitationRefMap(snapshot);
+    expect(m.get("category:Health:annual_total")?.amount).toBe(1200);
+    expect(m.get("category:Housing:annual_total")?.amount).toBe(26000);
   });
 });
 
@@ -51,5 +62,13 @@ describe("validateFreeformCitations", () => {
       snapshot,
     );
     expect(r.ok).toBe(false);
+  });
+
+  it("accepts a category annual_total citation", () => {
+    const r = validateFreeformCitations(
+      [{ ref: "category:Health:annual_total", label: "Health total", amount: 1200 }],
+      snapshot,
+    );
+    expect(r).toEqual({ ok: true });
   });
 });

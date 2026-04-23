@@ -46,6 +46,9 @@ export function buildCitationRefMap(snapshot: AskContextSnapshot): Map<string, {
     if (g.targetAmount != null) m.set(`goal:${g.id}:targetAmount`, { amount: g.targetAmount });
     if (g.targetDate) m.set(`goal:${g.id}:targetDate`, { dateIso: g.targetDate });
   }
+  for (const cat of snapshot.categoryTotals ?? []) {
+    m.set(`category:${cat.category}:annual_total`, { amount: cat.annualTotal });
+  }
   return m;
 }
 
