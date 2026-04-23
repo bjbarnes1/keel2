@@ -120,10 +120,8 @@ export async function POST(request: Request) {
       return privateJson({ data: refusal });
     }
 
-    if (wantsStream) {
-      return createStreamingAskResponse({ client, userId, message });
-    }
-
+    // Classify intent once, before the streaming decision, so non-answer intents
+    // (capture, scenario, out_of_scope) are always handled here — streaming or not.
     const ceiling = defaultAiCostCeilingCentsAud();
     if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {
       return privateJson({ data: quotaResponse });
@@ -374,6 +372,11 @@ export async function POST(request: Request) {
       };
 
       return privateJson({ data: askResponseSchema.parse(dataOut) });
+    }
+
+    // "answer" intent — stream if the client requested it (intent already classified above).
+    if (wantsStream) {
+      return createStreamingAskResponse({ client, userId, message, intent });
     }
 
     if ((await assertWithinAiCostCeil({ userId, ceilingCentsAud: ceiling })).ok === false) {

@@ -13,7 +13,7 @@ import { z } from "zod";
 
 import { buildAskContextSnapshot, formatAskSnapshotForPrompt } from "@/lib/ai/ask-context";
 import { validateFreeformCitations } from "@/lib/ai/ask-citations";
-import { classifyAskIntent } from "@/lib/ai/classify-ask";
+import type { AskIntentClassification } from "@/lib/ai/classify-ask";
 import { askResponseSchema, type AskKeelResponse } from "@/lib/ai/ask-keel-schema";
 import { extractJsonObject } from "@/lib/ai/parse-capture";
 import {
@@ -91,13 +91,17 @@ function ndjsonLine(obj: unknown) {
 }
 
 /**
- * Builds an HTTP streaming response for Ask when the client sets `{ stream: true }`
- * and intent resolves to a normal in-scope answer.
+ * Builds an HTTP streaming response for Ask when the client sets `{ stream: true }`.
+ *
+ * `intent` must already be classified by the caller (route.ts) — this avoids a duplicate
+ * Haiku call and guarantees only "answer"-kind intents reach the streaming prose path.
+ * Non-answer intents should be handled before calling this function.
  */
 export function createStreamingAskResponse(input: {
   client: Anthropic;
   userId: string;
   message: string;
+  intent: AskIntentClassification;
 }): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -112,22 +116,6 @@ export function createStreamingAskResponse(input: {
               type: "freeform",
               headline: "You've used Ask Keel's quota for today.",
               body: "It'll refresh tomorrow.",
-            }),
-          });
-          controller.close();
-          return;
-        }
-
-        const intent = await classifyAskIntent(input.client, input.message);
-        await trackAnthropicCompletion({ userId: input.userId, model: HAIKU_MODEL, usage: intent.usage });
-
-        if (intent.kind !== "answer") {
-          send({
-            type: "complete",
-            data: askResponseSchema.parse({
-              type: "freeform",
-              headline: "Streaming is for quick questions",
-              body: "Turn off streaming for scenarios, capture, or longer structured answers.",
             }),
           });
           controller.close();
