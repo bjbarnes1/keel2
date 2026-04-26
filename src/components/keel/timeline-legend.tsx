@@ -20,14 +20,13 @@
  * @module components/keel/timeline-legend
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ProjectionEvent } from "@/lib/engine/keel";
 import type { SyncSource } from "@/lib/hooks/use-timeline-sync";
 import { toIsoDate } from "@/lib/timeline/waterline-geometry";
 import { cn, formatAud, formatDisplayDate } from "@/lib/utils";
 
-const SCROLL_SETTLE_MS = 250;
 
 function opacityForUpcoming(iso: string, focalIso: string): number {
   const target = new Date(`${iso}T00:00:00Z`).getTime();
@@ -83,39 +82,44 @@ export function TimelineLegend({
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef(new Map<string, HTMLElement | null>());
-  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRafRef = useRef<number>(0);
   const suppressEmitRef = useRef(false);
 
   useEffect(() => {
     return () => {
-      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
     };
   }, []);
 
-  const handleScroll = () => {
+  const findAndEmitAnchorRow = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const containerTop = container.getBoundingClientRect().top;
+    let closestIso: string | null = null;
+    let closestDelta = Number.POSITIVE_INFINITY;
+    for (const [iso, node] of rowRefs.current) {
+      if (!node) continue;
+      const rect = node.getBoundingClientRect();
+      const delta = rect.top - containerTop;
+      if (delta < -20) continue; // row is above the fold
+      if (Math.abs(delta) < Math.abs(closestDelta)) {
+        closestDelta = delta;
+        closestIso = iso;
+      }
+    }
+    if (closestIso) {
+      onScroll(new Date(`${closestIso}T00:00:00Z`));
+    }
+  }, [onScroll]);
+
+  const handleScroll = useCallback(() => {
     if (suppressEmitRef.current) return;
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-    settleTimerRef.current = setTimeout(() => {
-      const container = scrollRef.current;
-      if (!container) return;
-      const containerTop = container.getBoundingClientRect().top;
-      let closestIso: string | null = null;
-      let closestDelta = Number.POSITIVE_INFINITY;
-      for (const [iso, node] of rowRefs.current) {
-        if (!node) continue;
-        const rect = node.getBoundingClientRect();
-        const delta = rect.top - containerTop;
-        if (delta < -20) continue; // row is above the viewport
-        if (Math.abs(delta) < Math.abs(closestDelta)) {
-          closestDelta = delta;
-          closestIso = iso;
-        }
-      }
-      if (closestIso) {
-        onScroll(new Date(`${closestIso}T00:00:00Z`));
-      }
-    }, SCROLL_SETTLE_MS);
-  };
+    if (scrollRafRef.current) return; // already queued for this frame
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = 0;
+      if (!suppressEmitRef.current) findAndEmitAnchorRow();
+    });
+  }, [findAndEmitAnchorRow]);
 
   // --- Chart → legend auto-scroll ------------------------------------------
 

@@ -32,8 +32,8 @@
  * Timing:
  *   - Chart updates: state mutates *immediately* (swipes need to feel instant) and the
  *     source claim is held for SOURCE_LOCKOUT_MS before resetting to null.
- *   - Legend updates: debounced by LEGEND_DEBOUNCE_MS (scroll listeners fire often).
- *     After debounce resolves, the state mutates and SOURCE_LOCKOUT_MS lockout kicks in.
+ *   - Legend updates: also immediate. The legend component throttles via rAF so scroll
+ *     events arrive at most once per frame; no additional debounce is needed here.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -75,7 +75,6 @@ export function useTimelineSync(initialDate?: Date): UseTimelineSyncReturn {
   }));
 
   const sourceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const legendDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -83,7 +82,6 @@ export function useTimelineSync(initialDate?: Date): UseTimelineSyncReturn {
     return () => {
       mountedRef.current = false;
       if (sourceTimeoutRef.current) clearTimeout(sourceTimeoutRef.current);
-      if (legendDebounceRef.current) clearTimeout(legendDebounceRef.current);
     };
   }, []);
 
@@ -105,12 +103,8 @@ export function useTimelineSync(initialDate?: Date): UseTimelineSyncReturn {
 
   const setFocalDateFromLegend = useCallback(
     (date: Date) => {
-      if (legendDebounceRef.current) clearTimeout(legendDebounceRef.current);
-      legendDebounceRef.current = setTimeout(() => {
-        if (!mountedRef.current) return;
-        setState((prev) => applyFocalUpdate(prev, "legend", date));
-        scheduleSourceReset();
-      }, LEGEND_DEBOUNCE_MS);
+      setState((prev) => applyFocalUpdate(prev, "legend", date));
+      scheduleSourceReset();
     },
     [scheduleSourceReset],
   );

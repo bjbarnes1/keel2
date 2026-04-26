@@ -99,7 +99,7 @@ export function TimelineView({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative" style={{ paddingTop: 8 }}>
+      <div className="sticky top-14 z-10 bg-background" style={{ paddingTop: 8 }}>
         {/* Available Money pinned card, centered on the Now line. */}
         <div
           className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2"
