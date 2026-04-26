@@ -46,13 +46,13 @@ export const MAX_HORIZON_DAYS = 24 * 7;
 export const INITIAL_CENTER_OFFSET_DAYS = 21;
 
 /** Size of the initial chunk loaded on mount. */
-export const INITIAL_CHUNK_DAYS = 42;
+export const INITIAL_CHUNK_DAYS = 84;
 
 /** Size of adjacent pre-fetch chunks. */
-export const ADJACENT_CHUNK_DAYS = 28;
+export const ADJACENT_CHUNK_DAYS = 56;
 
 /** How close `focalDate` must get to the window edge before triggering a pre-fetch. */
-export const EDGE_DISTANCE_DAYS = 5;
+export const EDGE_DISTANCE_DAYS = 14;
 
 /** Distance from the 24-week limit at which we flag `hasReachedMaxHorizon`. */
 export const MAX_HORIZON_WARN_DAYS = 14;
