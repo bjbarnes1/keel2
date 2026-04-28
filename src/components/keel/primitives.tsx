@@ -374,6 +374,97 @@ export function SurfaceCard({
   );
 }
 
+export function ProgressMeter({
+  value,
+  max,
+  tone = "safe",
+  className,
+}: {
+  value: number;
+  max: number;
+  tone?: "safe" | "attend" | "accent";
+  className?: string;
+}) {
+  const ratio = max > 0 ? Math.min(Math.max(value / max, 0), 1) : 0;
+  const color =
+    tone === "attend"
+      ? "var(--keel-attend)"
+      : tone === "accent"
+        ? "var(--color-accent)"
+        : "var(--keel-safe)";
+
+  return (
+    <div
+      className={cn(
+        "h-1.5 overflow-hidden rounded-full bg-[color:color-mix(in_oklab,var(--keel-ink),transparent_92%)]",
+        className,
+      )}
+    >
+      <div
+        className="h-full rounded-full transition-[width] duration-300"
+        style={{ width: `${Math.round(ratio * 100)}%`, backgroundColor: color }}
+      />
+    </div>
+  );
+}
+
+export function MetricStatCard({
+  label,
+  value,
+  tone = "safe",
+  hint,
+  progress,
+}: {
+  label: string;
+  value: string;
+  tone?: "safe" | "attend" | "accent";
+  hint?: string;
+  progress?: { value: number; max: number };
+}) {
+  const valueColor =
+    tone === "attend"
+      ? "text-[color:var(--keel-attend)]"
+      : tone === "accent"
+        ? "text-primary"
+        : "text-[color:var(--keel-safe)]";
+
+  return (
+    <div className="glass-clear keel-surface-soft rounded-[var(--radius-sm)] p-3">
+      <p className="text-[11px] uppercase tracking-wide text-[color:var(--keel-ink-4)]">{label}</p>
+      <p className={cn("mt-1 font-mono text-xl font-semibold tabular-nums", valueColor)}>{value}</p>
+      {hint ? <p className="mt-1 text-[11px] text-[color:var(--keel-ink-4)]">{hint}</p> : null}
+      {progress ? <ProgressMeter value={progress.value} max={progress.max} tone={tone} className="mt-2" /> : null}
+    </div>
+  );
+}
+
+export function InsightTile({
+  title,
+  body,
+  tone = "safe",
+}: {
+  title: string;
+  body: string;
+  tone?: "safe" | "attend" | "accent";
+}) {
+  const badge =
+    tone === "attend"
+      ? "bg-[color:color-mix(in_oklab,var(--keel-attend),transparent_78%)] text-[color:var(--keel-attend)]"
+      : tone === "accent"
+        ? "bg-[color:color-mix(in_oklab,var(--color-accent),transparent_84%)] text-primary"
+        : "bg-[color:color-mix(in_oklab,var(--keel-safe),transparent_82%)] text-[color:var(--keel-safe)]";
+
+  return (
+    <div className="glass-clear keel-surface-soft rounded-[var(--radius-sm)] p-4">
+      <span className={cn("inline-block rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide", badge)}>
+        Insight
+      </span>
+      <p className="mt-3 text-sm font-semibold text-[color:var(--keel-ink)]">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-[color:var(--keel-ink-4)]">{body}</p>
+    </div>
+  );
+}
+
 export function IncomeCard({ income }: { income: IncomeView }) {
   return (
     <SurfaceCard className="flex items-center justify-between">

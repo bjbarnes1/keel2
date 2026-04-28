@@ -1,122 +1,191 @@
 /**
- * Monthly budget view: categories/subcategories with month-equivalent totals.
+ * Budget dashboard route using the new modular Budget UI surface.
  *
  * @module app/budget/page
  */
 
-import Link from "next/link";
-
-import { AppShell, SurfaceCard } from "@/components/keel/primitives";
-import { getMonthlyBudgetTree } from "@/lib/persistence/keel-store";
-import { formatAud, sentenceCaseFrequency } from "@/lib/utils";
+import {
+  BudgetDashboard,
+  type BudgetCategoryCardModel,
+  type BudgetDashboardModel,
+  type BudgetInsightModel,
+  type BudgetVsActualCardModel,
+} from "@/components/keel/budget/budget-dashboard";
+import { AppShell } from "@/components/keel/primitives";
+import { getActualVsPlannedReport, getMonthlyBudgetTree } from "@/lib/persistence/keel-store";
+import { formatAud } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-function MonthlyChip({ value }: { value: number }) {
-  return (
-    <span className="rounded-full bg-white/10 px-3 py-1 font-mono text-xs tabular-nums text-[color:var(--keel-ink)]">
-      {formatAud(value)}/mo
-    </span>
+function monthLabelForReport(start: string, end: string) {
+  if (!start || !end) return "Current month";
+  const startDate = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(`${end}T00:00:00Z`);
+  const startLabel = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short" }).format(startDate);
+  const endLabel = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" }).format(endDate);
+  return `${startLabel} - ${endLabel}`;
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function buildCategoryCards(
+  tree: Awaited<ReturnType<typeof getMonthlyBudgetTree>>,
+  actualByCategory: Map<string, number>,
+): BudgetCategoryCardModel[] {
+  return tree.map((category) => {
+    const planned = roundMoney(category.monthlyTotal);
+    const actual = roundMoney(actualByCategory.get(category.id) ?? 0);
+    const categoryScale = Math.max(planned, actual, 1);
+    const mapItem = (monthlyEquivalent: number) => ({
+      progressValue: monthlyEquivalent,
+      progressMax: categoryScale,
+    });
+
+    return {
+      id: category.id,
+      name: category.name,
+      monthlyTotal: planned,
+      planned,
+      actual,
+      progressValue: actual,
+      progressMax: categoryScale,
+      commitmentCount:
+        category.subcategories.reduce((acc, sub) => acc + sub.commitments.length, 0) +
+        category.uncategorisedCommitments.length,
+      subcategories: category.subcategories.map((sub) => ({
+        id: sub.id,
+        name: sub.name,
+        monthlyTotal: roundMoney(sub.monthlyTotal),
+        commitments: sub.commitments.map((commitment) => ({
+          id: commitment.id,
+          name: commitment.name,
+          amount: commitment.amount,
+          monthlyEquivalent: commitment.monthlyEquivalent,
+          frequency: commitment.frequency,
+          ...mapItem(commitment.monthlyEquivalent),
+        })),
+      })),
+      uncategorisedCommitments: category.uncategorisedCommitments.map((commitment) => ({
+        id: commitment.id,
+        name: commitment.name,
+        amount: commitment.amount,
+        monthlyEquivalent: commitment.monthlyEquivalent,
+        frequency: commitment.frequency,
+        ...mapItem(commitment.monthlyEquivalent),
+      })),
+    };
+  });
+}
+
+function buildInsights(
+  categories: BudgetCategoryCardModel[],
+  plannedTotal: number,
+  actualTotal: number,
+): BudgetInsightModel[] {
+  const onTrack = categories.filter((category) => category.actual <= category.planned + 0.005).length;
+  const overPlan = categories.filter((category) => category.actual > category.planned + 0.005).length;
+  const largest = categories.reduce<BudgetCategoryCardModel | null>(
+    (winner, current) => (winner && winner.monthlyTotal >= current.monthlyTotal ? winner : current),
+    null,
   );
+  const headroom = roundMoney(plannedTotal - actualTotal);
+  const spendCoverage = plannedTotal > 0 ? Math.min(Math.max((actualTotal / plannedTotal) * 100, 0), 100) : 0;
+
+  return [
+    {
+      title: `${onTrack} categories on track`,
+      body: overPlan > 0 ? `${overPlan} categories are currently over plan.` : "No categories are over plan this month.",
+      tone: overPlan > 0 ? "attend" : "safe",
+    },
+    {
+      title: largest ? `${largest.name} is your largest planned bucket` : "No category data yet",
+      body: largest
+        ? `${formatAud(largest.monthlyTotal)} planned per month.`
+        : "Create commitments to build your category structure.",
+      tone: "accent",
+    },
+    {
+      title: headroom >= 0 ? "Headroom available" : "Spend is over plan",
+      body: `${formatAud(Math.abs(headroom))} ${headroom >= 0 ? "remaining against plan" : "above this month's plan"} with ${Math.round(spendCoverage)}% used.`,
+      tone: headroom >= 0 ? "safe" : "attend",
+    },
+  ];
+}
+
+function buildBudgetVsActual(
+  categories: BudgetCategoryCardModel[],
+  reportRows: Awaited<ReturnType<typeof getActualVsPlannedReport>>["rows"],
+): BudgetVsActualCardModel[] {
+  const byCategoryId = new Map(reportRows.filter((row) => row.categoryId).map((row) => [row.categoryId as string, row]));
+  const rows = categories.map<BudgetVsActualCardModel>((category) => {
+    const report = byCategoryId.get(category.id);
+    const planned = roundMoney(report?.planned ?? category.planned);
+    const actual = roundMoney(report?.actual ?? category.actual);
+    return {
+      id: category.id,
+      name: category.name,
+      planned,
+      actual,
+      variance: roundMoney(planned - actual),
+    };
+  });
+
+  return rows
+    .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
+    .slice(0, 3);
 }
 
 export default async function BudgetPage() {
-  const tree = await getMonthlyBudgetTree();
-  const total = tree.reduce((sum, c) => sum + c.monthlyTotal, 0);
+  const [tree, report] = await Promise.all([getMonthlyBudgetTree(), getActualVsPlannedReport()]);
+  const actualByCategory = new Map(
+    report.rows.filter((row) => row.categoryId).map((row) => [row.categoryId as string, row.actual]),
+  );
+
+  const categories = buildCategoryCards(tree, actualByCategory);
+  const plannedTotal = roundMoney(categories.reduce((sum, category) => sum + category.planned, 0));
+  const actualTotal = roundMoney(categories.reduce((sum, category) => sum + category.actual, 0));
+  const remaining = roundMoney(plannedTotal - actualTotal);
+  const overPlanCategories = categories.filter((category) => category.actual > category.planned + 0.005).length;
+
+  const model: BudgetDashboardModel = {
+    monthLabel: monthLabelForReport(report.start, report.end),
+    statCards: [
+      {
+        label: "Planned budget",
+        value: formatAud(plannedTotal),
+        hint: "Monthly commitment equivalent",
+        tone: "accent",
+      },
+      {
+        label: "Actual spend",
+        value: formatAud(actualTotal),
+        hint: `${Math.round(plannedTotal > 0 ? (actualTotal / plannedTotal) * 100 : 0)}% of plan used`,
+        tone: overPlanCategories > 0 ? "attend" : "safe",
+        progress: { value: actualTotal, max: Math.max(plannedTotal, actualTotal, 1) },
+      },
+      {
+        label: remaining >= 0 ? "Remaining" : "Over plan",
+        value: formatAud(Math.abs(remaining)),
+        hint: remaining >= 0 ? "Still available this month" : "Needs schedule review",
+        tone: remaining >= 0 ? "safe" : "attend",
+      },
+      {
+        label: "Categories",
+        value: `${categories.length}`,
+        hint: `${overPlanCategories} over plan this month`,
+        tone: overPlanCategories > 0 ? "attend" : "accent",
+      },
+    ],
+    categories,
+    insights: buildInsights(categories, plannedTotal, actualTotal),
+    budgetVsActual: buildBudgetVsActual(categories, report.rows),
+  };
 
   return (
     <AppShell title="Budget" currentPath="/budget" backHref="/">
-      <SurfaceCard className="mb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-[color:var(--keel-ink)]">Monthly plan (commitments)</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Commitment amounts are annualised and divided by 12 so the structure is always monthly.
-            </p>
-          </div>
-          <MonthlyChip value={total} />
-        </div>
-      </SurfaceCard>
-
-      <div className="space-y-3">
-        {tree.map((cat) => (
-          <SurfaceCard key={cat.id} className="p-0 overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-4 py-4">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[color:var(--keel-ink)]">{cat.name}</p>
-                <p className="mt-1 text-xs text-[color:var(--keel-ink-4)]">
-                  {cat.subcategories.length} subcategories
-                  {cat.uncategorisedCommitments.length ? ` · ${cat.uncategorisedCommitments.length} uncategorised` : ""}
-                </p>
-              </div>
-              <MonthlyChip value={cat.monthlyTotal} />
-            </div>
-
-            {cat.subcategories.length ? (
-              <div className="border-t border-white/10">
-                {cat.subcategories.map((sub) => (
-                  <div key={sub.id} className="px-4 py-3 border-b border-white/[0.06] last:border-b-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-[color:var(--keel-ink)]">{sub.name}</p>
-                      <MonthlyChip value={sub.monthlyTotal} />
-                    </div>
-                    {sub.commitments.length ? (
-                      <div className="mt-2 grid gap-2 md:grid-cols-2">
-                        {sub.commitments.map((c) => (
-                          <Link
-                            key={c.id}
-                            href={`/commitments/${c.id}`}
-                            className="glass-clear rounded-xl px-3 py-2 text-sm transition-colors hover:border-white/16"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="truncate text-[color:var(--keel-ink)]">{c.name}</span>
-                              <span className="shrink-0 font-mono text-xs tabular-nums text-[color:var(--keel-ink-2)]">
-                                {formatAud(c.monthlyEquivalent)}/mo
-                              </span>
-                            </div>
-                            <p className="mt-1 text-[11px] text-[color:var(--keel-ink-4)]">
-                              {sentenceCaseFrequency(c.frequency)} · {formatAud(c.amount)}
-                            </p>
-                          </Link>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-xs text-[color:var(--keel-ink-4)]">No commitments here yet.</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {cat.uncategorisedCommitments.length ? (
-              <div className="border-t border-white/10 px-4 py-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-[color:var(--keel-ink-5)]">
-                  Uncategorised commitments
-                </p>
-                <div className="mt-2 grid gap-2 md:grid-cols-2">
-                  {cat.uncategorisedCommitments.map((c) => (
-                    <Link
-                      key={c.id}
-                      href={`/commitments/${c.id}`}
-                      className="glass-clear rounded-xl px-3 py-2 text-sm transition-colors hover:border-white/16"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="truncate text-[color:var(--keel-ink)]">{c.name}</span>
-                        <span className="shrink-0 font-mono text-xs tabular-nums text-[color:var(--keel-ink-2)]">
-                          {formatAud(c.monthlyEquivalent)}/mo
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-[color:var(--keel-ink-4)]">
-                        {sentenceCaseFrequency(c.frequency)} · {formatAud(c.amount)}
-                      </p>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </SurfaceCard>
-        ))}
-      </div>
+      <BudgetDashboard model={model} />
     </AppShell>
   );
 }

@@ -107,6 +107,8 @@
   --color-positive: var(--keel-safe);
   --color-attention: var(--keel-attend);
   --color-negative: var(--keel-ink-3);
+  --color-surface-soft: color-mix(in oklab, var(--keel-ink), transparent 95%);
+  --color-surface-pop: color-mix(in oklab, var(--keel-ink), transparent 90%);
 }
 
 .dark {
@@ -146,6 +148,8 @@
   --glass-tint-attend-border: rgba(212, 165, 92, 0.2);
   --glass-inset-highlight: inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
   --glass-inset-highlight-heavy: inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+  --color-surface-soft: color-mix(in oklab, var(--keel-ink), transparent 95%);
+  --color-surface-pop: color-mix(in oklab, var(--keel-ink), transparent 90%);
 }
 
 * {
@@ -293,6 +297,16 @@ select {
   box-shadow: var(--glass-inset-highlight);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+.keel-surface-soft {
+  background: var(--color-surface-soft);
+  border: 0.5px solid color-mix(in oklab, var(--keel-ink), transparent 92%);
+}
+
+.keel-surface-pop {
+  background: var(--color-surface-pop);
+  border: 0.5px solid color-mix(in oklab, var(--keel-ink), transparent 90%);
 }
 
 input::placeholder,
