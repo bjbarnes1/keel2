@@ -36,6 +36,7 @@ export type AnnualTotals = {
 
 export type TimelineViewProps = {
   startingAvailableMoney: number;
+  startingBankBalance: number;
   attentionCommitmentIds: string[];
   /** Surface a message when the user has nothing scheduled yet. */
   hasAnyScheduledEvents: boolean;
@@ -44,6 +45,7 @@ export type TimelineViewProps = {
 
 export function TimelineView({
   startingAvailableMoney,
+  startingBankBalance,
   attentionCommitmentIds,
   hasAnyScheduledEvents,
   annualTotals,
@@ -98,56 +100,59 @@ export function TimelineView({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="sticky top-14 z-10 bg-background" style={{ paddingTop: 8 }}>
-        {/* Available Money pinned card, centered on the Now line. */}
-        <div
-          className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2"
-        >
-          <AvailableMoneyCard
-            value={availableMoneyAtFocal}
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-start lg:gap-10">
+      <div className="min-w-0">
+        <div className="sticky top-14 z-10 bg-background" style={{ paddingTop: 8 }}>
+          {/* Available Money pinned card, centered on the Now line. */}
+          <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2">
+            <AvailableMoneyCard
+              value={availableMoneyAtFocal}
+              focalDate={sync.focalDate}
+              isTodayFocused={isTodayFocused}
+            />
+          </div>
+
+          <WaterlineChart
+            eventsInViewport={eventsInViewport}
+            allEvents={events}
             focalDate={sync.focalDate}
-            isTodayFocused={isTodayFocused}
+            todayDate={today}
+            onFocalChange={sync.setFocalDateFromChart}
+            availableMoneyAtFocal={availableMoneyAtFocal}
+            startingAvailableMoney={startingAvailableMoney}
+            startingBankBalance={startingBankBalance}
+            attentionCommitmentIds={attentionSet}
+            className="lg:mx-0 lg:max-w-none"
           />
+
+          {isLoading ? <TimelineShimmer /> : null}
         </div>
 
-        <WaterlineChart
-          eventsInViewport={eventsInViewport}
+        {error ? (
+          <div className="glass-tint-attend mt-4 rounded-[var(--radius-sm)] px-4 py-3 text-[12px] text-[color:var(--keel-ink-2)]">
+            Couldn&apos;t load your timeline. Reload to try again.
+          </div>
+        ) : null}
+
+        {hasReachedMaxHorizon ? (
+          <p className="mt-3 px-1 text-[11px] text-[color:var(--keel-ink-4)]">
+            Projections beyond 6 months are fuzzy. Keel will fill in the details
+            as the time comes closer.
+          </p>
+        ) : null}
+      </div>
+
+      <aside className="mt-4 min-w-0 space-y-4 lg:mt-0 lg:sticky lg:top-24">
+        <AnnualTotalsStrip totals={annualTotals} />
+        <TimelineLegend
           allEvents={events}
           focalDate={sync.focalDate}
           todayDate={today}
-          onFocalChange={sync.setFocalDateFromChart}
-          availableMoneyAtFocal={availableMoneyAtFocal}
-          startingAvailableMoney={startingAvailableMoney}
-          attentionCommitmentIds={attentionSet}
+          syncSource={sync.source}
+          onRowTap={sync.setFocalDateFromLegend}
+          onScroll={sync.setFocalDateFromLegend}
         />
-
-        {isLoading ? <TimelineShimmer /> : null}
-      </div>
-
-      {error ? (
-        <div className="glass-tint-attend rounded-[var(--radius-sm)] px-4 py-3 text-[12px] text-[color:var(--keel-ink-2)]">
-          Couldn&apos;t load your timeline. Reload to try again.
-        </div>
-      ) : null}
-
-      {hasReachedMaxHorizon ? (
-        <p className="px-1 text-[11px] text-[color:var(--keel-ink-4)]">
-          Projections beyond 6 months are fuzzy. Keel will fill in the details
-          as the time comes closer.
-        </p>
-      ) : null}
-
-      <AnnualTotalsStrip totals={annualTotals} />
-
-      <TimelineLegend
-        allEvents={events}
-        focalDate={sync.focalDate}
-        todayDate={today}
-        syncSource={sync.source}
-        onRowTap={sync.setFocalDateFromLegend}
-        onScroll={sync.setFocalDateFromLegend}
-      />
+      </aside>
     </div>
   );
 }

@@ -8,7 +8,10 @@ export const AVATAR_MENU_GROUPS = [
   {
     id: "identity",
     label: "Identity",
-    items: [{ type: "link" as const, href: "/settings", label: "Settings" }],
+    items: [
+      { type: "link" as const, href: "/settings", label: "Settings" },
+      { type: "action" as const, id: "toggleTheme", label: "Toggle theme" },
+    ],
   },
   {
     id: "data",
@@ -17,6 +20,7 @@ export const AVATAR_MENU_GROUPS = [
       { type: "link" as const, href: "/commitments", label: "Commitments" },
       { type: "link" as const, href: "/incomes", label: "Incomes" },
       { type: "link" as const, href: "/wealth", label: "Assets" },
+      { type: "link" as const, href: "/budget", label: "Budget" },
     ],
   },
   {

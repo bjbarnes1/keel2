@@ -241,6 +241,67 @@ export function buildAvailableMoneyTrajectory(input: {
   return deduped;
 }
 
+/**
+ * Derives a bank-balance trajectory from the available-money projection.
+ *
+ * Engine projection events are computed from `startingAvailableMoney`, but the cashflow deltas
+ * are identical for bank balance and available money. So we can reconstruct a bank balance at
+ * any date by applying the same deltas to `startingBankBalance`.
+ */
+export function buildBankBalanceTrajectory(input: {
+  allEvents: readonly ProjectionEvent[];
+  startingAvailableMoney: number;
+  startingBankBalance: number;
+  viewportStart: Date;
+  viewportEnd: Date;
+}): TrajectoryPoint[] {
+  const { allEvents, startingAvailableMoney, startingBankBalance, viewportStart, viewportEnd } =
+    input;
+  const startIso = toIsoDate(viewportStart);
+  const endIso = toIsoDate(viewportEnd);
+
+  const bankBalanceAtIso = (iso: string) => {
+    const availAt = availableMoneyAt(iso, allEvents as ProjectionEvent[], startingAvailableMoney);
+    return startingBankBalance + (availAt - startingAvailableMoney);
+  };
+
+  const bracketStart: TrajectoryPoint = {
+    date: startOfUtcDay(viewportStart),
+    iso: startIso,
+    value: bankBalanceAtIso(startIso),
+  };
+  const bracketEnd: TrajectoryPoint = {
+    date: startOfUtcDay(viewportEnd),
+    iso: endIso,
+    value: bankBalanceAtIso(endIso),
+  };
+
+  const points: TrajectoryPoint[] = [bracketStart];
+  for (const event of allEvents) {
+    if (event.date >= startIso && event.date <= endIso) {
+      points.push({
+        date: fromIsoDate(event.date),
+        iso: event.date,
+        value: startingBankBalance + (event.projectedAvailableMoney - startingAvailableMoney),
+      });
+    }
+  }
+  points.push(bracketEnd);
+
+  points.sort((a, b) => a.iso.localeCompare(b.iso));
+
+  const deduped: TrajectoryPoint[] = [];
+  for (const point of points) {
+    const prev = deduped[deduped.length - 1];
+    if (prev && prev.iso === point.iso) {
+      deduped[deduped.length - 1] = point;
+    } else {
+      deduped.push(point);
+    }
+  }
+  return deduped;
+}
+
 // --- Pay / commitment crossing detection (for haptics) -----------------------
 
 /**

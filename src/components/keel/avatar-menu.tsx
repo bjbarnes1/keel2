@@ -30,6 +30,7 @@ import { GlassSheet } from "@/components/keel/glass-sheet";
 import { AVATAR_MENU_GROUPS } from "@/components/keel/avatar-menu-groups";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { getStoredTheme, resolveTheme, subscribeThemeChange, toggleTheme } from "@/lib/theme/theme";
 
 const MENU_Z = 70;
 const PANEL_ANIM_MS = 180;
@@ -62,9 +63,22 @@ export function AvatarMenu({ initialLetter = "K" }: { initialLetter?: string }) 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
+  const [themeLabel, setThemeLabel] = useState<string>(() => {
+    const stored = getStoredTheme();
+    return resolveTheme(stored) === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  });
 
   useEffect(() => {
     queueMicrotask(() => setMounted(true));
+  }, []);
+
+  useEffect(() => {
+    const update = () => {
+      const stored = getStoredTheme();
+      setThemeLabel(resolveTheme(stored) === "dark" ? "Switch to light mode" : "Switch to dark mode");
+    };
+    update();
+    return subscribeThemeChange(update);
   }, []);
 
   useEffect(() => {
@@ -194,13 +208,13 @@ export function AvatarMenu({ initialLetter = "K" }: { initialLetter?: string }) 
           ref={panelRef}
           role="menu"
           aria-labelledby={menuLabelId}
-          className="pointer-events-auto fixed max-h-[70vh] min-w-[260px] overflow-y-auto rounded-[var(--radius-lg)] border border-[rgba(240,235,220,0.08)] p-1 shadow-[0_16px_48px_rgba(0,0,0,0.5),inset_0_0.5px_0_rgba(255,255,255,0.08)]"
+          className="pointer-events-auto fixed max-h-[70vh] min-w-[260px] overflow-y-auto rounded-[var(--radius-lg)] border border-border p-1 shadow-[0_16px_48px_rgba(0,0,0,0.22),inset_0_0.5px_0_rgba(255,255,255,0.18)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.5),inset_0_0.5px_0_rgba(255,255,255,0.08)]"
           style={{
             top: panelPos.top,
             right: panelPos.right,
-            backgroundColor: "rgba(20, 26, 23, 0.92)",
-            backdropFilter: "blur(40px) saturate(180%)",
-            WebkitBackdropFilter: "blur(40px) saturate(180%)",
+            backgroundColor: "var(--glass-heavy-bg)",
+            backdropFilter: "blur(40px) saturate(160%)",
+            WebkitBackdropFilter: "blur(40px) saturate(160%)",
             opacity: open ? 1 : 0,
             transform: open ? "scale(1)" : "scale(0.98)",
             transition: panelTransition,
@@ -212,7 +226,7 @@ export function AvatarMenu({ initialLetter = "K" }: { initialLetter?: string }) 
 
           {AVATAR_MENU_GROUPS.map((group, gi) => (
             <div key={group.id}>
-              {gi > 0 ? <div className="h-[0.5px] bg-[rgba(240,235,220,0.08)]" role="presentation" /> : null}
+              {gi > 0 ? <div className="h-[0.5px] bg-border" role="presentation" /> : null}
               <div
                 className="px-4 pb-1.5 pt-3 text-[10px] font-medium uppercase tracking-[0.16em] text-[color:var(--keel-ink-5)]"
                 aria-hidden="true"
@@ -228,13 +242,26 @@ export function AvatarMenu({ initialLetter = "K" }: { initialLetter?: string }) 
                       role="menuitem"
                       href={item.href}
                       onClick={close}
-                      className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-[var(--radius-md)] px-4 py-2.5 text-left text-sm text-[color:var(--keel-ink)] transition-colors hover:bg-[rgba(240,235,220,0.04)]"
+                      className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-[var(--radius-md)] px-4 py-2.5 text-left text-sm text-[color:var(--keel-ink)] transition-colors hover:bg-[color:var(--keel-ink-6)]"
                     >
                       <span>{item.label}</span>
                       {group.id === "data" ? (
                         <ChevronRight className="h-4 w-4 shrink-0 text-[color:var(--keel-ink-4)]" aria-hidden />
                       ) : null}
                     </Link>
+                  ) : item.type === "action" && item.id === "toggleTheme" ? (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        toggleTheme();
+                        // Keep menu open so the user sees the change immediately.
+                      }}
+                      className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-left text-sm text-[color:var(--keel-ink)] transition-colors hover:bg-[color:var(--keel-ink-6)]"
+                    >
+                      {themeLabel}
+                    </button>
                   ) : (
                     <button
                       key="logout"
@@ -244,7 +271,7 @@ export function AvatarMenu({ initialLetter = "K" }: { initialLetter?: string }) 
                         close();
                         setLogoutSheetOpen(true);
                       }}
-                      className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-left text-sm text-[color:var(--keel-ink-2)] transition-colors hover:bg-[rgba(240,235,220,0.04)]"
+                      className="w-full rounded-[var(--radius-md)] px-4 py-2.5 text-left text-sm text-[color:var(--keel-ink-2)] transition-colors hover:bg-[color:var(--keel-ink-6)]"
                     >
                       {item.label}
                     </button>

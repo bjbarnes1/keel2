@@ -32,6 +32,7 @@ export default async function TimelinePage() {
     <AppShell title="Timeline" currentPath="/timeline" headerRight={header}>
       <TimelineView
         startingAvailableMoney={snapshot.availableMoney}
+        startingBankBalance={snapshot.bankBalance}
         attentionCommitmentIds={attentionCommitmentIds}
         hasAnyScheduledEvents={hasAnyScheduledEvents}
         annualTotals={{

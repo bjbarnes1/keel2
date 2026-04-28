@@ -163,7 +163,7 @@ export function TimelineLegend({
       className="hide-scrollbar overflow-y-auto"
       // ~10 rows × 40px each; caps the legend so it doesn't fill the whole screen
       // and makes the scroll container bounded so auto-scroll and scroll→chart sync work.
-      style={{ WebkitOverflowScrolling: "touch", maxHeight: 400 }}
+      style={{ WebkitOverflowScrolling: "touch", maxHeight: 520 }}
     >
       {todays.length > 0 ? (
         <section className="mb-4">

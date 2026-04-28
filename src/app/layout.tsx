@@ -18,6 +18,7 @@ import type { ReactNode } from "react";
 import "@/app/globals.css";
 
 import { GlassSheetScopeProvider } from "@/components/keel/glass-sheet-scope";
+import { ThemeBootScript } from "@/components/keel/theme-boot";
 
 const siteName = "Keel";
 const description =
@@ -51,13 +52,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#141a17",
+  themeColor: "#0e1412",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body>
+        <ThemeBootScript />
         <GlassSheetScopeProvider>{children}</GlassSheetScopeProvider>
       </body>
     </html>

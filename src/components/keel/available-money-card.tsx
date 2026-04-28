@@ -96,12 +96,12 @@ export function AvailableMoneyCard({ value, focalDate, isTodayFocused }: Availab
       aria-live="polite"
       className="pointer-events-none inline-flex min-w-[130px] flex-col items-center rounded-[var(--radius-sm)] px-[18px] py-[10px] text-center"
       style={{
-        background: "rgba(20, 26, 23, 0.85)",
-        backdropFilter: "blur(30px) saturate(180%)",
-        WebkitBackdropFilter: "blur(30px) saturate(180%)",
-        border: "0.5px solid rgba(142, 196, 168, 0.25)",
+        background: "var(--glass-heavy-bg)",
+        backdropFilter: "blur(30px) saturate(160%)",
+        WebkitBackdropFilter: "blur(30px) saturate(160%)",
+        border: "0.5px solid color-mix(in oklab, var(--keel-safe-soft), transparent 70%)",
         boxShadow:
-          "inset 0 0.5px 0 rgba(255, 255, 255, 0.1), 0 8px 24px rgba(0, 0, 0, 0.5)",
+          "var(--glass-inset-highlight-heavy), 0 8px 24px color-mix(in oklab, black, transparent 65%)",
       }}
     >
       <span className="relative inline-block" style={{ height: 12, minWidth: 80 }}>

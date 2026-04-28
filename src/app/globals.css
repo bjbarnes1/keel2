@@ -19,39 +19,39 @@
   --color-background: var(--color-bg-primary);
   --color-foreground: var(--color-text-primary);
   --color-card: var(--color-bg-elevated);
-  --color-muted: rgba(255, 255, 255, 0.04);
+  --color-muted: var(--keel-ink-6);
   --color-muted-foreground: var(--color-text-tertiary);
-  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border: color-mix(in oklab, var(--keel-ink), transparent 88%);
   --color-primary: var(--color-accent);
 }
 
+/* Light is the default; `.dark` overrides below. */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* Appendix A — CSS variables (design brief) */
   /* Surfaces */
-  --keel-tide: #0e1412;
-  --keel-tide-2: #141a17;
+  --keel-tide: #f7f6f2;
+  --keel-tide-2: #ffffff;
 
   /* Text */
-  --keel-ink: #f0ebdc;
-  --keel-ink-2: #d4cfbf;
-  --keel-ink-3: #a8ac9f;
-  --keel-ink-4: #8a8f88;
-  --keel-ink-5: #5f645e;
+  --keel-ink: #1b1f1d;
+  --keel-ink-2: #2a302d;
+  --keel-ink-3: #4c5651;
+  --keel-ink-4: #66726b;
+  --keel-ink-5: #8a978f;
   /** Progress track / subtle dividers */
-  --keel-ink-6: rgba(240, 235, 220, 0.06);
+  --keel-ink-6: rgba(27, 31, 29, 0.06);
 
   /* Accents */
-  --keel-safe: #6bb391;
-  --keel-safe-soft: #8ec4a8;
-  --keel-safe-faint: #a8c9b6;
-  --keel-attend: #d48f46;
+  --keel-safe: #1e8f6a;
+  --keel-safe-soft: #2aa77b;
+  --keel-safe-faint: rgba(42, 167, 123, 0.35);
+  --keel-attend: #c9792f;
 
   /* Asset identity */
-  --keel-btc: #d4a55c;
-  --keel-eth: #9f97e8;
-  --keel-stock: #7fb5e8;
+  --keel-btc: #c98c2b;
+  --keel-eth: #675fe6;
+  --keel-stock: #2b79c9;
 
   /* Spacing */
   --space-1: 4px;
@@ -75,16 +75,16 @@
   --radius-pill: 999px;
 
   /* Glass presets — apply via utility classes */
-  --glass-clear-bg: rgba(255, 255, 255, 0.035);
-  --glass-clear-border: rgba(255, 255, 255, 0.08);
-  --glass-heavy-bg: rgba(20, 26, 23, 0.55);
-  --glass-heavy-border: rgba(255, 255, 255, 0.12);
-  --glass-tint-safe-bg: rgba(107, 179, 145, 0.14);
-  --glass-tint-safe-border: rgba(107, 179, 145, 0.22);
-  --glass-tint-attend-bg: rgba(212, 165, 92, 0.12);
-  --glass-tint-attend-border: rgba(212, 165, 92, 0.2);
-  --glass-inset-highlight: inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
-  --glass-inset-highlight-heavy: inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+  --glass-clear-bg: rgba(27, 31, 29, 0.03);
+  --glass-clear-border: rgba(27, 31, 29, 0.08);
+  --glass-heavy-bg: rgba(255, 255, 255, 0.72);
+  --glass-heavy-border: rgba(27, 31, 29, 0.12);
+  --glass-tint-safe-bg: rgba(42, 167, 123, 0.12);
+  --glass-tint-safe-border: rgba(42, 167, 123, 0.22);
+  --glass-tint-attend-bg: rgba(201, 121, 47, 0.12);
+  --glass-tint-attend-border: rgba(201, 121, 47, 0.22);
+  --glass-inset-highlight: inset 0 0.5px 0 rgba(255, 255, 255, 0.7);
+  --glass-inset-highlight-heavy: inset 0 0.5px 0 rgba(255, 255, 255, 0.85);
 
   /* Motion */
   --ease-micro: cubic-bezier(0.4, 0, 0.2, 1);
@@ -107,6 +107,45 @@
   --color-positive: var(--keel-safe);
   --color-attention: var(--keel-attend);
   --color-negative: var(--keel-ink-3);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --keel-tide: #0e1412;
+  --keel-tide-2: #141a17;
+
+  /* Text */
+  --keel-ink: #f0ebdc;
+  --keel-ink-2: #d4cfbf;
+  --keel-ink-3: #a8ac9f;
+  --keel-ink-4: #8a8f88;
+  --keel-ink-5: #5f645e;
+  --keel-ink-6: rgba(240, 235, 220, 0.06);
+
+  /* Accents */
+  --keel-safe: #6bb391;
+  --keel-safe-soft: #8ec4a8;
+  --keel-safe-faint: #a8c9b6;
+  --keel-attend: #d48f46;
+
+  /* Asset identity */
+  --keel-btc: #d4a55c;
+  --keel-eth: #9f97e8;
+  --keel-stock: #7fb5e8;
+
+  /* Glass presets */
+  --glass-clear-bg: rgba(255, 255, 255, 0.035);
+  --glass-clear-border: rgba(255, 255, 255, 0.08);
+  --glass-heavy-bg: rgba(20, 26, 23, 0.55);
+  --glass-heavy-border: rgba(255, 255, 255, 0.12);
+  --glass-tint-safe-bg: rgba(107, 179, 145, 0.14);
+  --glass-tint-safe-border: rgba(107, 179, 145, 0.22);
+  --glass-tint-attend-bg: rgba(212, 165, 92, 0.12);
+  --glass-tint-attend-border: rgba(212, 165, 92, 0.2);
+  --glass-inset-highlight: inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
+  --glass-inset-highlight-heavy: inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
 }
 
 * {
@@ -157,6 +196,36 @@ select {
 }
 
 .keel-bg {
+  background:
+    radial-gradient(
+        120% 90% at 50% -10%,
+        rgba(107, 179, 145, 0.08),
+        rgba(20, 26, 23, 0) 55%
+      ),
+    radial-gradient(
+        120% 90% at 50% 110%,
+        rgba(212, 165, 92, 0.06),
+        rgba(20, 26, 23, 0) 60%
+      ),
+    var(--color-background);
+}
+
+.keel-bg {
+  background:
+    radial-gradient(
+        120% 90% at 50% -10%,
+        rgba(42, 167, 123, 0.08),
+        rgba(255, 255, 255, 0) 55%
+      ),
+    radial-gradient(
+        120% 90% at 50% 110%,
+        rgba(201, 121, 47, 0.05),
+        rgba(255, 255, 255, 0) 60%
+      ),
+    var(--color-background);
+}
+
+.dark .keel-bg {
   background:
     radial-gradient(
         120% 90% at 50% -10%,
@@ -228,7 +297,7 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: #64748b;
+  color: var(--color-text-quaternary);
 }
 
 .hide-scrollbar {

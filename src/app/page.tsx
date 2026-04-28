@@ -45,7 +45,7 @@ export default async function HomePage() {
 
   return (
     <AppShell title="Keel" currentPath="/">
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,340px)] lg:items-start lg:gap-10">
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:items-start lg:gap-10">
         <div className="min-w-0 lg:order-2">
           <div className="lg:sticky lg:top-24">
             <HouseholdCockpit
@@ -62,7 +62,7 @@ export default async function HomePage() {
           </div>
         </div>
 
-        <div className="min-w-0 lg:order-1">
+        <div className="min-w-0 lg:order-1 lg:max-w-[780px]">
           <HeroAvailableMoneyCard
             amount={snapshot.availableMoney}
             bankBalance={snapshot.bankBalance}

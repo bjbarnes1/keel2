@@ -58,6 +58,7 @@ export {
   createBudgetInvite,
   acceptBudgetInvite,
 } from "./budget";
+export { getMonthlyBudgetTree, type BudgetCategoryNode, type BudgetCommitmentLine } from "./budget-view";
 export {
   getRecentSpendForCommitment,
   getSpendOverview,

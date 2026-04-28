@@ -35,6 +35,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
       path.startsWith("/commitments") ||
       path.startsWith("/incomes"),
   },
+  { href: "/budget", label: "Budget" },
   { href: "/timeline", label: "Timeline" },
   { href: "/cashflow", label: "Cashflow" },
   { href: "/ask", label: "Ask" },
@@ -148,6 +149,7 @@ function IconGoals({ active }: { active: boolean }) {
 
 function TabIcon({ href, active }: { href: string; active: boolean }) {
   if (href === "/") return <IconHome active={active} />;
+  if (href === "/budget") return <IconHome active={active} />;
   if (href === "/timeline") return <IconTimeline active={active} />;
   if (href === "/cashflow") return <IconTimeline active={active} />;
   if (href === "/wealth") return <IconWealth active={active} />;
@@ -301,9 +303,14 @@ export function HeroAvailableMoneyCard({
           };
 
   return (
-    <section className={cn("rounded-[var(--radius-xl)] p-6", theme.card)}>
+    <section className={cn("rounded-[var(--radius-xl)] p-6 lg:p-7", theme.card)}>
       <p className="label-upper">Available money</p>
-      <p className={cn("tabular-nums mt-3 font-mono text-5xl font-medium tracking-[-0.035em]", theme.text)}>
+      <p
+        className={cn(
+          "tabular-nums mt-3 font-mono text-[44px] font-medium tracking-[-0.035em] sm:text-5xl lg:text-[52px]",
+          theme.text,
+        )}
+      >
         {formatAud(amount)}
       </p>
       <p className={cn("mt-3 text-sm font-medium", theme.text)}>{theme.subtitle}</p>

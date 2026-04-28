@@ -89,7 +89,7 @@ export function HouseholdCockpit({
 
   return (
     <div className="mt-2 space-y-4 lg:mt-0">
-      <div className="rounded-[var(--radius-xl)] border border-white/[0.08] bg-white/[0.03] p-5 lg:p-6">
+      <div className="glass-clear rounded-[var(--radius-xl)] p-5 lg:p-6">
         <p className="label-upper">Household position</p>
         <p className="mt-2 font-mono text-4xl font-medium tabular-nums tracking-[-0.03em] text-[color:var(--keel-ink)] lg:text-5xl">
           {formatAud(totalPosition)}
@@ -118,7 +118,7 @@ export function HouseholdCockpit({
                 {formatAud(snapshot.totalReserved + snapshot.totalGoalContributions)}
               </span>
             </li>
-            <li className="flex justify-between gap-3 border-t border-white/10 pt-2">
+            <li className="flex justify-between gap-3 border-t border-border pt-2">
               <span className="text-[color:var(--keel-ink-3)]">12-mo min projected</span>
               <span
                 className={
@@ -207,7 +207,7 @@ export function HouseholdCockpit({
         </SurfaceCard>
       </div>
 
-      <SurfaceCard className="border border-[color:var(--keel-attend)]/25 bg-[color:var(--keel-attend)]/5 lg:p-5">
+      <SurfaceCard className="border border-[color:var(--keel-attend)]/22 bg-[color:var(--keel-attend)]/6 lg:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--keel-ink-5)]">
@@ -219,7 +219,7 @@ export function HouseholdCockpit({
             {spend.needsReview > 0 ? (
               <Link
                 href="/spend"
-                className="rounded-full bg-white/10 px-3 py-1 font-medium text-[color:var(--keel-ink)] hover:bg-white/15"
+                className="rounded-full bg-[color:var(--keel-ink-6)] px-3 py-1 font-medium text-[color:var(--keel-ink)] hover:bg-[color:var(--keel-ink-6)]/80"
               >
                 {spend.needsReview} spend triage
               </Link>
@@ -227,7 +227,7 @@ export function HouseholdCockpit({
             {attentionBills > 0 ? (
               <Link
                 href="/commitments"
-                className="rounded-full bg-white/10 px-3 py-1 font-medium text-[color:var(--keel-ink)] hover:bg-white/15"
+                className="rounded-full bg-[color:var(--keel-ink-6)] px-3 py-1 font-medium text-[color:var(--keel-ink)] hover:bg-[color:var(--keel-ink-6)]/80"
               >
                 {attentionBills} bills need funding
               </Link>
@@ -235,7 +235,7 @@ export function HouseholdCockpit({
             {(actionExtras?.outstandingRebates ?? 0) > 0 ? (
               <Link
                 href="/medical"
-                className="rounded-full bg-white/10 px-3 py-1 font-medium text-[color:var(--keel-ink)] hover:bg-white/15"
+                className="rounded-full bg-[color:var(--keel-ink-6)] px-3 py-1 font-medium text-[color:var(--keel-ink)] hover:bg-[color:var(--keel-ink-6)]/80"
               >
                 {actionExtras!.outstandingRebates} rebates
               </Link>
@@ -243,7 +243,7 @@ export function HouseholdCockpit({
             {projectedStress ? (
               <Link
                 href="/timeline"
-                className="rounded-full bg-white/10 px-3 py-1 font-medium text-[color:var(--keel-attend)] hover:bg-white/15"
+                className="rounded-full bg-[color:var(--keel-ink-6)] px-3 py-1 font-medium text-[color:var(--keel-attend)] hover:bg-[color:var(--keel-ink-6)]/80"
               >
                 12-mo shortfall risk
               </Link>

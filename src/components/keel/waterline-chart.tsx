@@ -25,6 +25,7 @@ import type { ProjectionEvent } from "@/lib/engine/keel";
 import {
   addDaysUtc,
   buildAvailableMoneyTrajectory,
+  buildBankBalanceTrajectory,
   catmullRomPath,
   computeMaxAmountInViewport,
   detectFocalCrossings,
@@ -49,6 +50,8 @@ const ABOVE_BOTTOM = 108;
 const BELOW_TOP = 118;
 const BELOW_BOTTOM = 195;
 const LABEL_Y = 207;
+const BALANCE_TOP = 26;
+const BALANCE_BOTTOM = 196;
 
 const TRAJECTORY_RANGE = BELOW_BOTTOM - BELOW_TOP;
 
@@ -73,6 +76,8 @@ export type WaterlineChartProps = {
   onFocalChange: (date: Date) => void;
   availableMoneyAtFocal: number;
   startingAvailableMoney: number;
+  /** Bank balance at `todayDate` / dashboard as-of (used for the balance trend line). */
+  startingBankBalance: number;
   /** Set of commitment ids currently in attention state (amber anchor). */
   attentionCommitmentIds?: ReadonlySet<string>;
   /** Container width in CSS pixels (SVG scales to 100% and we match viewBox). */
@@ -139,6 +144,7 @@ export function WaterlineChart({
   onFocalChange,
   availableMoneyAtFocal,
   startingAvailableMoney,
+  startingBankBalance,
   attentionCommitmentIds,
   width: widthOverride,
   className,
@@ -190,6 +196,18 @@ export function WaterlineChart({
     [allEvents, startingAvailableMoney, viewportStart, viewportEnd],
   );
 
+  const balancePoints = useMemo(
+    () =>
+      buildBankBalanceTrajectory({
+        allEvents,
+        startingAvailableMoney,
+        startingBankBalance,
+        viewportStart,
+        viewportEnd,
+      }),
+    [allEvents, startingAvailableMoney, startingBankBalance, viewportStart, viewportEnd],
+  );
+
   const trajectoryStats = useMemo(() => {
     if (trajectoryPoints.length === 0) {
       return { min: 0, max: 0, range: 1 };
@@ -204,6 +222,18 @@ export function WaterlineChart({
     return { min, max, range };
   }, [trajectoryPoints]);
 
+  const balanceStats = useMemo(() => {
+    if (balancePoints.length === 0) return { min: 0, max: 0, range: 1 };
+    let min = Infinity;
+    let max = -Infinity;
+    for (const p of balancePoints) {
+      if (p.value < min) min = p.value;
+      if (p.value > max) max = p.value;
+    }
+    const range = Math.max(max - min, 1);
+    return { min, max, range };
+  }, [balancePoints]);
+
   const yForValue = useCallback(
     (value: number): number => {
       const { min, range } = trajectoryStats;
@@ -211,6 +241,15 @@ export function WaterlineChart({
       return BELOW_BOTTOM - ratio * TRAJECTORY_RANGE;
     },
     [trajectoryStats],
+  );
+
+  const yForBalance = useCallback(
+    (value: number) => {
+      const { min, range } = balanceStats;
+      const ratio = (value - min) / range;
+      return BALANCE_BOTTOM - ratio * (BALANCE_BOTTOM - BALANCE_TOP);
+    },
+    [balanceStats],
   );
 
   const trajectoryCurvePoints = useMemo(
@@ -226,6 +265,26 @@ export function WaterlineChart({
         y: yForValue(point.value),
       })),
     [trajectoryPoints, viewportStart, width, yForValue],
+  );
+
+  const balanceCurvePoints = useMemo(
+    () =>
+      balancePoints.map((point) => ({
+        x: xForIsoDate({
+          iso: point.iso,
+          viewportStart,
+          viewportDays: VIEWPORT_DAYS,
+          width,
+          padX: PAD_X,
+        }),
+        y: yForBalance(point.value),
+      })),
+    [balancePoints, viewportStart, width, yForBalance],
+  );
+
+  const balanceLinePath = useMemo(
+    () => catmullRomPath(balanceCurvePoints, 0.55),
+    [balanceCurvePoints],
   );
 
   const trajectoryLinePath = useMemo(
@@ -441,12 +500,9 @@ export function WaterlineChart({
   return (
     <div
       ref={containerRef}
-      className={cn("relative w-full select-none", className)}
+      className={cn("relative mx-auto w-full max-w-[560px] select-none lg:max-w-none", className)}
       style={{
         touchAction: "pan-y",
-        maxWidth: 500,
-        marginLeft: "auto",
-        marginRight: "auto",
       }}
     >
       <svg
@@ -478,6 +534,18 @@ export function WaterlineChart({
           <path d={trajectoryFillPath} fill={`url(#${gradientId})`} stroke="none" />
         ) : null}
 
+        {/* Bank balance trend line (separate y-scale) */}
+        {balanceCurvePoints.length >= 2 ? (
+          <path
+            d={balanceLinePath}
+            fill="none"
+            stroke="color-mix(in oklab, var(--keel-safe-soft), var(--keel-ink) 35%)"
+            strokeWidth={1.6}
+            strokeLinecap="round"
+            opacity={0.95}
+          />
+        ) : null}
+
         {/* Trajectory line */}
         {trajectoryCurvePoints.length >= 2 ? (
           <path
@@ -495,7 +563,7 @@ export function WaterlineChart({
           y1={BASELINE_Y}
           x2={width - PAD_X}
           y2={BASELINE_Y}
-          stroke="rgba(240, 235, 220, 0.3)"
+          stroke="color-mix(in oklab, var(--keel-ink), transparent 70%)"
           strokeWidth={0.75}
         />
 
@@ -514,7 +582,7 @@ export function WaterlineChart({
           y1={ABOVE_TOP}
           x2={nowX}
           y2={BELOW_BOTTOM}
-          stroke="rgba(240, 235, 220, 0.15)"
+          stroke="color-mix(in oklab, var(--keel-ink), transparent 85%)"
           strokeWidth={1}
           strokeDasharray="3 4"
         />
@@ -528,6 +596,44 @@ export function WaterlineChart({
           style={{ fontSize: 8, letterSpacing: "1.5px", fontWeight: 600 }}
         >
           NOW
+        </text>
+
+        {/* Axis hints: bank balance (left) + cashflow magnitude (right). */}
+        <text
+          x={PAD_X}
+          y={BALANCE_TOP - 6}
+          textAnchor="start"
+          fill="var(--keel-ink-5)"
+          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
+        >
+          BAL {Math.round(balanceStats.max).toLocaleString("en-AU")}
+        </text>
+        <text
+          x={PAD_X}
+          y={BALANCE_BOTTOM + 8}
+          textAnchor="start"
+          fill="var(--keel-ink-5)"
+          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
+        >
+          BAL {Math.round(balanceStats.min).toLocaleString("en-AU")}
+        </text>
+        <text
+          x={width - PAD_X}
+          y={BASELINE_Y - 6}
+          textAnchor="end"
+          fill="var(--keel-ink-5)"
+          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
+        >
+          +{Math.round(maxAmount).toLocaleString("en-AU")}
+        </text>
+        <text
+          x={width - PAD_X}
+          y={BASELINE_Y + 12}
+          textAnchor="end"
+          fill="var(--keel-ink-5)"
+          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
+        >
+          −{Math.round(maxAmount).toLocaleString("en-AU")}
         </text>
 
         {/* Markers */}
@@ -630,7 +736,7 @@ export function WaterlineChart({
           x={PAD_X}
           y={LABEL_Y}
           textAnchor="start"
-          fill="#5f645e"
+          fill="var(--keel-ink-5)"
           style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
         >
           {startLabel}
@@ -639,7 +745,7 @@ export function WaterlineChart({
           x={nowX}
           y={LABEL_Y}
           textAnchor="middle"
-          fill={middleLabelIsToday ? "rgba(168, 215, 189, 1)" : "#5f645e"}
+          fill={middleLabelIsToday ? "var(--keel-safe-soft)" : "var(--keel-ink-5)"}
           style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
         >
           {middleLabelText}
@@ -648,7 +754,7 @@ export function WaterlineChart({
           x={width - PAD_X}
           y={LABEL_Y}
           textAnchor="end"
-          fill="#5f645e"
+          fill="var(--keel-ink-5)"
           style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
         >
           {endLabel}
