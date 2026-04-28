@@ -39,7 +39,7 @@ const revokeIncomeSkipSchema = z.object({
 
 function revalidateIncomeSkipPaths(incomeId: string, userId?: string) {
   revalidatePath("/");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/incomes");
   revalidatePath(`/incomes/${incomeId}`);
   if (userId) invalidateLayerACache(userId);

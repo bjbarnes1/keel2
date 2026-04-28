@@ -6,7 +6,7 @@
  * Validates that each moved occurrence belongs to the active budget and exists in
  * the generated recurrence window, then persists occurrence-only date overrides.
  *
- * @module app/actions/timeline-occurrence-overrides
+ * @module app/actions/cashflow-occurrence-overrides
  */
 
 import { revalidatePath } from "next/cache";
@@ -49,7 +49,7 @@ function addDaysIso(iso: string, days: number) {
 
 function revalidateTimelinePaths(userId?: string) {
   revalidatePath("/");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/cashflow");
   if (userId) invalidateLayerACache(userId);
 }

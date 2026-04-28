@@ -77,7 +77,7 @@ export async function updateBankBalanceAction(formData: FormData) {
   const amount = parseAmount(formData.get("amount"));
   await updateBankBalance(amount);
   revalidatePath("/");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   redirect("/");
 }
 
@@ -99,7 +99,7 @@ export async function createCommitmentAction(formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   redirect("/commitments");
 }
 
@@ -125,21 +125,21 @@ export async function updateCommitmentAction(id: string, formData: FormData) {
 
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
 }
 
 export async function archiveCommitmentAction(id: string) {
   await deleteCommitment(id);
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
 }
 
 export async function restoreCommitmentAction(id: string) {
   await restoreCommitment(id);
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
 }
 
 /** Sheet-friendly income save: persists a versioned row and revalidates without redirecting. */
@@ -159,7 +159,7 @@ export async function saveIncomeEditFromSheet(input: {
   revalidatePath("/");
   revalidatePath("/commitments");
   revalidatePath("/goals");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/incomes");
 }
 
@@ -181,7 +181,7 @@ export async function saveCommitmentEditFromSheet(input: {
   });
   revalidatePath("/");
   revalidatePath("/commitments");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
 }
 
 export async function deleteCommitmentAction(id: string) {
@@ -222,7 +222,7 @@ export async function createIncomeAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/commitments");
   revalidatePath("/goals");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/incomes");
   redirect("/incomes");
 }
@@ -244,7 +244,7 @@ export async function updateIncomeFutureAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/commitments");
   revalidatePath("/goals");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/incomes");
   redirect("/incomes");
 }
@@ -259,7 +259,7 @@ export async function setPrimaryIncomeAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/commitments");
   revalidatePath("/goals");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/incomes");
   redirect("/incomes");
 }
@@ -274,7 +274,7 @@ export async function archiveIncomeAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/commitments");
   revalidatePath("/goals");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/incomes");
   redirect("/incomes");
 }

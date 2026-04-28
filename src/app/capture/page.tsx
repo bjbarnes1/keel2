@@ -22,7 +22,7 @@ export default async function CapturePage() {
       currentPath="/capture"
       headerRight={
         <Link
-          href="/timeline"
+          href="/cashflow"
           className="glass-clear inline-flex h-9 w-9 items-center justify-center rounded-full text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink)]"
           aria-label="Close"
         >

@@ -60,7 +60,7 @@ function parseGoalRedirect(redirectTo: string | null | undefined) {
 
 function revalidateSkipPaths(userId?: string) {
   revalidatePath("/");
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/commitments");
   revalidatePath("/goals");
   if (userId) invalidateLayerACache(userId);

@@ -83,7 +83,7 @@ export async function createCommitmentFromCapture(input: unknown) {
     categoryId,
   });
 
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/");
   revalidatePath("/commitments");
   invalidateLayerACache(userId);
@@ -105,7 +105,7 @@ export async function createIncomeFromCapture(input: unknown) {
     isPrimary: payload.isPrimary,
   });
 
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/");
   revalidatePath("/incomes");
   invalidateLayerACache(userId);
@@ -128,7 +128,7 @@ export async function createAssetFromCapture(input: unknown) {
     asOf: payload.asOf ?? undefined,
   });
 
-  revalidatePath("/timeline");
+  revalidatePath("/cashflow");
   revalidatePath("/");
   revalidatePath("/wealth");
   invalidateLayerACache(userId);

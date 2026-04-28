@@ -1,81 +1,42 @@
 /**
- * Fortnight cashflow table + illustrative transfer hints (non-authoritative).
+ * Cashflow route shell: loads dashboard snapshot server-side for empty-state gating
+ * and annual totals, then mounts `TimelineView` (client) for weekly forecast + table.
  *
  * @module app/cashflow/page
  */
 
-import { AppShell, SurfaceCard } from "@/components/keel/primitives";
-import { buildFortnightCashflowTable } from "@/lib/engine/fortnight-cashflow";
-import { buildHouseholdMoneyHints } from "@/lib/engine/allocation-hints";
-import {
-  getDashboardSnapshot,
-  getHouseholdConfig,
-  getProjectionEngineInput,
-} from "@/lib/persistence/keel-store";
-import { formatAud } from "@/lib/utils";
+import { AppShell } from "@/components/keel/primitives";
+import { TimelineView } from "@/components/keel/timeline-view";
+import { getDashboardSnapshot } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
 
 export default async function CashflowPage() {
-  const [snapshot, engine, household] = await Promise.all([
-    getDashboardSnapshot(),
-    getProjectionEngineInput(),
-    getHouseholdConfig(),
-  ]);
+  const snapshot = await getDashboardSnapshot();
 
-  const rows = buildFortnightCashflowTable({
-    state: engine.state,
-    activeSkips: engine.activeSkips,
-    asOfIso: snapshot.balanceAsOfIso,
-    startingAvailableMoney: snapshot.availableMoney,
-  });
+  const hasAnyScheduledEvents =
+    snapshot.incomes.some((income) => Boolean(income.nextPayDateIso)) ||
+    snapshot.commitments.some((commitment) => Boolean(commitment.nextDueDateIso));
 
-  const hints = buildHouseholdMoneyHints({
-    availableMoney: snapshot.availableMoney,
-    floatThreshold: household.ubankFloatThreshold ?? null,
-  });
+  const header = (
+    <span className="keel-chip px-3 py-1 text-[11px] font-medium text-[color:var(--keel-ink-3)]">
+      Weekly forecast
+    </span>
+  );
 
   return (
-    <AppShell title="Cashflow" currentPath="/cashflow" backHref="/">
-      <SurfaceCard className="mb-4">
-        <p className="text-sm text-muted-foreground">
-          26-fortnight projection from your current commitments and pay schedule. Numbers are indicative — perform real
-          transfers in your banking apps.
-        </p>
-      </SurfaceCard>
-
-      <SurfaceCard className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This fortnight (hints)</p>
-        <p className="mt-2 text-sm">
-          Float target {formatAud(hints.ubankFloatTarget)} · suggested to everyday spend{" "}
-          <span className="font-mono font-medium">{formatAud(hints.suggestedToSpendEveryday)}</span> · to secondary saver{" "}
-          <span className="font-mono font-medium">{formatAud(hints.suggestedToSecondarySaver)}</span>
-        </p>
-        <p className="mt-2 text-xs text-muted-foreground">{hints.notes}</p>
-      </SurfaceCard>
-
-      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-white/10">
-        <table className="w-full min-w-[520px] text-left text-sm">
-          <thead className="bg-white/[0.04] text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">#</th>
-              <th className="px-3 py-2">Start</th>
-              <th className="px-3 py-2">End</th>
-              <th className="px-3 py-2 text-right">End available</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.index} className="border-t border-white/[0.06]">
-                <td className="px-3 py-2 tabular-nums">{r.index}</td>
-                <td className="px-3 py-2 font-mono text-xs">{r.startIso}</td>
-                <td className="px-3 py-2 font-mono text-xs">{r.endIso}</td>
-                <td className="px-3 py-2 text-right font-mono">{formatAud(r.endProjectedAvailableMoney)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <AppShell title="Cashflow" currentPath="/cashflow" headerRight={header}>
+      <TimelineView
+        balanceAsOfIso={snapshot.balanceAsOfIso}
+        startingAvailableMoney={snapshot.availableMoney}
+        startingBankBalance={snapshot.bankBalance}
+        hasAnyScheduledEvents={hasAnyScheduledEvents}
+        annualTotals={{
+          annualIncomeForecast: snapshot.annualIncomeForecast,
+          annualCommitmentsForecast: snapshot.annualCommitmentsForecast,
+          annualSpendActualToDate: snapshot.annualSpendActualToDate,
+        }}
+      />
     </AppShell>
   );
 }

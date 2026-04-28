@@ -36,7 +36,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
       path.startsWith("/incomes"),
   },
   { href: "/budget", label: "Budget" },
-  { href: "/timeline", label: "Timeline" },
   { href: "/cashflow", label: "Cashflow" },
   { href: "/ask", label: "Ask" },
   { href: "/goals", label: "Goals", match: (path) => path === "/goals" || path.startsWith("/goals/") },
@@ -150,7 +149,6 @@ function IconGoals({ active }: { active: boolean }) {
 function TabIcon({ href, active }: { href: string; active: boolean }) {
   if (href === "/") return <IconHome active={active} />;
   if (href === "/budget") return <IconHome active={active} />;
-  if (href === "/timeline") return <IconTimeline active={active} />;
   if (href === "/cashflow") return <IconTimeline active={active} />;
   if (href === "/wealth") return <IconWealth active={active} />;
   if (href === "/goals") return <IconGoals active={active} />;

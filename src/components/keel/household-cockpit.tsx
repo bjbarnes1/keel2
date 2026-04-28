@@ -242,7 +242,7 @@ export function HouseholdCockpit({
             ) : null}
             {projectedStress ? (
               <Link
-                href="/timeline"
+                href="/cashflow"
                 className="rounded-full bg-[color:var(--keel-ink-6)] px-3 py-1 font-medium text-[color:var(--keel-attend)] hover:bg-[color:var(--keel-ink-6)]/80"
               >
                 12-mo shortfall risk
