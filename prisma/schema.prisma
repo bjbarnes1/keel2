@@ -21,6 +21,11 @@ enum IncomeSkipStrategy {
   STANDALONE
 }
 
+enum OccurrenceOverrideKind {
+  INCOME
+  COMMITMENT
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -60,6 +65,7 @@ model Budget {
   commitmentSkips    CommitmentSkip[]
   goalSkips          GoalSkip[]
   incomeSkips        IncomeSkip[]
+  cashflowOccurrenceOverrides CashflowOccurrenceOverride[]
   learnedPatterns    UserLearnedPatterns?
   aiInsight          UserAiInsight?
   medicalSubItems    MedicalSubItem[]
@@ -285,6 +291,28 @@ model IncomeSkip {
   @@unique([incomeId, originalDate])
   @@index([budgetId, revokedAt])
   @@index([budgetId, originalDate])
+}
+
+model CashflowOccurrenceOverride {
+  id              String                 @id @default(cuid())
+  budgetId        String
+  kind            OccurrenceOverrideKind
+  sourceId        String
+  originalDate    DateTime               @db.Date
+  scheduledDate   DateTime               @db.Date
+  scenarioBatchId String?
+  notes           String?
+  revokedAt       DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  createdByUserId String
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, kind, sourceId, originalDate])
+  @@index([budgetId, revokedAt])
+  @@index([budgetId, scheduledDate])
+  @@index([budgetId, kind, sourceId])
 }
 
 model WealthAccount {

@@ -533,4 +533,70 @@ describe("keel engine", () => {
     // Skipped pay adds no credit — balance stays at starting available until other flows move it.
     expect(skippedRow?.projectedAvailableMoney).toBe(1000);
   });
+
+  it("moves a single commitment occurrence date while preserving recurrence identity", () => {
+    const timeline = buildProjectionTimeline({
+      availableMoney: 1000,
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      horizonDays: 60,
+      incomes: [income],
+      commitments: [
+        {
+          id: "c-rent",
+          name: "Rent",
+          amount: 1200,
+          frequency: "monthly",
+          nextDueDate: "2026-05-01",
+          fundedByIncomeId: income.id,
+        },
+      ],
+      occurrenceOverrides: [
+        {
+          kind: "commitment",
+          sourceId: "c-rent",
+          originalDateIso: "2026-05-01",
+          scheduledDateIso: "2026-05-05",
+        },
+      ],
+    });
+
+    const moved = timeline.find((event) => event.id === "c-rent-2026-05-01");
+    expect(moved).toBeDefined();
+    expect(moved?.date).toBe("2026-05-05");
+    expect(moved?.sourceKind).toBe("commitment");
+    expect(moved?.sourceId).toBe("c-rent");
+    expect(moved?.originalDateIso).toBe("2026-05-01");
+  });
+
+  it("applies an income skip to a moved income occurrence (keyed by original date)", () => {
+    const timeline = buildProjectionTimeline({
+      availableMoney: 1000,
+      asOf: new Date("2026-04-20T00:00:00Z"),
+      horizonDays: 20,
+      incomes: [income],
+      commitments: [],
+      skips: [
+        {
+          kind: "income",
+          incomeId: income.id,
+          originalDateIso: "2026-04-24",
+          strategy: "STANDALONE",
+        },
+      ],
+      occurrenceOverrides: [
+        {
+          kind: "income",
+          sourceId: income.id,
+          originalDateIso: "2026-04-24",
+          scheduledDateIso: "2026-04-26",
+        },
+      ],
+    });
+
+    const movedSkippedPay = timeline.find((event) => event.id === "income-income-salary-2026-04-24");
+    expect(movedSkippedPay).toBeDefined();
+    expect(movedSkippedPay?.date).toBe("2026-04-26");
+    expect(movedSkippedPay?.isSkipped).toBe(true);
+    expect(movedSkippedPay?.projectedAvailableMoney).toBe(1000);
+  });
 });

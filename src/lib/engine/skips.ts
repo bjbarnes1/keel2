@@ -27,6 +27,10 @@ export type ScheduledCashflowEvent = {
   label: string;
   amount: number;
   type: "income" | "bill";
+  /** Stable occurrence identity (optional for legacy test fixtures). */
+  sourceKind?: "income" | "commitment";
+  sourceId?: string;
+  originalDateIso?: string;
 };
 
 function roundCurrency(value: number) {

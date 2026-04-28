@@ -351,11 +351,12 @@ export async function loadProjectionChunk(
   input: LoadProjectionChunkInput,
 ): Promise<ProjectionEvent[]> {
   const payload = loadProjectionChunkInputSchema.parse(input);
-  const { state, activeSkips } = await getProjectionEngineInput();
+  const { state, activeSkips, occurrenceOverrides } = await getProjectionEngineInput();
 
   return buildProjectionChunkFromState({
     state,
     activeSkips,
+    occurrenceOverrides,
     startDateIso: payload.startDateIso,
     horizonDays: payload.horizonDays,
   });

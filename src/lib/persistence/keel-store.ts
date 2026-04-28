@@ -20,6 +20,12 @@ export {
   type ActiveSkipsBundle,
 } from "./skips";
 export {
+  getActiveOccurrenceOverridesForBudget,
+  listActiveOccurrenceOverridesForCurrentBudget,
+  upsertOccurrenceOverrideBatch,
+  revokeOccurrenceOverridesById,
+} from "./occurrence-overrides";
+export {
   getCategoryOptions,
   createCategory,
   createSubcategory,

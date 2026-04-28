@@ -105,6 +105,22 @@ export type IncomeSkipInput = {
 
 export type SkipInput = CommitmentSkipInput | GoalSkipInput | IncomeSkipInput;
 
+export type OccurrenceOverrideKind = "income" | "commitment";
+
+/**
+ * Per-occurrence date override that preserves recurrence linkage.
+ * The occurrence identity is `(kind, sourceId, originalDateIso)`;
+ * only `scheduledDateIso` moves.
+ */
+export type OccurrenceDateOverrideInput = {
+  overrideId?: string;
+  kind: OccurrenceOverrideKind;
+  sourceId: string;
+  originalDateIso: string;
+  scheduledDateIso: string;
+  scenarioBatchId?: string;
+};
+
 /** Pure preview / Ask payload: deltas vs baseline projection. */
 export type SkipPreview = {
   /** Bill event ids whose cashflow amount differs from baseline (includes removed as omitted from map) */
@@ -138,6 +154,12 @@ export interface ProjectionEventView {
   isSkipSpreadTarget?: boolean;
   /** When set, row amount shown in UI (baseline); balances use cashflow */
   displayAmount?: number;
+  /** Stable identity for recurrence-linked edits (always original occurrence date). */
+  sourceKind?: OccurrenceOverrideKind;
+  sourceId?: string;
+  originalDateIso?: string;
+  /** Present when this occurrence is currently date-overridden. */
+  scheduledDateIso?: string;
 }
 
 export type ForecastHorizon = {

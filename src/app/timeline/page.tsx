@@ -18,22 +18,18 @@ export default async function TimelinePage() {
     snapshot.incomes.some((income) => Boolean(income.nextPayDateIso)) ||
     snapshot.commitments.some((commitment) => Boolean(commitment.nextDueDateIso));
 
-  const attentionCommitmentIds = snapshot.commitments
-    .filter((commitment) => commitment.isAttention)
-    .map((commitment) => commitment.id);
-
   const header = (
     <span className="keel-chip px-3 py-1 text-[11px] font-medium text-[color:var(--keel-ink-3)]">
-      14 days
+      Weekly forecast
     </span>
   );
 
   return (
     <AppShell title="Timeline" currentPath="/timeline" headerRight={header}>
       <TimelineView
+        balanceAsOfIso={snapshot.balanceAsOfIso}
         startingAvailableMoney={snapshot.availableMoney}
         startingBankBalance={snapshot.bankBalance}
-        attentionCommitmentIds={attentionCommitmentIds}
         hasAnyScheduledEvents={hasAnyScheduledEvents}
         annualTotals={{
           annualIncomeForecast: snapshot.annualIncomeForecast,

@@ -10,6 +10,7 @@
 
 import type { ProjectionEvent } from "@/lib/engine/keel";
 import { availableMoneyAt } from "@/lib/engine/keel";
+import type { OccurrenceDateOverrideInput } from "@/lib/types";
 
 // --- Date helpers (UTC / ISO string based) -----------------------------------
 
@@ -34,6 +35,35 @@ export function toIsoDate(date: Date): string {
 
 export function fromIsoDate(iso: string): Date {
   return new Date(`${iso}T00:00:00Z`);
+}
+
+export function addMonthsUtc(date: Date, months: number): Date {
+  const next = startOfUtcDay(date);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+}
+
+export function startOfUtcMonth(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+export function endOfUtcMonth(date: Date): Date {
+  const start = startOfUtcMonth(date);
+  return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
+}
+
+/** ISO week start helper; defaults to Monday (`weekStartsOn = 1`). */
+export function startOfUtcWeek(date: Date, weekStartsOn = 1): Date {
+  const day = startOfUtcDay(date);
+  const dow = day.getUTCDay();
+  const delta = (dow - weekStartsOn + 7) % 7;
+  day.setUTCDate(day.getUTCDate() - delta);
+  return day;
+}
+
+export function endOfUtcWeek(date: Date, weekStartsOn = 1): Date {
+  const start = startOfUtcWeek(date, weekStartsOn);
+  return addDaysUtc(start, 6);
 }
 
 /** Integer days between two UTC midnights (b - a). */
@@ -182,6 +212,32 @@ export function catmullRomPath(points: readonly Point[], tension = 0.5): string 
 
 export type TrajectoryPoint = { date: Date; iso: string; value: number };
 
+export type WeeklyCashflowBucket = {
+  weekStartIso: string;
+  weekEndIso: string;
+  income: number;
+  commitments: number;
+  closingAvailableMoney: number;
+  closingBankBalance: number;
+};
+
+export type TimelineTableRow = {
+  id: string;
+  dateIso: string;
+  label: string;
+  type: "income" | "bill";
+  amount: number;
+  projectedAvailableMoney: number;
+  projectedBankBalance: number;
+  sourceKind?: "income" | "commitment";
+  sourceId?: string;
+  originalDateIso?: string;
+};
+
+function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
 /**
  * Samples available-money along the visible window. For every viewport event
  * we record `projectedAvailableMoney` at that event; plus we bracket the
@@ -300,6 +356,198 @@ export function buildBankBalanceTrajectory(input: {
     }
   }
   return deduped;
+}
+
+function maxIso(a: string, b: string) {
+  return a > b ? a : b;
+}
+
+function minIso(a: string, b: string) {
+  return a < b ? a : b;
+}
+
+/**
+ * Buckets projection events into ISO-week windows and returns week-close balances.
+ */
+export function buildWeeklyCashflowBuckets(input: {
+  events: readonly ProjectionEvent[];
+  startingAvailableMoney: number;
+  startingBankBalance: number;
+  windowStart: Date;
+  windowEnd: Date;
+}): WeeklyCashflowBucket[] {
+  const sorted = [...input.events].sort((a, b) => a.date.localeCompare(b.date));
+  const windowStartIso = toIsoDate(startOfUtcDay(input.windowStart));
+  const windowEndIso = toIsoDate(startOfUtcDay(input.windowEnd));
+
+  const firstWeekStart = startOfUtcWeek(input.windowStart);
+  const buckets: WeeklyCashflowBucket[] = [];
+
+  for (
+    let cursor = firstWeekStart;
+    toIsoDate(cursor) <= windowEndIso;
+    cursor = addDaysUtc(cursor, 7)
+  ) {
+    const fullWeekStartIso = toIsoDate(cursor);
+    const fullWeekEndIso = toIsoDate(addDaysUtc(cursor, 6));
+    const weekStartIso = maxIso(fullWeekStartIso, windowStartIso);
+    const weekEndIso = minIso(fullWeekEndIso, windowEndIso);
+
+    let income = 0;
+    let commitments = 0;
+    for (const event of sorted) {
+      if (event.date < weekStartIso) continue;
+      if (event.date > weekEndIso) break;
+      if (event.type === "income") income += Math.max(0, event.amount);
+      else commitments += Math.abs(event.amount);
+    }
+
+    const closingAvailableMoney = availableMoneyAt(
+      weekEndIso,
+      sorted as ProjectionEvent[],
+      input.startingAvailableMoney,
+    );
+    const closingBankBalance =
+      input.startingBankBalance + (closingAvailableMoney - input.startingAvailableMoney);
+
+    buckets.push({
+      weekStartIso,
+      weekEndIso,
+      income,
+      commitments,
+      closingAvailableMoney,
+      closingBankBalance,
+    });
+  }
+
+  return buckets;
+}
+
+/**
+ * Builds table rows for a fixed day window from a projection stream.
+ */
+export function buildTimelineTableRows(input: {
+  events: readonly ProjectionEvent[];
+  startingAvailableMoney: number;
+  startingBankBalance: number;
+  windowStartIso: string;
+  days: number;
+}): TimelineTableRow[] {
+  const windowEndIso = toIsoDate(addDaysUtc(fromIsoDate(input.windowStartIso), input.days - 1));
+
+  return input.events
+    .filter((event) => event.date >= input.windowStartIso && event.date <= windowEndIso)
+    .map((event) => {
+      const sourceKind = event.sourceKind;
+      const sourceId = event.sourceId;
+      const originalDateIso = event.originalDateIso ?? event.date;
+      const projectedBankBalance =
+        input.startingBankBalance + (event.projectedAvailableMoney - input.startingAvailableMoney);
+      return {
+        id: event.id,
+        dateIso: event.date,
+        label: event.label,
+        type: event.type,
+        amount: event.amount,
+        projectedAvailableMoney: event.projectedAvailableMoney,
+        projectedBankBalance,
+        sourceKind,
+        sourceId,
+        originalDateIso,
+      };
+    });
+}
+
+function parseOccurrenceIdentityFromEvent(
+  event: ProjectionEvent,
+): { kind: "income" | "commitment"; sourceId: string; originalDateIso: string } | null {
+  if (event.sourceKind && event.sourceId) {
+    return {
+      kind: event.sourceKind,
+      sourceId: event.sourceId,
+      originalDateIso: event.originalDateIso ?? event.date,
+    };
+  }
+
+  if (event.type === "income") {
+    const incomeMatch = /^income-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(event.id);
+    if (!incomeMatch) return null;
+    return {
+      kind: "income",
+      sourceId: incomeMatch[1]!,
+      originalDateIso: incomeMatch[2]!,
+    };
+  }
+
+  const dateMatch = /(\d{4}-\d{2}-\d{2})$/.exec(event.id);
+  const parts = event.id.split("-");
+  if (!dateMatch || parts.length < 4) return null;
+  const sourceId = parts.length === 4 ? parts[0]! : parts.slice(0, -3).join("-");
+  return {
+    kind: "commitment",
+    sourceId,
+    originalDateIso: dateMatch[1]!,
+  };
+}
+
+function sortProjectionEventsByTimeline(left: ProjectionEvent, right: ProjectionEvent) {
+  const dateOrder = left.date.localeCompare(right.date);
+  if (dateOrder !== 0) return dateOrder;
+  if (left.type !== right.type) return left.type === "income" ? -1 : 1;
+  return left.label.localeCompare(right.label);
+}
+
+/**
+ * Applies draft occurrence-date overrides to an existing projection stream and
+ * recalculates running balances locally for interactive what-if previews.
+ */
+export function applyDraftOccurrenceOverridesToProjection(input: {
+  events: readonly ProjectionEvent[];
+  startingAvailableMoney: number;
+  overrides: OccurrenceDateOverrideInput[];
+}): ProjectionEvent[] {
+  const byKey = new Map<string, OccurrenceDateOverrideInput>();
+  for (const override of input.overrides) {
+    byKey.set(
+      `${override.kind}:${override.sourceId}:${override.originalDateIso}`,
+      override,
+    );
+  }
+
+  const shifted = input.events.map((event) => {
+    const identity = parseOccurrenceIdentityFromEvent(event);
+    if (!identity) return event;
+    const override = byKey.get(
+      `${identity.kind}:${identity.sourceId}:${identity.originalDateIso}`,
+    );
+    if (!override) {
+      return {
+        ...event,
+        sourceKind: identity.kind,
+        sourceId: identity.sourceId,
+        originalDateIso: identity.originalDateIso,
+      };
+    }
+    return {
+      ...event,
+      date: override.scheduledDateIso,
+      sourceKind: identity.kind,
+      sourceId: identity.sourceId,
+      originalDateIso: identity.originalDateIso,
+    };
+  });
+
+  const sorted = [...shifted].sort(sortProjectionEventsByTimeline);
+
+  let running = input.startingAvailableMoney;
+  return sorted.map((event) => {
+    if (event.type === "income") {
+      running = roundCurrency(running + (event.isSkipped ? 0 : event.amount));
+    } else {
+      running = roundCurrency(running - event.amount);
+    }
+    return { ...event, projectedAvailableMoney: running };
+  });
 }
 
 // --- Pay / commitment crossing detection (for haptics) -----------------------

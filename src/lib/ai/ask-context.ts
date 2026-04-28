@@ -86,7 +86,7 @@ export async function buildAskContextSnapshot(opts?: { userId?: string }): Promi
     }
   }
 
-  const { state, activeSkips } = await getProjectionEngineInput();
+  const { state, activeSkips, occurrenceOverrides } = await getProjectionEngineInput();
   const asOf = new Date(`${state.user.balanceAsOf}T00:00:00Z`);
   const activeCommitments = state.commitments.filter((c) => !c.archivedAt);
   const activeIncomes = state.incomes.filter((i) => !i.archivedAt);
@@ -121,6 +121,7 @@ export async function buildAskContextSnapshot(opts?: { userId?: string }): Promi
   const chunk = buildProjectionChunkFromState({
     state,
     activeSkips,
+    occurrenceOverrides,
     startDateIso: state.user.balanceAsOf,
     horizonDays: 42,
   });

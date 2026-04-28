@@ -85,12 +85,12 @@ describe("loadProjectionChunk validation", () => {
     ).toThrow();
   });
 
-  // Horizon above the 200-day safety valve is rejected.
-  it("rejects horizonDays above 200", () => {
+  // Horizon above the 420-day safety valve is rejected.
+  it("rejects horizonDays above 420", () => {
     expect(() =>
       loadProjectionChunkInputSchema.parse({
         startDateIso: "2026-04-20",
-        horizonDays: 300,
+        horizonDays: 500,
       }),
     ).toThrow();
   });

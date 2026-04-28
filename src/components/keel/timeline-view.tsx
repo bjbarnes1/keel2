@@ -1,31 +1,78 @@
 "use client";
 
 /**
- * TimelineView — client-only orchestrator for the Timeline screen.
+ * TimelineView — non-scrolling weekly forecast + editable 30-day scenario table.
  *
- * Wires four concerns together:
- *   - `useTimelineEvents(focalDate)` owns the chunked event window.
- *   - `useTimelineSync()` owns the focal date + source lockout.
- *   - `WaterlineChart` renders the SVG + handles scrub gestures.
- *   - `AvailableMoneyCard` + `TimelineLegend` derive from the same state.
- *
- * No data fetching or state lives in the child components — they are pure
- * visual surfaces. If the foundation hooks' contract changes, this file is
- * the single place to reconcile.
+ * Loads a long projection window once, then applies draft occurrence-date
+ * overrides client-side for instant what-if feedback. Confirmation persists
+ * those occurrence moves as recurrence-linked overrides.
  *
  * @module components/keel/timeline-view
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { loadProjectionChunk } from "@/app/actions/keel";
+import { confirmTimelineOccurrenceOverrides } from "@/app/actions/timeline-occurrence-overrides";
 import { TimelineLegend } from "@/components/keel/timeline-legend";
 import { WaterlineChart } from "@/components/keel/waterline-chart";
-import { availableMoneyAt } from "@/lib/engine/keel";
-import { useTimelineEvents } from "@/lib/hooks/use-timeline-events";
-import { useTimelineSync } from "@/lib/hooks/use-timeline-sync";
-import { startOfUtcDay } from "@/lib/timeline/waterline-geometry";
-import { formatAud } from "@/lib/utils";
+import type { ProjectionEvent } from "@/lib/engine/keel";
+import type { OccurrenceDateOverrideInput } from "@/lib/types";
+import {
+  addDaysUtc,
+  addMonthsUtc,
+  applyDraftOccurrenceOverridesToProjection,
+  buildTimelineTableRows,
+  buildWeeklyCashflowBuckets,
+  fromIsoDate,
+  startOfUtcDay,
+  startOfUtcMonth,
+  toIsoDate,
+} from "@/lib/timeline/waterline-geometry";
+import { cn, formatAud, formatDisplayDate } from "@/lib/utils";
+
+const TIMELINE_HORIZON_DAYS = 420;
+const TABLE_WINDOW_DAYS = 30;
+
+type ChartRangeSelection = "auto" | "12" | "9" | "6" | "3";
+
+function useViewportWidth() {
+  const [width, setWidth] = useState(() =>
+    typeof window === "undefined" ? 1280 : window.innerWidth,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return width;
+}
+
+function autoRangeMonthsForWidth(width: number): 12 | 9 | 6 | 3 {
+  if (width >= 1280) return 12;
+  if (width >= 1024) return 9;
+  if (width >= 760) return 6;
+  return 3;
+}
+
+function parseManualRange(selection: ChartRangeSelection): 12 | 9 | 6 | 3 {
+  if (selection === "12") return 12;
+  if (selection === "9") return 9;
+  if (selection === "6") return 6;
+  return 3;
+}
+
+function minDate(left: Date, right: Date) {
+  return left.getTime() < right.getTime() ? left : right;
+}
+
+function clampIsoDate(iso: string, minIso: string, maxIso: string) {
+  if (iso < minIso) return minIso;
+  if (iso > maxIso) return maxIso;
+  return iso;
+}
 
 export type AnnualTotals = {
   annualIncomeForecast: number;
@@ -34,46 +81,210 @@ export type AnnualTotals = {
 };
 
 export type TimelineViewProps = {
+  balanceAsOfIso: string;
   startingAvailableMoney: number;
   startingBankBalance: number;
-  attentionCommitmentIds: string[];
   /** Surface a message when the user has nothing scheduled yet. */
   hasAnyScheduledEvents: boolean;
   annualTotals: AnnualTotals;
 };
 
 export function TimelineView({
+  balanceAsOfIso,
   startingAvailableMoney,
   startingBankBalance,
-  attentionCommitmentIds,
   hasAnyScheduledEvents,
   annualTotals,
 }: TimelineViewProps) {
-  // Today is stable for the lifetime of the mount — capturing once via lazy
-  // initial state keeps availableMoneyAt + legend sectioning + focal
-  // comparisons coherent across re-renders, even if the user leaves the tab
-  // open past midnight. A new `today` would invalidate the focal date if we
-  // let it drift.
-  const [today] = useState<Date>(() => startOfUtcDay(new Date()));
+  const asOfDate = useMemo(() => fromIsoDate(balanceAsOfIso), [balanceAsOfIso]);
+  const [projectionEvents, setProjectionEvents] = useState<ProjectionEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
-  const sync = useTimelineSync(today);
-  const {
-    events,
-    eventsInViewport,
-    isLoading,
-    hasReachedMaxHorizon,
-    error,
-  } = useTimelineEvents(sync.focalDate);
+  const [rangeSelection, setRangeSelection] = useState<ChartRangeSelection>("auto");
+  const [chartAnchorMonth, setChartAnchorMonth] = useState<Date>(() => startOfUtcMonth(asOfDate));
+  const [tableWindowStart, setTableWindowStart] = useState<Date>(() => startOfUtcDay(asOfDate));
+  const [selectedWeekStartIso, setSelectedWeekStartIso] = useState<string | null>(null);
+  const [draftOverridesByKey, setDraftOverridesByKey] = useState<
+    Record<string, OccurrenceDateOverrideInput>
+  >({});
 
-  const attentionSet = useMemo(
-    () => new Set(attentionCommitmentIds),
-    [attentionCommitmentIds],
+  const viewportWidth = useViewportWidth();
+  const autoRangeMonths = autoRangeMonthsForWidth(viewportWidth);
+  const rangeMonths =
+    rangeSelection === "auto" ? autoRangeMonths : parseManualRange(rangeSelection);
+  const maxHorizonDate = useMemo(
+    () => addDaysUtc(asOfDate, TIMELINE_HORIZON_DAYS),
+    [asOfDate],
+  );
+  const maxHorizonIso = toIsoDate(maxHorizonDate);
+
+  const reloadProjection = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const events = await loadProjectionChunk({
+        startDateIso: balanceAsOfIso,
+        horizonDays: TIMELINE_HORIZON_DAYS,
+      });
+      setProjectionEvents(events);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load your timeline.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [balanceAsOfIso]);
+
+  useEffect(() => {
+    void reloadProjection();
+  }, [reloadProjection]);
+
+  const draftOverrides = useMemo(
+    () => Object.values(draftOverridesByKey),
+    [draftOverridesByKey],
   );
 
-  const availableMoneyAtFocal = useMemo(() => {
-    if (events.length === 0) return startingAvailableMoney;
-    return availableMoneyAt(sync.focalDate, events, startingAvailableMoney);
-  }, [events, sync.focalDate, startingAvailableMoney]);
+  const projectedEvents = useMemo(
+    () =>
+      applyDraftOccurrenceOverridesToProjection({
+        events: projectionEvents,
+        startingAvailableMoney,
+        overrides: draftOverrides,
+      }),
+    [projectionEvents, startingAvailableMoney, draftOverrides],
+  );
+
+  const chartRangeStart = useMemo(() => startOfUtcMonth(chartAnchorMonth), [chartAnchorMonth]);
+  const chartRangeEndWanted = useMemo(
+    () => addDaysUtc(addMonthsUtc(chartRangeStart, rangeMonths), -1),
+    [chartRangeStart, rangeMonths],
+  );
+  const chartRangeEnd = useMemo(
+    () => minDate(chartRangeEndWanted, maxHorizonDate),
+    [chartRangeEndWanted, maxHorizonDate],
+  );
+
+  const weeklyBuckets = useMemo(
+    () =>
+      buildWeeklyCashflowBuckets({
+        events: projectedEvents,
+        startingAvailableMoney,
+        startingBankBalance,
+        windowStart: chartRangeStart,
+        windowEnd: chartRangeEnd,
+      }),
+    [projectedEvents, startingAvailableMoney, startingBankBalance, chartRangeStart, chartRangeEnd],
+  );
+
+  useEffect(() => {
+    if (weeklyBuckets.length === 0) {
+      setSelectedWeekStartIso(null);
+      return;
+    }
+    if (!selectedWeekStartIso) {
+      setSelectedWeekStartIso(weeklyBuckets[0]!.weekStartIso);
+      return;
+    }
+    if (!weeklyBuckets.some((bucket) => bucket.weekStartIso === selectedWeekStartIso)) {
+      setSelectedWeekStartIso(weeklyBuckets[0]!.weekStartIso);
+    }
+  }, [weeklyBuckets, selectedWeekStartIso]);
+
+  const chartRangeLabel = useMemo(() => {
+    const modeLabel = rangeSelection === "auto" ? `Auto (${autoRangeMonths} months)` : `${rangeMonths} months`;
+    return `${formatDisplayDate(toIsoDate(chartRangeStart), "short")} to ${formatDisplayDate(
+      toIsoDate(chartRangeEnd),
+      "short",
+    )} · ${modeLabel}`;
+  }, [autoRangeMonths, chartRangeEnd, chartRangeStart, rangeMonths, rangeSelection]);
+
+  const tableWindowStartIso = toIsoDate(tableWindowStart);
+  const tableRows = useMemo(
+    () =>
+      buildTimelineTableRows({
+        events: projectedEvents,
+        startingAvailableMoney,
+        startingBankBalance,
+        windowStartIso: tableWindowStartIso,
+        days: TABLE_WINDOW_DAYS,
+      }),
+    [projectedEvents, startingAvailableMoney, startingBankBalance, tableWindowStartIso],
+  );
+  const tableWindowEndIso = toIsoDate(
+    addDaysUtc(fromIsoDate(tableWindowStartIso), TABLE_WINDOW_DAYS - 1),
+  );
+
+  const chartCanPrev =
+    addMonthsUtc(chartAnchorMonth, -1).getTime() >= startOfUtcMonth(asOfDate).getTime();
+  const chartCanNext =
+    addDaysUtc(addMonthsUtc(addMonthsUtc(chartAnchorMonth, 1), rangeMonths), -1).getTime() <=
+    maxHorizonDate.getTime();
+  const tableCanPrev =
+    addMonthsUtc(tableWindowStart, -1).getTime() >= startOfUtcDay(asOfDate).getTime();
+  const tableCanNext =
+    addDaysUtc(addMonthsUtc(tableWindowStart, 1), TABLE_WINDOW_DAYS - 1).getTime() <=
+    maxHorizonDate.getTime();
+
+  const setRowScheduledDate = useCallback(
+    (row: (typeof tableRows)[number], nextIsoInput: string) => {
+      const kind = row.sourceKind;
+      const sourceId = row.sourceId;
+      const originalDateIso = row.originalDateIso;
+      if (!kind || !sourceId || !originalDateIso) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(nextIsoInput)) return;
+
+      const nextIso = clampIsoDate(nextIsoInput, balanceAsOfIso, maxHorizonIso);
+      const key = `${kind}:${sourceId}:${originalDateIso}`;
+
+      setDraftOverridesByKey((prev) => {
+        if (nextIso === originalDateIso) {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        return {
+          ...prev,
+          [key]: {
+            kind,
+            sourceId,
+            originalDateIso,
+            scheduledDateIso: nextIso,
+          },
+        };
+      });
+    },
+    [balanceAsOfIso, maxHorizonIso],
+  );
+
+  const handleMoveByDays = useCallback(
+    (row: (typeof tableRows)[number], days: number) => {
+      const nextIso = toIsoDate(addDaysUtc(fromIsoDate(row.dateIso), days));
+      setRowScheduledDate(row, nextIso);
+    },
+    [setRowScheduledDate],
+  );
+
+  const undoDraft = useCallback(() => {
+    setDraftOverridesByKey({});
+    setConfirmError(null);
+  }, []);
+
+  const confirmDraft = useCallback(async () => {
+    if (draftOverrides.length === 0) return;
+    setIsConfirming(true);
+    setConfirmError(null);
+    try {
+      await confirmTimelineOccurrenceOverrides({ overrides: draftOverrides });
+      setDraftOverridesByKey({});
+      await reloadProjection();
+    } catch (err) {
+      setConfirmError(err instanceof Error ? err.message : "Could not save your scenario changes.");
+    } finally {
+      setIsConfirming(false);
+    }
+  }, [draftOverrides, reloadProjection]);
 
   // Empty state — no events at all (brand-new user with no incomes/commitments).
   if (!hasAnyScheduledEvents) {
@@ -97,17 +308,60 @@ export function TimelineView({
   return (
     <div className="space-y-5">
       <div className="relative">
+        <section className="glass-clear rounded-[var(--radius-md)] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {(["auto", "12", "9", "6", "3"] as const).map((option) => {
+                const active = rangeSelection === option;
+                const label =
+                  option === "auto"
+                    ? `Auto (${autoRangeMonths}m)`
+                    : `${option}m`;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setRangeSelection(option)}
+                    className={cn(
+                      "rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs font-medium",
+                      active
+                        ? "border-transparent bg-[#2f7fce] text-white"
+                        : "border-[color:var(--color-border)] text-[color:var(--keel-ink)]",
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setChartAnchorMonth((prev) => addMonthsUtc(prev, -1))}
+                disabled={!chartCanPrev}
+                className="rounded-[var(--radius-pill)] border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--keel-ink)] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                Previous month
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartAnchorMonth((prev) => addMonthsUtc(prev, 1))}
+                disabled={!chartCanNext}
+                className="rounded-[var(--radius-pill)] border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--keel-ink)] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                Next month
+              </button>
+            </div>
+          </div>
+        </section>
+
         <WaterlineChart
-          eventsInViewport={eventsInViewport}
-          allEvents={events}
-          focalDate={sync.focalDate}
-          todayDate={today}
-          onFocalChange={sync.setFocalDateFromChart}
-          availableMoneyAtFocal={availableMoneyAtFocal}
-          startingAvailableMoney={startingAvailableMoney}
-          startingBankBalance={startingBankBalance}
-          attentionCommitmentIds={attentionSet}
-          className="lg:max-w-none"
+          weeklyBuckets={weeklyBuckets}
+          selectedWeekStartIso={selectedWeekStartIso}
+          onSelectWeek={setSelectedWeekStartIso}
+          rangeLabel={chartRangeLabel}
+          className="mt-3"
         />
 
         {isLoading ? <TimelineShimmer /> : null}
@@ -115,23 +369,25 @@ export function TimelineView({
 
       {error ? (
         <div className="glass-tint-attend rounded-[var(--radius-sm)] px-4 py-3 text-[12px] text-[color:var(--keel-ink-2)]">
-          Couldn&apos;t load your timeline. Reload to try again.
+          {error}
         </div>
       ) : null}
 
-      {hasReachedMaxHorizon ? (
-        <p className="px-1 text-[11px] text-[color:var(--keel-ink-4)]">
-          Projections beyond 6 months are fuzzy. Keel will fill in the details as the time comes closer.
-        </p>
-      ) : null}
-
       <TimelineLegend
-        allEvents={events}
-        focalDate={sync.focalDate}
-        todayDate={today}
-        syncSource={sync.source}
-        onRowTap={sync.setFocalDateFromLegend}
-        onScroll={sync.setFocalDateFromLegend}
+        rows={tableRows}
+        windowStartIso={tableWindowStartIso}
+        windowEndIso={tableWindowEndIso}
+        onPrevMonth={() => setTableWindowStart((prev) => addMonthsUtc(prev, -1))}
+        onNextMonth={() => setTableWindowStart((prev) => addMonthsUtc(prev, 1))}
+        canPrevMonth={tableCanPrev}
+        canNextMonth={tableCanNext}
+        onMoveByDays={handleMoveByDays}
+        onSetDate={setRowScheduledDate}
+        draftCount={draftOverrides.length}
+        onUndoDraft={undoDraft}
+        onConfirmDraft={confirmDraft}
+        isConfirming={isConfirming}
+        error={confirmError}
       />
 
       <AnnualTotalsStrip totals={annualTotals} />

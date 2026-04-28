@@ -5,8 +5,11 @@ import { describe, expect, it } from "vitest";
 import type { ProjectionEvent } from "@/lib/engine/keel";
 
 import {
+  applyDraftOccurrenceOverridesToProjection,
   addDaysUtc,
   buildAvailableMoneyTrajectory,
+  buildTimelineTableRows,
+  buildWeeklyCashflowBuckets,
   catmullRomPath,
   computeMaxAmountInViewport,
   detectFocalCrossings,
@@ -393,5 +396,96 @@ describe("chart drag ↔ whole-day shift", () => {
     const dragPx = 35; // -1 whole day at ppd=20 with 15px remainder
     expect(dragPixelsToWholeDayShift(dragPx, ppd)).toBe(-1);
     expect(dragRemainderPixelsAfterWholeDayShift(dragPx, ppd)).toBeCloseTo(15, 5);
+  });
+});
+
+describe("weekly buckets and table extraction", () => {
+  const events: ProjectionEvent[] = [
+    event({
+      id: "income-i1-2026-04-21",
+      type: "income",
+      date: "2026-04-21",
+      amount: 1000,
+      projectedAvailableMoney: 1500,
+      sourceKind: "income",
+      sourceId: "i1",
+      originalDateIso: "2026-04-21",
+    }),
+    event({
+      id: "c-rent-2026-04-24",
+      type: "bill",
+      date: "2026-04-24",
+      amount: 700,
+      projectedAvailableMoney: 800,
+      sourceKind: "commitment",
+      sourceId: "c-rent",
+      originalDateIso: "2026-04-24",
+    }),
+    event({
+      id: "income-i1-2026-04-28",
+      type: "income",
+      date: "2026-04-28",
+      amount: 1000,
+      projectedAvailableMoney: 1800,
+      sourceKind: "income",
+      sourceId: "i1",
+      originalDateIso: "2026-04-28",
+    }),
+  ];
+
+  it("aggregates income/commitments and closing balances by week", () => {
+    const buckets = buildWeeklyCashflowBuckets({
+      events,
+      startingAvailableMoney: 500,
+      startingBankBalance: 2000,
+      windowStart: new Date("2026-04-20T00:00:00Z"),
+      windowEnd: new Date("2026-05-03T00:00:00Z"),
+    });
+
+    expect(buckets.length).toBe(2);
+    expect(buckets[0]?.income).toBe(1000);
+    expect(buckets[0]?.commitments).toBe(700);
+    expect(buckets[0]?.closingAvailableMoney).toBe(800);
+    expect(buckets[0]?.closingBankBalance).toBe(2300);
+    expect(buckets[1]?.income).toBe(1000);
+    expect(buckets[1]?.closingAvailableMoney).toBe(1800);
+  });
+
+  it("extracts 30-day table rows with bank-balance projection", () => {
+    const rows = buildTimelineTableRows({
+      events,
+      startingAvailableMoney: 500,
+      startingBankBalance: 2000,
+      windowStartIso: "2026-04-20",
+      days: 30,
+    });
+
+    expect(rows).toHaveLength(3);
+    expect(rows[1]?.projectedBankBalance).toBe(2300);
+    expect(rows[1]?.sourceKind).toBe("commitment");
+    expect(rows[1]?.originalDateIso).toBe("2026-04-24");
+  });
+
+  it("applies draft date overrides and recomputes running balances", () => {
+    const shifted = applyDraftOccurrenceOverridesToProjection({
+      events,
+      startingAvailableMoney: 500,
+      overrides: [
+        {
+          kind: "commitment",
+          sourceId: "c-rent",
+          originalDateIso: "2026-04-24",
+          scheduledDateIso: "2026-04-29",
+        },
+      ],
+    });
+
+    const moved = shifted.find((row) => row.id === "c-rent-2026-04-24");
+    expect(moved?.date).toBe("2026-04-29");
+
+    const apr28Income = shifted.find((row) => row.id === "income-i1-2026-04-28");
+    const apr29Rent = shifted.find((row) => row.id === "c-rent-2026-04-24");
+    expect(apr28Income?.projectedAvailableMoney).toBe(2500);
+    expect(apr29Rent?.projectedAvailableMoney).toBe(1800);
   });
 });

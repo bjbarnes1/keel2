@@ -204,7 +204,7 @@ export async function POST(request: Request) {
         return privateJson({ data: quotaResponse });
       }
 
-      const { state, activeSkips } = await getProjectionEngineInput();
+      const { state, activeSkips, occurrenceOverrides } = await getProjectionEngineInput();
       const commitmentIds = state.commitments.filter((c) => !c.archivedAt).map((c) => c.id);
       const incomeIds = state.incomes.filter((i) => !i.archivedAt).map((i) => i.id);
       const goalBrief = state.goals.map((g) => ({
@@ -301,6 +301,7 @@ export async function POST(request: Request) {
         commitments: commitmentsBase,
         goals: goalsBaseline,
         skips: persisted,
+        occurrenceOverrides,
         horizonDays: 42,
       });
       const hypTimeline = buildTimelineForTest({
@@ -311,6 +312,7 @@ export async function POST(request: Request) {
         commitments,
         goals,
         skips: combined,
+        occurrenceOverrides,
         horizonDays: 42,
       });
 

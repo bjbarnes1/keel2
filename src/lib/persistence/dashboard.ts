@@ -34,6 +34,7 @@ import type {
   CommitmentCategory,
   DashboardSnapshot,
   ForecastHorizon,
+  OccurrenceDateOverrideInput,
   SkipInput,
 } from "@/lib/types";
 
@@ -43,6 +44,7 @@ import {
   getActiveSkipsForBudget,
   type ActiveSkipsBundle,
 } from "./skips";
+import { getActiveOccurrenceOverridesForBudget } from "./occurrence-overrides";
 import { formatShortDate, readState, type StoredKeelState } from "./state";
 
 type ProjectionEvent = ReturnType<typeof buildProjectionTimeline>[number];
@@ -204,6 +206,7 @@ function toDashboardSnapshot(
     spendByCommitment: DashboardSnapshot["spendByCommitment"];
   },
   activeSkips: ActiveSkipsBundle = { commitmentSkips: [], goalSkips: [], incomeSkips: [] },
+  occurrenceOverrides: OccurrenceDateOverrideInput[] = [],
 ): DashboardSnapshot {
   const asOf = new Date(`${state.user.balanceAsOf}T00:00:00Z`);
   const activeCommitments = state.commitments.filter((c) => !c.archivedAt);
@@ -268,6 +271,7 @@ function toDashboardSnapshot(
     incomes: state.incomes,
     commitments: activeCommitments,
     skips: skipInputs,
+    occurrenceOverrides,
   });
 
   const timelineCutoffIso = horizonCutoffIso(asOf, timelineHorizonDays);
@@ -369,6 +373,11 @@ function toDashboardSnapshot(
         skipStrategy: billSkipped ? skipRow?.strategy : incomeSkipped ? "STANDALONE" : undefined,
         isSkipSpreadTarget: skipRow?.isSpreadTarget ? true : undefined,
         displayAmount: billSkipped || incomeSkipped ? event.amount : undefined,
+        sourceKind: event.sourceKind,
+        sourceId: event.sourceId,
+        originalDateIso: event.originalDateIso,
+        scheduledDateIso:
+          event.originalDateIso && event.date !== event.originalDateIso ? event.date : undefined,
       };
     }),
     forecast: {
@@ -416,14 +425,15 @@ export async function getDashboardSnapshot() {
     spendByCommitment: [] as DashboardSnapshot["spendByCommitment"],
   };
 
-  const [spendRollups, activeSkips] = await Promise.all([
+  const [spendRollups, activeSkips, occurrenceOverrides] = await Promise.all([
     hasConfiguredDatabase() && hasSupabaseAuthConfigured()
       ? fetchSpendAttributionRollups({ budgetId: state.budget.id })
       : Promise.resolve(emptyRollups),
     getActiveSkipsForBudget(state.budget.id),
+    getActiveOccurrenceOverridesForBudget(state.budget.id),
   ]);
 
-  return toDashboardSnapshot(state, spendRollups, activeSkips);
+  return toDashboardSnapshot(state, spendRollups, activeSkips, occurrenceOverrides);
 }
 
 /**
@@ -495,8 +505,11 @@ export async function getCommitmentSkipPreviewBundle(snapshot: DashboardSnapshot
 export async function getProjectionEngineInput() {
   noStore();
   const state = await readState();
-  const activeSkips = await getActiveSkipsForBudget(state.budget.id);
-  return { state, activeSkips };
+  const [activeSkips, occurrenceOverrides] = await Promise.all([
+    getActiveSkipsForBudget(state.budget.id),
+    getActiveOccurrenceOverridesForBudget(state.budget.id),
+  ]);
+  return { state, activeSkips, occurrenceOverrides };
 }
 
 /**
@@ -511,6 +524,7 @@ export async function getProjectionEngineInput() {
 export function buildProjectionChunkFromState(input: {
   state: StoredKeelState;
   activeSkips: ActiveSkipsBundle;
+  occurrenceOverrides?: OccurrenceDateOverrideInput[];
   /** Optional override for "now"; defaults to the state's balanceAsOf. */
   asOf?: Date;
   startDateIso: string;
@@ -562,5 +576,6 @@ export function buildProjectionChunkFromState(input: {
     incomes: input.state.incomes,
     commitments: activeCommitments,
     skips: skipInputs,
+    occurrenceOverrides: input.occurrenceOverrides ?? [],
   });
 }

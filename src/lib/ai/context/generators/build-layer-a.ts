@@ -119,7 +119,7 @@ export async function buildLayerA(userId: string, asOf?: Date): Promise<LayerA> 
     return hit.value;
   }
 
-  const [{ state, activeSkips }, wealth] = await Promise.all([
+  const [{ state, activeSkips, occurrenceOverrides }, wealth] = await Promise.all([
     getProjectionEngineInput(),
     getWealthSnapshot(),
   ]);
@@ -190,6 +190,7 @@ export async function buildLayerA(userId: string, asOf?: Date): Promise<LayerA> 
     incomes: engineIncomes,
     commitments: engineCommitments,
     skips: combinedSkips,
+    occurrenceOverrides,
   });
 
   const startingBalance = availableMoneyResult.availableMoney;

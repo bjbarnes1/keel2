@@ -22,6 +22,7 @@ import type {
   CommitmentFrequency,
   CommitmentSkipInput,
   IncomeSkipInput,
+  OccurrenceDateOverrideInput,
   PayFrequency,
   SkipInput,
 } from "@/lib/types";
@@ -29,6 +30,7 @@ import type {
 import {
   applyGoalSkipsToGoal,
   applySkipsToEvents,
+  parseBillEventCommitmentId,
   parseIncomeEventId,
   type ScheduledCashflowEvent,
 } from "@/lib/engine/skips";
@@ -101,6 +103,11 @@ export interface ProjectionEvent {
   label: string;
   amount: number;
   type: "income" | "bill";
+  /** Stable identity for recurrence-linked edits and scenario persistence. */
+  sourceKind?: "income" | "commitment";
+  sourceId?: string;
+  /** Original generated date for this occurrence (before date overrides). */
+  originalDateIso?: string;
   projectedAvailableMoney: number;
   /** When set, this income pay was skipped (no credit applied to running balance). */
   isSkipped?: boolean;
@@ -422,6 +429,104 @@ export function calculateAvailableMoney(input: {
 
 // --- Scheduled events (income + bills) ---------------------------------------
 
+function sortScheduledProjectionEvents(events: ScheduledCashflowEvent[]) {
+  events.sort((left, right) => {
+    const dateOrder = left.date.localeCompare(right.date);
+    if (dateOrder !== 0) {
+      return dateOrder;
+    }
+
+    if (left.type !== right.type) {
+      return left.type === "income" ? -1 : 1;
+    }
+
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function parseBillOriginalIsoFromId(eventId: string): string | null {
+  const match = /(\d{4}-\d{2}-\d{2})$/.exec(eventId);
+  return match ? match[1]! : null;
+}
+
+function deriveOccurrenceIdentity(event: ScheduledCashflowEvent): {
+  kind: "income" | "commitment";
+  sourceId: string;
+  originalDateIso: string;
+} | null {
+  if (event.sourceKind && event.sourceId && event.originalDateIso) {
+    return {
+      kind: event.sourceKind,
+      sourceId: event.sourceId,
+      originalDateIso: event.originalDateIso,
+    };
+  }
+
+  if (event.type === "income") {
+    const parsed = parseIncomeEventId(event.id);
+    if (!parsed) return null;
+    return {
+      kind: "income",
+      sourceId: parsed.incomeId,
+      originalDateIso: parsed.iso,
+    };
+  }
+
+  const sourceId = parseBillEventCommitmentId(event.id);
+  const originalDateIso = parseBillOriginalIsoFromId(event.id);
+  if (!sourceId || !originalDateIso) return null;
+  return {
+    kind: "commitment",
+    sourceId,
+    originalDateIso,
+  };
+}
+
+/**
+ * Applies per-occurrence date overrides while preserving event identity (`id`) and amount.
+ * The caller remains responsible for downstream skip transforms and balance walking.
+ */
+export function applyOccurrenceOverridesToScheduledEvents(
+  events: ScheduledCashflowEvent[],
+  overrides: OccurrenceDateOverrideInput[],
+): ScheduledCashflowEvent[] {
+  if (overrides.length === 0) return events;
+
+  const byKey = new Map<string, OccurrenceDateOverrideInput>();
+  for (const override of overrides) {
+    byKey.set(
+      `${override.kind}:${override.sourceId}:${override.originalDateIso}`,
+      override,
+    );
+  }
+
+  const shifted = events.map((event) => {
+    const identity = deriveOccurrenceIdentity(event);
+    if (!identity) return event;
+    const override = byKey.get(
+      `${identity.kind}:${identity.sourceId}:${identity.originalDateIso}`,
+    );
+    if (!override || override.scheduledDateIso === identity.originalDateIso) {
+      return {
+        ...event,
+        sourceKind: identity.kind,
+        sourceId: identity.sourceId,
+        originalDateIso: identity.originalDateIso,
+      };
+    }
+    return {
+      ...event,
+      date: override.scheduledDateIso,
+      sourceKind: identity.kind,
+      sourceId: identity.sourceId,
+      originalDateIso: identity.originalDateIso,
+    };
+  });
+
+  sortScheduledProjectionEvents(shifted);
+  return shifted;
+}
+
 /**
  * Expands recurring incomes/commitments into discrete dated cashflow events up to
  * `asOf + horizonDays`.
@@ -450,6 +555,9 @@ export function collectScheduledProjectionEvents(input: {
           label: income.name,
           amount: income.amount,
           type: "income",
+          sourceKind: "income",
+          sourceId: income.id,
+          originalDateIso: toIsoDate(incomeDate),
         });
       }
       incomeDate = addCycle(incomeDate, income.frequency);
@@ -467,6 +575,9 @@ export function collectScheduledProjectionEvents(input: {
           label: commitment.name,
           amount: commitment.amount,
           type: "bill",
+          sourceKind: "commitment",
+          sourceId: commitment.id,
+          originalDateIso: toIsoDate(dueDate),
         });
       }
 
@@ -474,18 +585,7 @@ export function collectScheduledProjectionEvents(input: {
     }
   }
 
-  scheduledEvents.sort((left, right) => {
-    const dateOrder = left.date.localeCompare(right.date);
-    if (dateOrder !== 0) {
-      return dateOrder;
-    }
-
-    if (left.type !== right.type) {
-      return left.type === "income" ? -1 : 1;
-    }
-
-    return left.label.localeCompare(right.label);
-  });
+  sortScheduledProjectionEvents(scheduledEvents);
 
   return scheduledEvents;
 }
@@ -523,6 +623,7 @@ export function buildProjectionTimeline(input: {
   incomes: EngineIncome[];
   commitments: EngineCommitment[];
   skips?: SkipInput[];
+  occurrenceOverrides?: OccurrenceDateOverrideInput[];
 }) {
   const horizonDays = input.horizonDays ?? 42;
   const startDate = input.startDate ?? input.asOf;
@@ -543,6 +644,10 @@ export function buildProjectionTimeline(input: {
     incomes: input.incomes,
     commitments: input.commitments,
   });
+  const baselineWithOverrides = applyOccurrenceOverridesToScheduledEvents(
+    baseline,
+    input.occurrenceOverrides ?? [],
+  );
 
   /** Commitment skips reshape bill amounts before the running balance walk; order matches `skips.ts` + `keel-store` timeline. */
   const commitmentSkips =
@@ -554,7 +659,7 @@ export function buildProjectionTimeline(input: {
     incomeSkipByKey.set(`${skip.incomeId}:${skip.originalDateIso}`, skip);
   }
 
-  const cashflow = applySkipsToEvents(baseline, commitmentSkips);
+  const cashflow = applySkipsToEvents(baselineWithOverrides, commitmentSkips);
 
   const cashflowBillAmountById = new Map(
     cashflow.filter((event) => event.type === "bill").map((event) => [event.id, event.amount]),
@@ -566,7 +671,7 @@ export function buildProjectionTimeline(input: {
   let runningAvailableMoney = input.availableMoney;
   const out: ProjectionEvent[] = [];
 
-  for (const event of baseline) {
+  for (const event of baselineWithOverrides) {
     const incomeParts = event.type === "income" ? parseIncomeEventId(event.id) : null;
     const incomeSkip =
       incomeParts && incomeSkipByKey.has(`${incomeParts.incomeId}:${incomeParts.iso}`)
@@ -634,6 +739,7 @@ export function buildTimelineForTest(input: {
   commitments: EngineCommitment[];
   goals: EngineGoal[];
   skips?: SkipInput[];
+  occurrenceOverrides?: OccurrenceDateOverrideInput[];
   horizonDays?: number;
 }) {
   const asOf = new Date(`${input.asOfIso}T00:00:00Z`);
@@ -666,6 +772,7 @@ export function buildTimelineForTest(input: {
     incomes: input.incomes,
     commitments: input.commitments,
     skips: input.skips,
+    occurrenceOverrides: input.occurrenceOverrides,
   });
 }
 
