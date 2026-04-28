@@ -18,6 +18,7 @@ import { hasConfiguredDatabase } from "./config";
 type WealthHoldingView = {
   id: string;
   name: string;
+  assetType: string;
   symbol?: string;
   quantity: string;
   value: number;
@@ -54,6 +55,7 @@ export async function getWealthSnapshot() {
   const mapped: WealthHoldingView[] = holdings.map((holding) => ({
     id: holding.id,
     name: holding.name,
+    assetType: holding.assetType,
     symbol: holding.symbol ?? undefined,
     quantity: String(Number(holding.quantity)),
     value: holdingValue(holding),

@@ -77,11 +77,7 @@ export async function createBudgetInvite(email: string) {
   }
 
   const prisma = getPrismaClient();
-  const { authedUser, budget, membership } = await getBudgetContext();
-
-  if (membership.role !== "owner") {
-    throw new Error("Only budget owners can invite members.");
-  }
+  const { authedUser, budget } = await getBudgetContext();
 
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) throw new Error("Email is required.");

@@ -6,6 +6,7 @@
 
 import { AppShell, SurfaceCard } from "@/components/keel/primitives";
 import { WealthOverview } from "@/components/keel/wealth-overview";
+import { getBtcAudPrice } from "@/lib/market/coingecko-btc";
 import { getWealthHistory, getWealthSnapshot, hasConfiguredDatabase } from "@/lib/persistence/keel-store";
 
 export const dynamic = "force-dynamic";
@@ -25,14 +26,15 @@ export default async function WealthPage() {
     );
   }
 
-  const [snapshot, history] = await Promise.all([
+  const [snapshot, history, btcAud] = await Promise.all([
     getWealthSnapshot(),
     getWealthHistory({ years: 3 }),
+    getBtcAudPrice(),
   ]);
 
   return (
     <AppShell title="Wealth" currentPath="/wealth">
-      <WealthOverview snapshot={snapshot} history={history} addHref="/wealth/new" />
+      <WealthOverview snapshot={snapshot} history={history} addHref="/wealth/new" btcAud={btcAud} />
     </AppShell>
   );
 }

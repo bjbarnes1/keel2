@@ -37,6 +37,11 @@ model Budget {
   name        String
   bankBalance Decimal   @default(0)
   balanceAsOf DateTime?
+  /**
+   * Optional JSON household knobs: `ubankFloatThreshold`, `timezone`, `primaryUpAccountId`, etc.
+   * Validated at application boundaries; keep migrations additive.
+   */
+  householdConfig Json?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -57,6 +62,9 @@ model Budget {
   incomeSkips        IncomeSkip[]
   learnedPatterns    UserLearnedPatterns?
   aiInsight          UserAiInsight?
+  medicalSubItems    MedicalSubItem[]
+  spendCategorisationRules SpendCategorisationRule[]
+  rebateAllocations  RebateAllocation[]
 }
 
 model BudgetMember {
@@ -168,12 +176,16 @@ model Category {
   budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   name      String
   sortOrder Int      @default(0)
+  /** Free-form pool / taxonomy hint (e.g. sinking, medical_parent) for dashboards. */
+  poolKind  String?
+  isSinkingFund Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   subcategories Subcategory[]
   commitments   Commitment[]
   spendTransactions SpendTransaction[]
+  spendCategorisationRules SpendCategorisationRule[]
 
   @@unique([budgetId, name])
   @@index([budgetId])
@@ -190,6 +202,7 @@ model Subcategory {
 
   commitments Commitment[]
   spendTransactions SpendTransaction[]
+  spendCategorisationRules SpendCategorisationRule[]
 
   @@unique([categoryId, name])
   @@index([categoryId])
@@ -333,6 +346,9 @@ model SpendAccount {
   accountNumberIv  String?
   accountNumberLastFour String?
   currency  String   @default("AUD")
+  /** Up Bank transaction account id when linked via PAT. */
+  upAccountId String?
+  upLastSyncedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -340,6 +356,7 @@ model SpendAccount {
   importBatches SpendImportBatch[]
 
   @@index([budgetId])
+  @@index([budgetId, upAccountId])
 }
 
 model SpendImportBatch {
@@ -368,6 +385,55 @@ model AiRateLimit {
   costCentsDay  Int       @default(0)
 }
 
+model MedicalSubItem {
+  id             String   @id @default(cuid())
+  budgetId       String
+  budget         Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  name           String
+  expectedTotal  Decimal?
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  spendTransactions SpendTransaction[]
+
+  @@index([budgetId])
+}
+
+model SpendCategorisationRule {
+  id            String   @id @default(cuid())
+  budgetId      String
+  budget        Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  /** e.g. MEMO_CONTAINS, MEMO_REGEX */
+  matchKind     String   @default("MEMO_CONTAINS")
+  pattern       String
+  categoryId    String
+  categoryRef   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  subcategoryId String?
+  subcategoryRef Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  priority      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([budgetId, priority])
+}
+
+model RebateAllocation {
+  id            String   @id @default(cuid())
+  budgetId      String
+  budget        Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  expenseId     String
+  expense       SpendTransaction @relation("RebateExpense", fields: [expenseId], references: [id], onDelete: Cascade)
+  creditId      String?
+  credit        SpendTransaction? @relation("RebateCredit", fields: [creditId], references: [id], onDelete: SetNull)
+  amount        Decimal
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([budgetId])
+  @@index([expenseId])
+}
+
 model SpendTransaction {
   id            String    @id @default(cuid())
   budgetId      String
@@ -386,16 +452,30 @@ model SpendTransaction {
   subcategoryRef Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
   commitmentId  String?
   commitment    Commitment? @relation(fields: [commitmentId], references: [id], onDelete: SetNull)
+  medicalSubItemId String?
+  medicalSubItem   MedicalSubItem? @relation(fields: [medicalSubItemId], references: [id], onDelete: SetNull)
+  /** Idempotent ingest key for external feeds (e.g. Up). */
+  externalSource String?
+  externalId     String?
+  /** NONE | EXPECTED | PARTIAL | SETTLED */
+  rebateState    String?
+  rebateExpectedAmount Decimal?
+  rebateMatchedAmount  Decimal? @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  rebateAllocationsAsExpense RebateAllocation[] @relation("RebateExpense")
+  rebateAllocationsAsCredit  RebateAllocation[] @relation("RebateCredit")
+
   @@unique([budgetId, dedupeKey])
+  @@unique([budgetId, externalSource, externalId])
   @@index([budgetId, postedOn])
   @@index([accountId, postedOn])
   // Covers `fetchSpendAttributionRollups` groupBy: filters by (budgetId, commitmentId)
   // over a postedOn range. Without it Postgres uses (budgetId, postedOn) and filters
   // commitmentId in memory, which scales poorly as the table grows.
   @@index([budgetId, commitmentId, postedOn])
+  @@index([budgetId, medicalSubItemId])
 }
 
 // ─── Proactive AI insight — one cached LLM-generated card per budget ──────────

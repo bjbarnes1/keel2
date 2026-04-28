@@ -66,9 +66,26 @@ export {
   getBudgetCommitmentsForTagging,
   getSpendReconciliationQueue,
   updateSpendTransactionClassification,
+  linkSpendAccountToUp,
   type SpendAccountView,
   type SpendTransactionListItem,
 } from "./spend";
+export {
+  listSpendCategorisationRules,
+  createSpendCategorisationRule,
+  deleteSpendCategorisationRule,
+} from "./spend-rules";
+export {
+  listMedicalSubItems,
+  createMedicalSubItem,
+  deleteMedicalSubItem,
+  listOutstandingRebates,
+  setTransactionRebateExpectation,
+  recordRebatePartialMatch,
+  type MedicalSubItemView,
+  type RebateQueueRow,
+} from "./medical";
+export { getHouseholdConfig, updateHouseholdConfigPatch, type HouseholdConfigShape } from "./household-config";
 export {
   getActualVsPlannedReport,
   type ActualVsPlannedRow,

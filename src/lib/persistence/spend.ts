@@ -26,6 +26,8 @@ export type SpendAccountView = {
   bsb?: string;
   accountName?: string;
   maskedAccountNumber?: string;
+  upAccountId?: string;
+  upLastSyncedAt?: string;
 };
 
 export type SpendTransactionListItem = {
@@ -101,6 +103,8 @@ export async function getSpendOverview() {
       bsb: account.bsb ?? undefined,
       accountName: account.accountName ?? undefined,
       maskedAccountNumber: maskBankAccount(account.accountNumberLastFour),
+      upAccountId: account.upAccountId ?? undefined,
+      upLastSyncedAt: account.upLastSyncedAt?.toISOString(),
     })),
     recent: recent.map((t) => ({
       id: t.id,
@@ -294,6 +298,7 @@ export async function updateSpendTransactionClassification(input: {
   categoryId: string | null;
   subcategoryId?: string | null;
   commitmentId?: string | null;
+  medicalSubItemId?: string | null;
 }) {
   if (!hasConfiguredDatabase()) {
     throw new Error("Spend tracking requires a database.");
@@ -334,6 +339,33 @@ export async function updateSpendTransactionClassification(input: {
 
   await prisma.spendTransaction.update({
     where: { id: transaction.id },
-    data: { categoryId, subcategoryId, commitmentId },
+    data: {
+      categoryId,
+      subcategoryId,
+      commitmentId,
+      ...(input.medicalSubItemId !== undefined ? { medicalSubItemId: input.medicalSubItemId } : {}),
+    },
+  });
+}
+
+export async function linkSpendAccountToUp(input: { spendAccountId: string; upAccountId: string }) {
+  if (!hasConfiguredDatabase()) {
+    throw new Error("Spend tracking requires a database.");
+  }
+
+  const prisma = getPrismaClient();
+  const { budget } = await getBudgetContext();
+
+  const id = input.upAccountId.trim();
+  if (!id) throw new Error("Up account id is required.");
+
+  const account = await prisma.spendAccount.findFirst({
+    where: { id: input.spendAccountId, budgetId: budget.id },
+  });
+  if (!account) throw new Error("Spend account not found.");
+
+  await prisma.spendAccount.update({
+    where: { id: account.id },
+    data: { upAccountId: id },
   });
 }

@@ -36,6 +36,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
       path.startsWith("/incomes"),
   },
   { href: "/timeline", label: "Timeline" },
+  { href: "/cashflow", label: "Cashflow" },
   { href: "/ask", label: "Ask" },
   { href: "/goals", label: "Goals", match: (path) => path === "/goals" || path.startsWith("/goals/") },
   { href: "/wealth", label: "Wealth" },
@@ -148,10 +149,36 @@ function IconGoals({ active }: { active: boolean }) {
 function TabIcon({ href, active }: { href: string; active: boolean }) {
   if (href === "/") return <IconHome active={active} />;
   if (href === "/timeline") return <IconTimeline active={active} />;
+  if (href === "/cashflow") return <IconTimeline active={active} />;
   if (href === "/wealth") return <IconWealth active={active} />;
   if (href === "/goals") return <IconGoals active={active} />;
   if (href === "/ask") return <IconAsk active={active} />;
   return <IconHome active={active} />;
+}
+
+function DesktopSidebarNav({ currentPath }: { currentPath: string }) {
+  return (
+    <nav className="flex flex-col gap-0.5" aria-label="Primary">
+      {tabNavItems().map((item) => {
+        const active = isNavActive(item, currentPath);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+              active
+                ? "bg-white/10 text-[color:var(--keel-ink)]"
+                : "text-[color:var(--keel-ink-3)] hover:bg-white/[0.06] hover:text-[color:var(--keel-ink-2)]",
+            )}
+          >
+            <TabIcon href={item.href} active={active} />
+            <span>{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
 }
 
 export function AppShell({
@@ -168,58 +195,73 @@ export function AppShell({
   headerRight?: ReactNode;
 }) {
   return (
-    <div className="keel-bg mx-auto min-h-screen max-w-[520px] bg-background text-foreground">
-      <header className="sticky top-0 z-30 flex items-center justify-between bg-background/70 px-5 pb-2 pt-3 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          {backHref ? (
-            <Link
-              href={backHref}
-              className="glass-clear inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span className="sr-only">Back</span>
-            </Link>
-          ) : null}
-          <h1 className="text-[22px] font-medium tracking-[-0.025em]">{title}</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {headerRight}
+    <div className="keel-bg flex min-h-screen justify-center bg-background text-foreground lg:justify-stretch">
+      <aside className="sticky top-0 hidden h-screen w-[220px] shrink-0 flex-col border-r border-white/[0.06] bg-background/80 px-3 py-5 backdrop-blur-xl lg:flex">
+        <Link href="/" className="mb-6 px-2 text-lg font-semibold tracking-tight text-[color:var(--keel-ink)]">
+          Keel
+        </Link>
+        <DesktopSidebarNav currentPath={currentPath} />
+        <div className="mt-auto px-2 pt-6">
           <AvatarMenu />
         </div>
-      </header>
+      </aside>
 
-      <main className="px-5 pb-32">{children}</main>
-
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[calc(12px+env(safe-area-inset-bottom))]">
-        <nav className="pointer-events-auto glass-heavy mx-4 w-full max-w-[480px] rounded-[var(--radius-pill)] px-2 py-2">
-          <div className="flex items-end justify-between gap-1">
-            {tabNavItems().map((item) => {
-              const active = isNavActive(item, currentPath);
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex min-w-0 flex-1 flex-col items-center justify-end gap-1 rounded-[var(--radius-pill)] px-2 py-2 transition-[background-color,transform,color] duration-[var(--dur-nav)]",
-                    active
-                      ? "glass-clear text-[color:var(--keel-ink)]"
-                      : "text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]",
-                  )}
-                >
-                  <TabIcon href={item.href} active={active} />
-                  {active ? (
-                    <span className="w-full truncate text-center text-[11px] font-medium leading-none">
-                      {item.label}
-                    </span>
-                  ) : (
-                    <span className="h-[11px]" />
-                  )}
-                </Link>
-              );
-            })}
+      <div className="mx-auto flex w-full min-w-0 max-w-[520px] flex-1 flex-col lg:max-w-none">
+        <header className="sticky top-0 z-30 flex items-center justify-between bg-background/70 px-5 pb-2 pt-3 backdrop-blur-xl lg:px-8 lg:pt-5">
+          <div className="flex items-center gap-3">
+            {backHref ? (
+              <Link
+                href={backHref}
+                className="glass-clear inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:border-white/20 hover:text-foreground"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="sr-only">Back</span>
+              </Link>
+            ) : null}
+            <h1 className="text-[22px] font-medium tracking-[-0.025em] lg:text-2xl">{title}</h1>
           </div>
-        </nav>
+          <div className="flex items-center gap-2 lg:hidden">
+            {headerRight}
+            <AvatarMenu />
+          </div>
+          <div className="hidden items-center gap-2 lg:flex">
+            {headerRight}
+          </div>
+        </header>
+
+        <main className="px-5 pb-32 lg:mx-auto lg:w-full lg:max-w-6xl lg:px-8 lg:pb-12">{children}</main>
+
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[calc(12px+env(safe-area-inset-bottom))] lg:hidden">
+          <nav className="pointer-events-auto glass-heavy mx-4 w-full max-w-[480px] rounded-[var(--radius-pill)] px-2 py-2">
+            <div className="flex items-end justify-between gap-1">
+              {tabNavItems().map((item) => {
+                const active = isNavActive(item, currentPath);
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex min-w-0 flex-1 flex-col items-center justify-end gap-1 rounded-[var(--radius-pill)] px-2 py-2 transition-[background-color,transform,color] duration-[var(--dur-nav)]",
+                      active
+                        ? "glass-clear text-[color:var(--keel-ink)]"
+                        : "text-[color:var(--keel-ink-3)] hover:text-[color:var(--keel-ink-2)]",
+                    )}
+                  >
+                    <TabIcon href={item.href} active={active} />
+                    {active ? (
+                      <span className="w-full truncate text-center text-[11px] font-medium leading-none">
+                        {item.label}
+                      </span>
+                    ) : (
+                      <span className="h-[11px]" />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </nav>
+        </div>
       </div>
     </div>
   );
@@ -481,7 +523,7 @@ export function ModalSheet({
   return (
     <AppShell title="Balance" currentPath="/">
       <div className="fixed inset-0 bg-black/55" />
-      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-[520px] rounded-t-3xl border border-border bg-card p-6">
+      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-[520px] rounded-t-3xl border border-border bg-card p-6 lg:max-w-lg">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">{title}</h2>

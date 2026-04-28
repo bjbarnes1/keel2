@@ -17,6 +17,7 @@ export type WealthOverviewSnapshot = {
   holdings: Array<{
     id: string;
     name: string;
+    assetType?: string;
     symbol?: string;
     quantity: string;
     value: number;
@@ -24,22 +25,42 @@ export type WealthOverviewSnapshot = {
   }>;
 };
 
+function isBtcHolding(h: WealthOverviewSnapshot["holdings"][number]) {
+  const sym = h.symbol?.toUpperCase();
+  if (sym === "BTC") return true;
+  const t = (h.assetType ?? "").toUpperCase();
+  if (t === "CRYPTO" && sym === "BTC") return true;
+  return h.name.toLowerCase().includes("bitcoin");
+}
+
 export function WealthOverview({
   snapshot,
   history,
   addHref,
+  btcAud,
 }: {
   snapshot: WealthOverviewSnapshot;
   history: { values: number[] };
   addHref: string;
+  /** Live CoinGecko BTC/AUD; when set, BTC rows use quantity × price for display. */
+  btcAud?: number | null;
 }) {
+  let displayTotal = snapshot.totalValue;
+  if (btcAud != null && Number.isFinite(btcAud)) {
+    for (const h of snapshot.holdings) {
+      if (isBtcHolding(h)) {
+        displayTotal = displayTotal - h.value + Number(h.quantity) * btcAud;
+      }
+    }
+  }
+
   return (
     <>
       <SurfaceCard className="flex items-start justify-between gap-4">
         <div>
           <p className="label-upper">Net worth (tracked assets)</p>
           <p className="tabular-nums mt-2 font-mono text-3xl font-medium text-primary">
-            {formatAud(snapshot.totalValue)}
+            {formatAud(displayTotal)}
           </p>
           {history.values.length ? (
             <div className="mt-3">
@@ -51,7 +72,11 @@ export function WealthOverview({
               Add holdings over time to build a 3-year sparkline.
             </p>
           )}
-          <p className="mt-2 text-xs text-muted-foreground">Manual values for now. Live pricing comes later.</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {btcAud != null && Number.isFinite(btcAud)
+              ? `BTC priced live (~${formatAud(btcAud)} per coin, cached ~5m). Other holdings stay manual.`
+              : "Manual values for now; configure network to fetch live BTC from CoinGecko."}
+          </p>
         </div>
         <Link
           href={addHref}
@@ -69,7 +94,11 @@ export function WealthOverview({
             </p>
           </SurfaceCard>
         ) : (
-          snapshot.holdings.map((holding) => (
+          snapshot.holdings.map((holding) => {
+            const btc = btcAud != null && isBtcHolding(holding);
+            const displayValue =
+              btc && Number.isFinite(btcAud!) ? Number(holding.quantity) * btcAud! : holding.value;
+            return (
             <SurfaceCard key={holding.id} className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-medium">{holding.name}</p>
@@ -79,10 +108,11 @@ export function WealthOverview({
                 </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   {holding.asOf ? `As of ${holding.asOf}` : "As of: not set"}
+                  {btc ? " · live BTC/AUD" : ""}
                 </p>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <p className="tabular-nums font-mono text-sm font-medium">{formatAud(holding.value)}</p>
+                <p className="tabular-nums font-mono text-sm font-medium">{formatAud(displayValue)}</p>
                 <form action={deleteWealthHoldingAction.bind(null, holding.id)}>
                   <SubmitButton
                     label="Delete"
@@ -93,7 +123,8 @@ export function WealthOverview({
                 </form>
               </div>
             </SurfaceCard>
-          ))
+          );
+          })
         )}
       </div>
     </>

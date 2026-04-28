@@ -54,6 +54,18 @@ export default async function SpendPage({
         >
           New account
         </Link>
+        <Link
+          href="/spend/up"
+          className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-primary"
+        >
+          Up sync
+        </Link>
+        <Link
+          href="/spend/rules"
+          className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-primary"
+        >
+          Rules
+        </Link>
       </div>
 
       {params.imported ? (
