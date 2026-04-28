@@ -1,108 +1,63 @@
 "use client";
 
 /**
- * WaterlineChart — the Timeline's flagship visual surface.
+ * Timeline cashflow chart.
  *
- * Design discipline (do not drift without discussing first):
- *   - 14-day viewport. Data moves past the Now line, not the other way around.
- *   - Proportional depths above and below the baseline; same-day markers stack
- *     as "primary + companion dot" rather than fighting for x-space.
- *   - Sea-green trajectory curve below the line, with a focal dot sliding along
- *     it connecting the two metaphors (waterline + trajectory).
- *   - Gesture model: horizontal drag updates focal immediately via rAF;
- *     pointer-up decays with exponential momentum (~400ms).
- *   - Motion tokens:
- *       * focal dot slide: 280ms, cubic-bezier(0.34, 1.56, 0.64, 1) (slight overshoot).
- *       * pulse ring: 2s ease-in-out loop, pauses during active gesture.
- *       * Reduced-motion: instant transitions, no pulse, no momentum.
+ * The chart keeps the existing sync contract: dragging the graph changes focal date,
+ * and the legend/table below can still drive the same focal date through `TimelineView`.
+ * Visual model:
+ * - green income bars above the cashflow axis
+ * - orange commitment bars below the cashflow axis
+ * - blue projected bank-balance line across the window
+ * - summary cards for income, commitments, net, and lowest balance
  *
  * @module components/keel/waterline-chart
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ProjectionEvent } from "@/lib/engine/keel";
 import {
   addDaysUtc,
-  buildAvailableMoneyTrajectory,
   buildBankBalanceTrajectory,
   catmullRomPath,
-  computeMaxAmountInViewport,
   detectFocalCrossings,
   filterEventsInViewport,
-  groupSameDayEvents,
-  normalizeDepth,
-  startOfUtcDay,
   toIsoDate,
   xForIsoDate,
 } from "@/lib/timeline/waterline-geometry";
 import { hapticCommitmentCrossing, hapticPayCrossing } from "@/lib/haptics";
-import { cn } from "@/lib/utils";
+import { cn, formatAud, formatDisplayDate } from "@/lib/utils";
 
-// --- Layout constants (SVG user units) ---------------------------------------
+const VIEWPORT_DAYS = 28;
+const SVG_HEIGHT = 420;
+const PAD_X = 34;
+const PLOT_TOP = 56;
+const BALANCE_TOP = 74;
+const CASH_AXIS_Y = 268;
+const PLOT_BOTTOM = 350;
+const LABEL_Y = 388;
+const BAR_RANGE = 128;
 
-const VIEWPORT_DAYS = 14;
-const SVG_HEIGHT = 220;
-const PAD_X = 10;
-const BASELINE_Y = 113;
-const ABOVE_TOP = 32;
-const ABOVE_BOTTOM = 108;
-const BELOW_TOP = 118;
-const BELOW_BOTTOM = 195;
-const LABEL_Y = 207;
-const BALANCE_TOP = 26;
-const BALANCE_BOTTOM = 196;
-
-const TRAJECTORY_RANGE = BELOW_BOTTOM - BELOW_TOP;
-
-// Marker sizing tuning (per spec).
-const MARKER_MIN_HEIGHT = 8;
-const MARKER_DEPTH_RANGE = 65;
-const MARKER_MIN_RADIUS = 3;
-const MARKER_RADIUS_RANGE = 2.5;
-const COMPANION_OFFSET = 4;
-const COMPANION_RADIUS_SCALE = 0.6;
-
-// --- Types -------------------------------------------------------------------
+type DayCashflow = {
+  iso: string;
+  income: number;
+  commitments: number;
+};
 
 export type WaterlineChartProps = {
-  /** Events that currently intersect the 14-day viewport. */
   eventsInViewport: ProjectionEvent[];
-  /** All loaded events (used for the trajectory curve, which needs context). */
   allEvents: ProjectionEvent[];
   focalDate: Date;
   todayDate: Date;
-  /** Called during pointer drag and momentum. Always fires with UTC-midnight dates. */
   onFocalChange: (date: Date) => void;
   availableMoneyAtFocal: number;
   startingAvailableMoney: number;
-  /** Bank balance at `todayDate` / dashboard as-of (used for the balance trend line). */
   startingBankBalance: number;
-  /** Set of commitment ids currently in attention state (amber anchor). */
   attentionCommitmentIds?: ReadonlySet<string>;
-  /** Container width in CSS pixels (SVG scales to 100% and we match viewBox). */
   width?: number;
   className?: string;
 };
-
-// --- Helpers -----------------------------------------------------------------
-
-function commitmentIdFromEventId(eventId: string): string {
-  // Engine bill ids look like `<commitmentId>-YYYY-MM-DD`. Strip the ISO date.
-  return eventId.replace(/-\d{4}-\d{2}-\d{2}$/, "");
-}
-
-/** Piecewise opacity based on distance from focal. */
-function opacityForDate(eventIso: string, focalIsoDay: string, todayIso: string): number {
-  const focal = new Date(`${focalIsoDay}T00:00:00Z`).getTime();
-  const event = new Date(`${eventIso}T00:00:00Z`).getTime();
-  const days = Math.abs(event - focal) / 86_400_000;
-  let opacity = 1;
-  if (days > 28) opacity = 0.35;
-  else if (days > 14) opacity = 0.65;
-  if (eventIso < todayIso) opacity = Math.min(opacity, 0.65);
-  return opacity;
-}
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -134,7 +89,35 @@ function useContainerWidth(ref: React.RefObject<HTMLDivElement | null>, fallback
   return width;
 }
 
-// --- Component ---------------------------------------------------------------
+function buildDayCashflows(events: readonly ProjectionEvent[]): DayCashflow[] {
+  const byIso = new Map<string, DayCashflow>();
+  for (const event of events) {
+    const row = byIso.get(event.date) ?? { iso: event.date, income: 0, commitments: 0 };
+    if (event.type === "income") row.income += Math.max(0, event.amount);
+    else row.commitments += Math.abs(event.amount);
+    byIso.set(event.date, row);
+  }
+  return Array.from(byIso.values()).sort((a, b) => a.iso.localeCompare(b.iso));
+}
+
+function valueStats(points: Array<{ iso: string; value: number }>) {
+  if (points.length === 0) return { min: 0, max: 0, range: 1 };
+  let min = Infinity;
+  let max = -Infinity;
+  for (const point of points) {
+    min = Math.min(min, point.value);
+    max = Math.max(max, point.value);
+  }
+  return { min, max, range: Math.max(max - min, 1) };
+}
+
+function balanceAtFocal(input: {
+  startingBankBalance: number;
+  startingAvailableMoney: number;
+  availableMoneyAtFocal: number;
+}) {
+  return input.startingBankBalance + (input.availableMoneyAtFocal - input.startingAvailableMoney);
+}
 
 export function WaterlineChart({
   eventsInViewport,
@@ -145,55 +128,32 @@ export function WaterlineChart({
   availableMoneyAtFocal,
   startingAvailableMoney,
   startingBankBalance,
-  attentionCommitmentIds,
   width: widthOverride,
   className,
 }: WaterlineChartProps) {
-  const rawId = useId().replace(/:/g, "");
-  const gradientId = `moneyTraj-${rawId}`;
-  const todayBandId = `nowBand-${rawId}`;
-
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const measuredWidth = useContainerWidth(containerRef, widthOverride ?? 360);
+  const measuredWidth = useContainerWidth(containerRef, widthOverride ?? 720);
   const width = widthOverride ?? measuredWidth;
   const reducedMotion = usePrefersReducedMotion();
 
-  // Viewport window is focal ± 7 days.
-  const viewportStart = useMemo(
-    () => addDaysUtc(focalDate, -VIEWPORT_DAYS / 2),
-    [focalDate],
-  );
-  const viewportEnd = useMemo(
-    () => addDaysUtc(focalDate, VIEWPORT_DAYS / 2),
-    [focalDate],
-  );
-
+  const viewportStart = useMemo(() => addDaysUtc(focalDate, -VIEWPORT_DAYS / 2), [focalDate]);
+  const viewportEnd = useMemo(() => addDaysUtc(focalDate, VIEWPORT_DAYS / 2), [focalDate]);
   const focalIso = toIsoDate(focalDate);
   const todayIso = toIsoDate(todayDate);
-
-  // --- Derived geometry (memoized on inputs) -------------------------------
+  const nowX = width / 2;
 
   const viewportEvents = useMemo(
     () =>
       eventsInViewport.length > 0
         ? eventsInViewport
         : filterEventsInViewport(allEvents, focalDate, VIEWPORT_DAYS / 2),
-    [eventsInViewport, allEvents, focalDate],
+    [allEvents, eventsInViewport, focalDate],
   );
 
-  const maxAmount = useMemo(() => computeMaxAmountInViewport(viewportEvents), [viewportEvents]);
-
-  const groups = useMemo(() => groupSameDayEvents(viewportEvents), [viewportEvents]);
-
-  const trajectoryPoints = useMemo(
-    () =>
-      buildAvailableMoneyTrajectory({
-        allEvents,
-        startingAvailableMoney,
-        viewportStart,
-        viewportEnd,
-      }),
-    [allEvents, startingAvailableMoney, viewportStart, viewportEnd],
+  const dayCashflows = useMemo(() => buildDayCashflows(viewportEvents), [viewportEvents]);
+  const maxCashflow = useMemo(
+    () => Math.max(1, ...dayCashflows.flatMap((d) => [d.income, d.commitments])),
+    [dayCashflows],
   );
 
   const balancePoints = useMemo(
@@ -208,63 +168,13 @@ export function WaterlineChart({
     [allEvents, startingAvailableMoney, startingBankBalance, viewportStart, viewportEnd],
   );
 
-  const trajectoryStats = useMemo(() => {
-    if (trajectoryPoints.length === 0) {
-      return { min: 0, max: 0, range: 1 };
-    }
-    let min = Infinity;
-    let max = -Infinity;
-    for (const point of trajectoryPoints) {
-      if (point.value < min) min = point.value;
-      if (point.value > max) max = point.value;
-    }
-    const range = Math.max(max - min, 1);
-    return { min, max, range };
-  }, [trajectoryPoints]);
-
-  const balanceStats = useMemo(() => {
-    if (balancePoints.length === 0) return { min: 0, max: 0, range: 1 };
-    let min = Infinity;
-    let max = -Infinity;
-    for (const p of balancePoints) {
-      if (p.value < min) min = p.value;
-      if (p.value > max) max = p.value;
-    }
-    const range = Math.max(max - min, 1);
-    return { min, max, range };
-  }, [balancePoints]);
-
-  const yForValue = useCallback(
-    (value: number): number => {
-      const { min, range } = trajectoryStats;
-      const ratio = (value - min) / range;
-      return BELOW_BOTTOM - ratio * TRAJECTORY_RANGE;
-    },
-    [trajectoryStats],
-  );
-
+  const balanceStats = useMemo(() => valueStats(balancePoints), [balancePoints]);
   const yForBalance = useCallback(
     (value: number) => {
-      const { min, range } = balanceStats;
-      const ratio = (value - min) / range;
-      return BALANCE_BOTTOM - ratio * (BALANCE_BOTTOM - BALANCE_TOP);
+      const ratio = (value - balanceStats.min) / balanceStats.range;
+      return PLOT_BOTTOM - ratio * (PLOT_BOTTOM - BALANCE_TOP);
     },
     [balanceStats],
-  );
-
-  const trajectoryCurvePoints = useMemo(
-    () =>
-      trajectoryPoints.map((point) => ({
-        x: xForIsoDate({
-          iso: point.iso,
-          viewportStart,
-          viewportDays: VIEWPORT_DAYS,
-          width,
-          padX: PAD_X,
-        }),
-        y: yForValue(point.value),
-      })),
-    [trajectoryPoints, viewportStart, width, yForValue],
   );
 
   const balanceCurvePoints = useMemo(
@@ -283,50 +193,32 @@ export function WaterlineChart({
   );
 
   const balanceLinePath = useMemo(
-    () => catmullRomPath(balanceCurvePoints, 0.55),
+    () => catmullRomPath(balanceCurvePoints, 0.45),
     [balanceCurvePoints],
   );
 
-  const trajectoryLinePath = useMemo(
-    () => catmullRomPath(trajectoryCurvePoints, 0.5),
-    [trajectoryCurvePoints],
+  const projectedBalance = balanceAtFocal({
+    startingBankBalance,
+    startingAvailableMoney,
+    availableMoneyAtFocal,
+  });
+  const focalDotY = yForBalance(projectedBalance);
+
+  const windowIncome = dayCashflows.reduce((sum, d) => sum + d.income, 0);
+  const windowCommitments = dayCashflows.reduce((sum, d) => sum + d.commitments, 0);
+  const net = windowIncome - windowCommitments;
+  const lowest = balancePoints.reduce(
+    (min, point) => (point.value < min.value ? point : min),
+    balancePoints[0] ?? { iso: focalIso, value: projectedBalance },
   );
 
-  const trajectoryFillPath = useMemo(() => {
-    if (trajectoryCurvePoints.length === 0) return "";
-    const tail = ` L ${width - PAD_X} ${BELOW_BOTTOM} L ${PAD_X} ${BELOW_BOTTOM} Z`;
-    return `${trajectoryLinePath}${tail}`;
-  }, [trajectoryCurvePoints, trajectoryLinePath, width]);
-
-  // --- Horizon labels ------------------------------------------------------
-
-  const startLabel = useMemo(() => formatDateLabel(viewportStart), [viewportStart]);
-  const endLabel = useMemo(() => formatDateLabel(viewportEnd), [viewportEnd]);
-  const middleLabelText = useMemo(
-    () => (focalIso === todayIso ? "TODAY" : formatDateLabel(focalDate)),
-    [focalIso, todayIso, focalDate],
-  );
-  const middleLabelIsToday = focalIso === todayIso;
-
-  // --- Gesture handling ----------------------------------------------------
-
-  // Pixels per day: the usable chart width mapped across the viewport.
-  const pixelsPerDay = Math.max((width - 2 * PAD_X) / VIEWPORT_DAYS, 1);
-
-  // Keep the latest focal date in a ref so gesture/momentum callbacks, which
-  // are created on mount, always see the current value without needing to be
-  // recreated on every focal update. Updated in an effect to satisfy the
-  // "no ref mutations during render" rule.
-  const focalRef = useRef(focalDate);
-  useEffect(() => {
-    focalRef.current = focalDate;
-  }, [focalDate]);
+  const startLabel = formatDisplayDate(toIsoDate(viewportStart), "short");
+  const endLabel = formatDisplayDate(toIsoDate(viewportEnd), "short");
+  const focalLabel = formatDisplayDate(focalIso, "short-day");
 
   const gestureRef = useRef({
     active: false,
     pointerId: -1,
-    startX: 0,
-    startFocal: focalDate,
     lastX: 0,
     lastTs: 0,
     velocity: 0,
@@ -334,23 +226,27 @@ export function WaterlineChart({
     pendingDelta: 0,
     momentumRaf: 0,
   });
+  const focalRef = useRef(focalDate);
   const [isGesturing, setIsGesturing] = useState(false);
 
-  const stopMomentum = useCallback(() => {
-    if (gestureRef.current.momentumRaf) {
-      cancelAnimationFrame(gestureRef.current.momentumRaf);
-      gestureRef.current.momentumRaf = 0;
-    }
-  }, []);
-
-  // Track the previous focal for haptic crossing detection. We fire haptics
-  // outside render — a ref avoids re-render thrash.
-  const prevFocalForHapticsRef = useRef(focalDate);
+  useEffect(() => {
+    focalRef.current = focalDate;
+  }, [focalDate]);
 
   useEffect(() => {
-    // Fire haptic feedback when focal crosses events in the loaded set.
+    const gesture = gestureRef.current;
+    return () => {
+      if (gesture.momentumRaf) cancelAnimationFrame(gesture.momentumRaf);
+      if (gesture.pendingRaf) cancelAnimationFrame(gesture.pendingRaf);
+      gesture.momentumRaf = 0;
+      gesture.pendingRaf = 0;
+    };
+  }, []);
+
+  const prevFocalForHapticsRef = useRef(focalDate);
+  useEffect(() => {
     const prev = prevFocalForHapticsRef.current;
-    if (toIsoDate(prev) !== toIsoDate(focalDate)) {
+    if (toIsoDate(prev) !== focalIso) {
       const crossed = detectFocalCrossings({
         previousFocalDate: prev,
         currentFocalDate: focalDate,
@@ -358,33 +254,24 @@ export function WaterlineChart({
         todayIso,
       });
       if (crossed.length > 0) {
-        // Prefer the "loudest" crossing on the frame: a pay event outranks a
-        // commitment. Rate limit inside the haptics module does the rest.
         const hasIncome = crossed.some((event) => event.type === "income");
         if (hasIncome) hapticPayCrossing();
         else hapticCommitmentCrossing();
       }
     }
     prevFocalForHapticsRef.current = focalDate;
-  }, [focalDate, allEvents, todayIso]);
+  }, [allEvents, focalDate, focalIso, todayIso]);
+
+  const pixelsPerDay = Math.max((width - 2 * PAD_X) / VIEWPORT_DAYS, 1);
 
   const emitDelta = useCallback(() => {
     const state = gestureRef.current;
     state.pendingRaf = 0;
     if (state.pendingDelta === 0) return;
-
     const deltaDays = -state.pendingDelta / pixelsPerDay;
     state.pendingDelta = 0;
     const next = addDaysUtc(focalRef.current, Math.round(deltaDays));
-    // Prevent the focal from falling off a whole integer day — additional
-    // sub-day motion accumulates until it's worth a whole day.
-    if (toIsoDate(next) === toIsoDate(focalRef.current)) {
-      // Apply fractional residue on the next frame by keeping the delta
-      // pending: leave the delta we already captured as absorbed (it wasn't a
-      // whole day anyway) — callers rely on whole-day focal semantics.
-      return;
-    }
-    onFocalChange(next);
+    if (toIsoDate(next) !== toIsoDate(focalRef.current)) onFocalChange(next);
   }, [onFocalChange, pixelsPerDay]);
 
   const queueDelta = useCallback(
@@ -397,19 +284,27 @@ export function WaterlineChart({
     [emitDelta],
   );
 
-  const onPointerDown = useCallback((ev: React.PointerEvent<SVGSVGElement>) => {
-    ev.currentTarget.setPointerCapture(ev.pointerId);
-    stopMomentum();
-    const state = gestureRef.current;
-    state.active = true;
-    state.pointerId = ev.pointerId;
-    state.startX = ev.clientX;
-    state.startFocal = focalRef.current;
-    state.lastX = ev.clientX;
-    state.lastTs = performance.now();
-    state.velocity = 0;
-    setIsGesturing(true);
-  }, [stopMomentum]);
+  const stopMomentum = useCallback(() => {
+    if (gestureRef.current.momentumRaf) {
+      cancelAnimationFrame(gestureRef.current.momentumRaf);
+      gestureRef.current.momentumRaf = 0;
+    }
+  }, []);
+
+  const onPointerDown = useCallback(
+    (ev: React.PointerEvent<SVGSVGElement>) => {
+      ev.currentTarget.setPointerCapture(ev.pointerId);
+      stopMomentum();
+      const state = gestureRef.current;
+      state.active = true;
+      state.pointerId = ev.pointerId;
+      state.lastX = ev.clientX;
+      state.lastTs = performance.now();
+      state.velocity = 0;
+      setIsGesturing(true);
+    },
+    [stopMomentum],
+  );
 
   const onPointerMove = useCallback(
     (ev: React.PointerEvent<SVGSVGElement>) => {
@@ -418,7 +313,7 @@ export function WaterlineChart({
       const now = performance.now();
       const dx = ev.clientX - state.lastX;
       const dt = Math.max(1, now - state.lastTs);
-      state.velocity = dx / dt; // pixels per ms
+      state.velocity = dx / dt;
       state.lastX = ev.clientX;
       state.lastTs = now;
       queueDelta(dx);
@@ -431,13 +326,9 @@ export function WaterlineChart({
     state.active = false;
     state.pointerId = -1;
     setIsGesturing(false);
-
     if (reducedMotion) return;
-
-    // Convert velocity (px/ms) to an initial per-frame delta (px/frame ~= px/16ms).
     let velocity = state.velocity * 16;
     if (Math.abs(velocity) < 0.5) return;
-
     const decay = 0.92;
     const step = () => {
       if (Math.abs(velocity) < 0.25) {
@@ -454,345 +345,238 @@ export function WaterlineChart({
   const onPointerUp = useCallback(
     (ev: React.PointerEvent<SVGSVGElement>) => {
       const state = gestureRef.current;
-      if (ev.pointerId === state.pointerId) {
-        try {
-          ev.currentTarget.releasePointerCapture(ev.pointerId);
-        } catch {
-          // already released
-        }
-        finishGesture();
+      if (ev.pointerId !== state.pointerId) return;
+      try {
+        ev.currentTarget.releasePointerCapture(ev.pointerId);
+      } catch {
+        // already released
       }
+      finishGesture();
     },
     [finishGesture],
   );
 
-  const onPointerCancel = useCallback(
-    (ev: React.PointerEvent<SVGSVGElement>) => {
-      if (ev.pointerId === gestureRef.current.pointerId) {
-        finishGesture();
-      }
-    },
-    [finishGesture],
-  );
-
-  useEffect(() => {
-    const gesture = gestureRef.current;
-    return () => {
-      if (gesture.momentumRaf) cancelAnimationFrame(gesture.momentumRaf);
-      if (gesture.pendingRaf) cancelAnimationFrame(gesture.pendingRaf);
-      gesture.momentumRaf = 0;
-      gesture.pendingRaf = 0;
-    };
-  }, []);
-
-  // --- Render --------------------------------------------------------------
-
-  const focalDotY = yForValue(availableMoneyAtFocal);
-  const nowX = width / 2;
-
-  const ariaLabel = useMemo(() => {
-    const dateLabel = middleLabelIsToday
-      ? "today"
-      : formatReadableDate(focalDate);
-    return `Waterline timeline. Focal date ${dateLabel}. ${eventsInViewport.length} events in viewport.`;
-  }, [middleLabelIsToday, focalDate, eventsInViewport.length]);
+  const ariaLabel = `Timeline cashflow chart. Centered on ${focalLabel}. Projected balance ${formatAud(
+    projectedBalance,
+  )}.`;
 
   return (
-    <div
-      ref={containerRef}
-      className={cn("relative mx-auto w-full max-w-[560px] select-none lg:max-w-none", className)}
-      style={{
-        touchAction: "pan-y",
-      }}
-    >
-      <svg
-        role="img"
-        aria-label={ariaLabel}
-        viewBox={`0 0 ${width} ${SVG_HEIGHT}`}
-        width="100%"
-        height={SVG_HEIGHT}
-        className="block touch-pan-y"
-        style={{ cursor: isGesturing ? "grabbing" : "grab" }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerCancel}
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(142, 196, 168, 0.25)" />
-            <stop offset="100%" stopColor="rgba(142, 196, 168, 0)" />
-          </linearGradient>
-          <radialGradient id={todayBandId} cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0%" stopColor="rgba(142, 196, 168, 0.06)" />
-            <stop offset="100%" stopColor="rgba(142, 196, 168, 0)" />
-          </radialGradient>
-        </defs>
+    <section className={cn("glass-clear rounded-[var(--radius-xl)] p-4 lg:p-5", className)}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="text-xs text-[color:var(--keel-ink-4)]">Centred date</p>
+            <p className="mt-1 text-lg font-semibold text-[color:var(--keel-ink)]">{focalLabel}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[color:var(--keel-ink-4)]">Projected balance</p>
+            <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-[#2f7fce]">
+              {formatAud(projectedBalance)}
+            </p>
+          </div>
+        </div>
 
-        {/* Trajectory fill (bottom layer) */}
-        {trajectoryCurvePoints.length >= 2 ? (
-          <path d={trajectoryFillPath} fill={`url(#${gradientId})`} stroke="none" />
-        ) : null}
+        <div className="flex items-center gap-2 text-xs text-[color:var(--keel-ink-4)]">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm bg-[#2bbf9b]" /> Income
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-sm bg-[#d76d45]" /> Commitments
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-px w-6 bg-[#2f7fce]" /> Balance
+          </span>
+        </div>
+      </div>
 
-        {/* Bank balance trend line (separate y-scale) */}
-        {balanceCurvePoints.length >= 2 ? (
-          <path
-            d={balanceLinePath}
-            fill="none"
-            stroke="color-mix(in oklab, var(--keel-safe-soft), var(--keel-ink) 35%)"
-            strokeWidth={1.6}
-            strokeLinecap="round"
-            opacity={0.95}
+      <div ref={containerRef} className="mt-4 w-full select-none" style={{ touchAction: "pan-y" }}>
+        <svg
+          role="img"
+          aria-label={ariaLabel}
+          viewBox={`0 0 ${width} ${SVG_HEIGHT}`}
+          width="100%"
+          height={SVG_HEIGHT}
+          className="block touch-pan-y"
+          style={{ cursor: isGesturing ? "grabbing" : "grab" }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          <defs>
+            <linearGradient id="balance-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(47,127,206,0.22)" />
+              <stop offset="100%" stopColor="rgba(47,127,206,0.02)" />
+            </linearGradient>
+          </defs>
+
+          <rect
+            x={PAD_X}
+            y={PLOT_TOP}
+            width={Math.max(0, width - PAD_X * 2)}
+            height={PLOT_BOTTOM - PLOT_TOP}
+            rx={24}
+            fill="color-mix(in oklab, var(--keel-ink), transparent 97%)"
           />
-        ) : null}
 
-        {/* Trajectory line */}
-        {trajectoryCurvePoints.length >= 2 ? (
-          <path
-            d={trajectoryLinePath}
-            fill="none"
-            stroke="rgba(142, 196, 168, 0.4)"
-            strokeWidth={1.25}
-            strokeLinecap="round"
+          <line
+            x1={PAD_X}
+            x2={width - PAD_X}
+            y1={CASH_AXIS_Y}
+            y2={CASH_AXIS_Y}
+            stroke="color-mix(in oklab, var(--keel-ink), transparent 78%)"
+            strokeWidth={1}
+            strokeDasharray="6 8"
           />
-        ) : null}
 
-        {/* Waterline baseline */}
-        <line
-          x1={PAD_X}
-          y1={BASELINE_Y}
-          x2={width - PAD_X}
-          y2={BASELINE_Y}
-          stroke="color-mix(in oklab, var(--keel-ink), transparent 70%)"
-          strokeWidth={0.75}
-        />
+          {balanceCurvePoints.length >= 2 ? (
+            <path
+              d={`${balanceLinePath} L ${width - PAD_X} ${PLOT_BOTTOM} L ${PAD_X} ${PLOT_BOTTOM} Z`}
+              fill="url(#balance-fill)"
+              stroke="none"
+            />
+          ) : null}
 
-        {/* Now line intersection band */}
-        <rect
-          x={nowX - 40}
-          y={ABOVE_BOTTOM}
-          width={80}
-          height={BELOW_TOP - ABOVE_BOTTOM}
-          fill={`url(#${todayBandId})`}
-        />
+          {dayCashflows.map((day) => {
+            const x = xForIsoDate({
+              iso: day.iso,
+              viewportStart,
+              viewportDays: VIEWPORT_DAYS,
+              width,
+              padX: PAD_X,
+            });
+            const barWidth = Math.max(5, Math.min(12, (width - PAD_X * 2) / VIEWPORT_DAYS / 2.6));
+            const incomeHeight = (day.income / maxCashflow) * BAR_RANGE;
+            const commitmentHeight = (day.commitments / maxCashflow) * BAR_RANGE;
+            return (
+              <g key={day.iso}>
+                {day.income > 0 ? (
+                  <rect
+                    x={x - barWidth / 2}
+                    y={CASH_AXIS_Y - incomeHeight}
+                    width={barWidth}
+                    height={incomeHeight}
+                    rx={barWidth / 2}
+                    fill="#2bbf9b"
+                    opacity={day.iso < todayIso ? 0.45 : 0.9}
+                  />
+                ) : null}
+                {day.commitments > 0 ? (
+                  <rect
+                    x={x - barWidth / 2}
+                    y={CASH_AXIS_Y}
+                    width={barWidth}
+                    height={commitmentHeight}
+                    rx={barWidth / 2}
+                    fill="#d76d45"
+                    opacity={day.iso < todayIso ? 0.45 : 0.9}
+                  />
+                ) : null}
+              </g>
+            );
+          })}
 
-        {/* Now line (dashed, center-pinned) */}
-        <line
-          x1={nowX}
-          y1={ABOVE_TOP}
-          x2={nowX}
-          y2={BELOW_BOTTOM}
-          stroke="color-mix(in oklab, var(--keel-ink), transparent 85%)"
-          strokeWidth={1}
-          strokeDasharray="3 4"
-        />
+          {balanceCurvePoints.length >= 2 ? (
+            <path
+              d={balanceLinePath}
+              fill="none"
+              stroke="#2f7fce"
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ) : null}
 
-        {/* NOW label */}
-        <text
-          x={nowX}
-          y={ABOVE_TOP - 8}
-          textAnchor="middle"
-          fill="var(--keel-safe-soft)"
-          style={{ fontSize: 8, letterSpacing: "1.5px", fontWeight: 600 }}
-        >
-          NOW
-        </text>
+          <line
+            x1={nowX}
+            x2={nowX}
+            y1={PLOT_TOP + 6}
+            y2={PLOT_BOTTOM - 4}
+            stroke="color-mix(in oklab, var(--keel-ink), transparent 74%)"
+            strokeWidth={1}
+          />
 
-        {/* Axis hints: bank balance (left) + cashflow magnitude (right). */}
-        <text
-          x={PAD_X}
-          y={BALANCE_TOP - 6}
-          textAnchor="start"
-          fill="var(--keel-ink-5)"
-          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
-        >
-          BAL {Math.round(balanceStats.max).toLocaleString("en-AU")}
-        </text>
-        <text
-          x={PAD_X}
-          y={BALANCE_BOTTOM + 8}
-          textAnchor="start"
-          fill="var(--keel-ink-5)"
-          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
-        >
-          BAL {Math.round(balanceStats.min).toLocaleString("en-AU")}
-        </text>
-        <text
-          x={width - PAD_X}
-          y={BASELINE_Y - 6}
-          textAnchor="end"
-          fill="var(--keel-ink-5)"
-          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
-        >
-          +{Math.round(maxAmount).toLocaleString("en-AU")}
-        </text>
-        <text
-          x={width - PAD_X}
-          y={BASELINE_Y + 12}
-          textAnchor="end"
-          fill="var(--keel-ink-5)"
-          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
-        >
-          −{Math.round(maxAmount).toLocaleString("en-AU")}
-        </text>
+          <g>
+            <rect
+              x={nowX - 46}
+              y={PLOT_TOP - 26}
+              width={92}
+              height={26}
+              rx={8}
+              fill="var(--color-card)"
+              stroke="color-mix(in oklab, var(--keel-ink), transparent 86%)"
+            />
+            <text
+              x={nowX}
+              y={PLOT_TOP - 9}
+              textAnchor="middle"
+              fill="var(--keel-ink)"
+              style={{ fontSize: 12, fontWeight: 600 }}
+            >
+              {focalLabel}
+            </text>
+          </g>
 
-        {/* Markers */}
-        {groups.map((group) => {
-          const x = xForIsoDate({
-            iso: group.dateIso,
-            viewportStart,
-            viewportDays: VIEWPORT_DAYS,
-            width,
-            padX: PAD_X,
-          });
-          const opacity = opacityForDate(group.dateIso, focalIso, todayIso);
-          const normalized = normalizeDepth(group.primary.amount, maxAmount);
-          const height = MARKER_MIN_HEIGHT + normalized * MARKER_DEPTH_RANGE;
-          const radius = MARKER_MIN_RADIUS + normalized * MARKER_RADIUS_RANGE;
-          const isBill = group.type === "bill";
-          const commitmentId = isBill ? commitmentIdFromEventId(group.primary.id) : null;
-          const isAttention = Boolean(commitmentId && attentionCommitmentIds?.has(commitmentId));
-          const isSkipped = Boolean(group.primary.isSkipped);
-          const markerY = isBill ? BASELINE_Y + height : BASELINE_Y - height;
-          const stemEndY = isBill ? markerY - radius - 1 : markerY + radius + 1;
-
-          const r = isSkipped ? Math.max(2, radius * 0.82) : radius;
-
-          const fill = isSkipped
-            ? "none"
-            : isBill
-              ? isAttention
-                ? "var(--keel-attend)"
-                : "rgba(240, 235, 220, 0.85)"
-              : "#f0ebdc";
-          const stroke = isSkipped
-            ? "rgba(240, 235, 220, 0.45)"
-            : isAttention
-              ? "rgba(212, 143, 70, 0.55)"
-              : "none";
-
-          return (
-            <g key={`${group.dateIso}-${group.type}`} opacity={isSkipped ? opacity * 0.4 : opacity}>
-              <line
-                x1={x}
-                y1={BASELINE_Y}
-                x2={x}
-                y2={stemEndY}
-                stroke="rgba(240, 235, 220, 0.25)"
-                strokeWidth={0.75}
-              />
-              <circle
-                cx={x}
-                cy={markerY}
-                r={r}
-                fill={fill}
-                stroke={stroke}
-                strokeWidth={isSkipped ? 1.1 : isAttention ? 0.75 : 0}
-              />
-              {group.companions.map((companion, idx) => (
-                <circle
-                  key={companion.id}
-                  cx={x + COMPANION_OFFSET + idx * 1.5}
-                  cy={markerY + (isBill ? COMPANION_OFFSET : -COMPANION_OFFSET)}
-                  r={r * COMPANION_RADIUS_SCALE}
-                  fill={isSkipped ? "none" : fill}
-                  stroke={isSkipped ? "rgba(240, 235, 220, 0.35)" : stroke}
-                  strokeWidth={isSkipped ? 0.9 : 0}
-                  opacity={isSkipped ? 0.4 : 0.7}
-                />
-              ))}
-            </g>
-          );
-        })}
-
-        {/* Focal dot + pulse ring */}
-        <g>
           <circle
             cx={nowX}
             cy={focalDotY}
             r={7}
-            fill="none"
-            stroke="rgba(142, 196, 168, 0.4)"
-            strokeWidth={1}
-            className={cn(
-              !reducedMotion && !isGesturing && "waterline-focal-pulse",
-            )}
+            fill="var(--color-card)"
+            stroke="#2f7fce"
+            strokeWidth={3}
           />
-          <circle
-            cx={nowX}
-            cy={focalDotY}
-            r={4}
-            fill="var(--keel-safe-soft)"
-            style={
-              reducedMotion
-                ? undefined
-                : { transition: "cy 280ms cubic-bezier(0.34, 1.56, 0.64, 1)" }
-            }
-          />
-        </g>
 
-        {/* Bottom date labels */}
-        <text
-          x={PAD_X}
-          y={LABEL_Y}
-          textAnchor="start"
-          fill="var(--keel-ink-5)"
-          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
-        >
-          {startLabel}
-        </text>
-        <text
-          x={nowX}
-          y={LABEL_Y}
-          textAnchor="middle"
-          fill={middleLabelIsToday ? "var(--keel-safe-soft)" : "var(--keel-ink-5)"}
-          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
-        >
-          {middleLabelText}
-        </text>
-        <text
-          x={width - PAD_X}
-          y={LABEL_Y}
-          textAnchor="end"
-          fill="var(--keel-ink-5)"
-          style={{ fontSize: 8, letterSpacing: "0.8px", fontWeight: 500 }}
-        >
-          {endLabel}
-        </text>
-      </svg>
+          <text x={PAD_X} y={LABEL_Y} fill="var(--keel-ink-5)" style={{ fontSize: 10 }}>
+            {startLabel}
+          </text>
+          <text
+            x={width - PAD_X}
+            y={LABEL_Y}
+            textAnchor="end"
+            fill="var(--keel-ink-5)"
+            style={{ fontSize: 10 }}
+          >
+            {endLabel}
+          </text>
+        </svg>
+      </div>
 
-      <style>{`
-        @keyframes waterline-focal-pulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 0.15; }
-        }
-        .waterline-focal-pulse {
-          animation: waterline-focal-pulse 2s ease-in-out infinite;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .waterline-focal-pulse {
-            animation: none;
-            opacity: 0.4;
-          }
-        }
-      `}</style>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Window income" value={windowIncome} tone="income" />
+        <MetricCard label="Window commitments" value={windowCommitments} tone="commitment" />
+        <MetricCard label="Net" value={net} tone={net >= 0 ? "balance" : "commitment"} />
+        <MetricCard
+          label="Lowest balance"
+          value={lowest.value}
+          tone={lowest.value >= 0 ? "balance" : "commitment"}
+          suffix={` · ${formatDisplayDate(lowest.iso, "short")}`}
+        />
+      </div>
+    </section>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  tone,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  tone: "income" | "commitment" | "balance";
+  suffix?: string;
+}) {
+  const color =
+    tone === "income" ? "#1e8f6a" : tone === "commitment" ? "#c75f3b" : "#2f7fce";
+  return (
+    <div className="rounded-[var(--radius-md)] bg-[color:var(--color-card)] p-4 shadow-[inset_0_0.5px_0_rgba(255,255,255,0.18)]">
+      <p className="text-sm text-[color:var(--keel-ink-3)]">{label}</p>
+      <p className="mt-1 font-mono text-xl font-semibold tabular-nums" style={{ color }}>
+        {formatAud(value)}
+        {suffix ? <span className="text-[color:var(--keel-ink-3)]">{suffix}</span> : null}
+      </p>
     </div>
   );
 }
 
-// --- Formatting helpers ------------------------------------------------------
-
-function formatDateLabel(date: Date): string {
-  return startOfUtcDay(date)
-    .toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "UTC" })
-    .toUpperCase();
-}
-
-function formatReadableDate(date: Date): string {
-  return startOfUtcDay(date).toLocaleDateString("en-AU", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
