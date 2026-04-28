@@ -357,3 +357,36 @@ export function xForIsoDate(input: {
   const clamped = ratio < 0 ? 0 : ratio > 1 ? 1 : ratio;
   return padX + clamped * (width - 2 * padX);
 }
+
+// --- Chart drag ↔ whole-day shift (interaction layer) -----------------------
+
+/**
+ * Maps accumulated horizontal drag (CSS pixels, + = finger moved right) to a
+ * whole-day shift relative to the gesture anchor focal date.
+ *
+ * Convention matches the Waterline chart: dragging right moves the plot right,
+ * which scrubs toward the past, so positive `dragPx` yields a negative shift.
+ *
+ * @returns Integer day delta from the anchor (0 when inputs are invalid).
+ */
+export function dragPixelsToWholeDayShift(dragPx: number, pixelsPerDay: number): number {
+  if (!Number.isFinite(dragPx) || !Number.isFinite(pixelsPerDay) || pixelsPerDay <= 0) return 0;
+  const raw = Math.trunc(-dragPx / pixelsPerDay);
+  // `Math.trunc` can yield `-0`; normalize so callers/tests get a plain `0`.
+  return raw === 0 ? 0 : raw;
+}
+
+/**
+ * Pixel remainder after removing whole-day motion from `dragPx`. Applying this
+ * as an SVG `translateX` keeps the chart visually continuous while whole-day
+ * updates are throttled to parent state.
+ *
+ * @returns Sub-day translation in SVG user units (same sign as `dragPx` modulo whole days).
+ */
+export function dragRemainderPixelsAfterWholeDayShift(
+  dragPx: number,
+  pixelsPerDay: number,
+): number {
+  const shiftDays = dragPixelsToWholeDayShift(dragPx, pixelsPerDay);
+  return dragPx + shiftDays * pixelsPerDay;
+}

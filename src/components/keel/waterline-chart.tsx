@@ -5,6 +5,11 @@
  *
  * The chart keeps the existing sync contract: dragging the graph changes focal date,
  * and the legend/table below can still drive the same focal date through `TimelineView`.
+ *
+ * Interaction: high-frequency pointer deltas update an SVG `translate` on the plot
+ * group (refs + rAF) so motion stays smooth; `onFocalChange` fires at most once per
+ * frame and only when the scrub crosses a new whole-day boundary (plus a final
+ * nearest-day snap on release / momentum end).
  * Visual model:
  * - green income bars above the cashflow axis
  * - orange commitment bars below the cashflow axis
@@ -22,7 +27,10 @@ import {
   buildBankBalanceTrajectory,
   catmullRomPath,
   detectFocalCrossings,
+  dragPixelsToWholeDayShift,
+  dragRemainderPixelsAfterWholeDayShift,
   filterEventsInViewport,
+  startOfUtcDay,
   toIsoDate,
   xForIsoDate,
 } from "@/lib/timeline/waterline-geometry";
@@ -135,6 +143,7 @@ export function WaterlineChart({
   const measuredWidth = useContainerWidth(containerRef, widthOverride ?? 720);
   const width = widthOverride ?? measuredWidth;
   const reducedMotion = usePrefersReducedMotion();
+  const pixelsPerDay = Math.max((width - 2 * PAD_X) / VIEWPORT_DAYS, 1);
 
   const viewportStart = useMemo(() => addDaysUtc(focalDate, -VIEWPORT_DAYS / 2), [focalDate]);
   const viewportEnd = useMemo(() => addDaysUtc(focalDate, VIEWPORT_DAYS / 2), [focalDate]);
@@ -216,32 +225,62 @@ export function WaterlineChart({
   const endLabel = formatDisplayDate(toIsoDate(viewportEnd), "short");
   const focalLabel = formatDisplayDate(focalIso, "short-day");
 
+  const plotGroupRef = useRef<SVGGElement | null>(null);
+  const dragPxRef = useRef(0);
+  const anchorDateRef = useRef<Date>(focalDate);
   const gestureRef = useRef({
     active: false,
     pointerId: -1,
     lastX: 0,
     lastTs: 0,
     velocity: 0,
-    pendingRaf: 0,
-    pendingDelta: 0,
-    momentumRaf: 0,
   });
+  const interactionRafRef = useRef(0);
+  const momentumRafRef = useRef(0);
+  const pixelsPerDayRef = useRef(pixelsPerDay);
+  const onFocalChangeRef = useRef(onFocalChange);
   const focalRef = useRef(focalDate);
+  /** True from pointer-down until nearest-day settle (includes inertial momentum). */
+  const chartBusyRef = useRef(false);
   const [isGesturing, setIsGesturing] = useState(false);
+
+  useEffect(() => {
+    onFocalChangeRef.current = onFocalChange;
+  }, [onFocalChange]);
 
   useEffect(() => {
     focalRef.current = focalDate;
   }, [focalDate]);
 
   useEffect(() => {
-    const gesture = gestureRef.current;
+    pixelsPerDayRef.current = pixelsPerDay;
+  }, [pixelsPerDay]);
+
+  useEffect(() => {
     return () => {
-      if (gesture.momentumRaf) cancelAnimationFrame(gesture.momentumRaf);
-      if (gesture.pendingRaf) cancelAnimationFrame(gesture.pendingRaf);
-      gesture.momentumRaf = 0;
-      gesture.pendingRaf = 0;
+      if (interactionRafRef.current) cancelAnimationFrame(interactionRafRef.current);
+      if (momentumRafRef.current) cancelAnimationFrame(momentumRafRef.current);
+      interactionRafRef.current = 0;
+      momentumRafRef.current = 0;
     };
   }, []);
+
+  const applyPlotTransform = useCallback((remainderPx: number) => {
+    const node = plotGroupRef.current;
+    if (!node) return;
+    if (!remainderPx) {
+      node.setAttribute("transform", "translate(0 0)");
+    } else {
+      node.setAttribute("transform", `translate(${remainderPx} 0)`);
+    }
+  }, []);
+
+  /** Clears drag state when the legend (or anything else) moves focal while idle. */
+  useEffect(() => {
+    if (chartBusyRef.current) return;
+    dragPxRef.current = 0;
+    applyPlotTransform(0);
+  }, [focalIso, width, applyPlotTransform]);
 
   const prevFocalForHapticsRef = useRef(focalDate);
   useEffect(() => {
@@ -262,39 +301,60 @@ export function WaterlineChart({
     prevFocalForHapticsRef.current = focalDate;
   }, [allEvents, focalDate, focalIso, todayIso]);
 
-  const pixelsPerDay = Math.max((width - 2 * PAD_X) / VIEWPORT_DAYS, 1);
-
-  const emitDelta = useCallback(() => {
-    const state = gestureRef.current;
-    state.pendingRaf = 0;
-    if (state.pendingDelta === 0) return;
-    const deltaDays = -state.pendingDelta / pixelsPerDay;
-    state.pendingDelta = 0;
-    const next = addDaysUtc(focalRef.current, Math.round(deltaDays));
-    if (toIsoDate(next) !== toIsoDate(focalRef.current)) onFocalChange(next);
-  }, [onFocalChange, pixelsPerDay]);
-
-  const queueDelta = useCallback(
-    (pixelDelta: number) => {
-      const state = gestureRef.current;
-      state.pendingDelta += pixelDelta;
-      if (state.pendingRaf) return;
-      state.pendingRaf = requestAnimationFrame(emitDelta);
-    },
-    [emitDelta],
-  );
-
   const stopMomentum = useCallback(() => {
-    if (gestureRef.current.momentumRaf) {
-      cancelAnimationFrame(gestureRef.current.momentumRaf);
-      gestureRef.current.momentumRaf = 0;
+    if (momentumRafRef.current) {
+      cancelAnimationFrame(momentumRafRef.current);
+      momentumRafRef.current = 0;
     }
   }, []);
+
+  const settleToNearestDay = useCallback(() => {
+    if (interactionRafRef.current) {
+      cancelAnimationFrame(interactionRafRef.current);
+      interactionRafRef.current = 0;
+    }
+    const ppd = pixelsPerDayRef.current;
+    const dragPx = dragPxRef.current;
+    const nearestShift = Math.round(-dragPx / ppd);
+    const finalDate = addDaysUtc(startOfUtcDay(anchorDateRef.current), nearestShift);
+    if (toIsoDate(finalDate) !== toIsoDate(focalRef.current)) {
+      onFocalChangeRef.current(finalDate);
+      focalRef.current = finalDate;
+    }
+    dragPxRef.current = 0;
+    applyPlotTransform(0);
+    chartBusyRef.current = false;
+  }, [applyPlotTransform]);
+
+  const runInteractionFrame = useCallback(() => {
+    interactionRafRef.current = 0;
+    const ppd = pixelsPerDayRef.current;
+    const dragPx = dragPxRef.current;
+    const remainder = dragRemainderPixelsAfterWholeDayShift(dragPx, ppd);
+    applyPlotTransform(remainder);
+
+    const shiftDays = dragPixelsToWholeDayShift(dragPx, ppd);
+    const target = addDaysUtc(startOfUtcDay(anchorDateRef.current), shiftDays);
+    const targetIso = toIsoDate(target);
+    if (targetIso !== toIsoDate(focalRef.current)) {
+      onFocalChangeRef.current(target);
+      focalRef.current = target;
+    }
+  }, [applyPlotTransform]);
+
+  const scheduleInteractionFrame = useCallback(() => {
+    if (interactionRafRef.current) return;
+    interactionRafRef.current = requestAnimationFrame(runInteractionFrame);
+  }, [runInteractionFrame]);
 
   const onPointerDown = useCallback(
     (ev: React.PointerEvent<SVGSVGElement>) => {
       ev.currentTarget.setPointerCapture(ev.pointerId);
       stopMomentum();
+      chartBusyRef.current = true;
+      dragPxRef.current = 0;
+      anchorDateRef.current = startOfUtcDay(focalDate);
+      applyPlotTransform(0);
       const state = gestureRef.current;
       state.active = true;
       state.pointerId = ev.pointerId;
@@ -303,7 +363,7 @@ export function WaterlineChart({
       state.velocity = 0;
       setIsGesturing(true);
     },
-    [stopMomentum],
+    [applyPlotTransform, focalDate, stopMomentum],
   );
 
   const onPointerMove = useCallback(
@@ -316,9 +376,10 @@ export function WaterlineChart({
       state.velocity = dx / dt;
       state.lastX = ev.clientX;
       state.lastTs = now;
-      queueDelta(dx);
+      dragPxRef.current += dx;
+      scheduleInteractionFrame();
     },
-    [queueDelta],
+    [scheduleInteractionFrame],
   );
 
   const finishGesture = useCallback(() => {
@@ -326,21 +387,32 @@ export function WaterlineChart({
     state.active = false;
     state.pointerId = -1;
     setIsGesturing(false);
-    if (reducedMotion) return;
+
+    if (reducedMotion) {
+      settleToNearestDay();
+      return;
+    }
+
     let velocity = state.velocity * 16;
-    if (Math.abs(velocity) < 0.5) return;
+    if (Math.abs(velocity) < 0.5) {
+      settleToNearestDay();
+      return;
+    }
+
     const decay = 0.92;
     const step = () => {
       if (Math.abs(velocity) < 0.25) {
-        state.momentumRaf = 0;
+        momentumRafRef.current = 0;
+        settleToNearestDay();
         return;
       }
-      queueDelta(velocity);
+      dragPxRef.current += velocity;
       velocity *= decay;
-      state.momentumRaf = requestAnimationFrame(step);
+      scheduleInteractionFrame();
+      momentumRafRef.current = requestAnimationFrame(step);
     };
-    state.momentumRaf = requestAnimationFrame(step);
-  }, [queueDelta, reducedMotion]);
+    momentumRafRef.current = requestAnimationFrame(step);
+  }, [reducedMotion, scheduleInteractionFrame, settleToNearestDay]);
 
   const onPointerUp = useCallback(
     (ev: React.PointerEvent<SVGSVGElement>) => {
@@ -410,82 +482,97 @@ export function WaterlineChart({
             </linearGradient>
           </defs>
 
-          <rect
-            x={PAD_X}
-            y={PLOT_TOP}
-            width={Math.max(0, width - PAD_X * 2)}
-            height={PLOT_BOTTOM - PLOT_TOP}
-            rx={24}
-            fill="color-mix(in oklab, var(--keel-ink), transparent 97%)"
-          />
-
-          <line
-            x1={PAD_X}
-            x2={width - PAD_X}
-            y1={CASH_AXIS_Y}
-            y2={CASH_AXIS_Y}
-            stroke="color-mix(in oklab, var(--keel-ink), transparent 78%)"
-            strokeWidth={1}
-            strokeDasharray="6 8"
-          />
-
-          {balanceCurvePoints.length >= 2 ? (
-            <path
-              d={`${balanceLinePath} L ${width - PAD_X} ${PLOT_BOTTOM} L ${PAD_X} ${PLOT_BOTTOM} Z`}
-              fill="url(#balance-fill)"
-              stroke="none"
+          <g ref={plotGroupRef} transform="translate(0 0)">
+            <rect
+              x={PAD_X}
+              y={PLOT_TOP}
+              width={Math.max(0, width - PAD_X * 2)}
+              height={PLOT_BOTTOM - PLOT_TOP}
+              rx={24}
+              fill="color-mix(in oklab, var(--keel-ink), transparent 97%)"
             />
-          ) : null}
 
-          {dayCashflows.map((day) => {
-            const x = xForIsoDate({
-              iso: day.iso,
-              viewportStart,
-              viewportDays: VIEWPORT_DAYS,
-              width,
-              padX: PAD_X,
-            });
-            const barWidth = Math.max(5, Math.min(12, (width - PAD_X * 2) / VIEWPORT_DAYS / 2.6));
-            const incomeHeight = (day.income / maxCashflow) * BAR_RANGE;
-            const commitmentHeight = (day.commitments / maxCashflow) * BAR_RANGE;
-            return (
-              <g key={day.iso}>
-                {day.income > 0 ? (
-                  <rect
-                    x={x - barWidth / 2}
-                    y={CASH_AXIS_Y - incomeHeight}
-                    width={barWidth}
-                    height={incomeHeight}
-                    rx={barWidth / 2}
-                    fill="#2bbf9b"
-                    opacity={day.iso < todayIso ? 0.45 : 0.9}
-                  />
-                ) : null}
-                {day.commitments > 0 ? (
-                  <rect
-                    x={x - barWidth / 2}
-                    y={CASH_AXIS_Y}
-                    width={barWidth}
-                    height={commitmentHeight}
-                    rx={barWidth / 2}
-                    fill="#d76d45"
-                    opacity={day.iso < todayIso ? 0.45 : 0.9}
-                  />
-                ) : null}
-              </g>
-            );
-          })}
-
-          {balanceCurvePoints.length >= 2 ? (
-            <path
-              d={balanceLinePath}
-              fill="none"
-              stroke="#2f7fce"
-              strokeWidth={3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <line
+              x1={PAD_X}
+              x2={width - PAD_X}
+              y1={CASH_AXIS_Y}
+              y2={CASH_AXIS_Y}
+              stroke="color-mix(in oklab, var(--keel-ink), transparent 78%)"
+              strokeWidth={1}
+              strokeDasharray="6 8"
             />
-          ) : null}
+
+            {balanceCurvePoints.length >= 2 ? (
+              <path
+                d={`${balanceLinePath} L ${width - PAD_X} ${PLOT_BOTTOM} L ${PAD_X} ${PLOT_BOTTOM} Z`}
+                fill="url(#balance-fill)"
+                stroke="none"
+              />
+            ) : null}
+
+            {dayCashflows.map((day) => {
+              const x = xForIsoDate({
+                iso: day.iso,
+                viewportStart,
+                viewportDays: VIEWPORT_DAYS,
+                width,
+                padX: PAD_X,
+              });
+              const barWidth = Math.max(5, Math.min(12, (width - PAD_X * 2) / VIEWPORT_DAYS / 2.6));
+              const incomeHeight = (day.income / maxCashflow) * BAR_RANGE;
+              const commitmentHeight = (day.commitments / maxCashflow) * BAR_RANGE;
+              return (
+                <g key={day.iso}>
+                  {day.income > 0 ? (
+                    <rect
+                      x={x - barWidth / 2}
+                      y={CASH_AXIS_Y - incomeHeight}
+                      width={barWidth}
+                      height={incomeHeight}
+                      rx={barWidth / 2}
+                      fill="#2bbf9b"
+                      opacity={day.iso < todayIso ? 0.45 : 0.9}
+                    />
+                  ) : null}
+                  {day.commitments > 0 ? (
+                    <rect
+                      x={x - barWidth / 2}
+                      y={CASH_AXIS_Y}
+                      width={barWidth}
+                      height={commitmentHeight}
+                      rx={barWidth / 2}
+                      fill="#d76d45"
+                      opacity={day.iso < todayIso ? 0.45 : 0.9}
+                    />
+                  ) : null}
+                </g>
+              );
+            })}
+
+            {balanceCurvePoints.length >= 2 ? (
+              <path
+                d={balanceLinePath}
+                fill="none"
+                stroke="#2f7fce"
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ) : null}
+
+            <text x={PAD_X} y={LABEL_Y} fill="var(--keel-ink-5)" style={{ fontSize: 10 }}>
+              {startLabel}
+            </text>
+            <text
+              x={width - PAD_X}
+              y={LABEL_Y}
+              textAnchor="end"
+              fill="var(--keel-ink-5)"
+              style={{ fontSize: 10 }}
+            >
+              {endLabel}
+            </text>
+          </g>
 
           <line
             x1={nowX}
@@ -525,19 +612,6 @@ export function WaterlineChart({
             stroke="#2f7fce"
             strokeWidth={3}
           />
-
-          <text x={PAD_X} y={LABEL_Y} fill="var(--keel-ink-5)" style={{ fontSize: 10 }}>
-            {startLabel}
-          </text>
-          <text
-            x={width - PAD_X}
-            y={LABEL_Y}
-            textAnchor="end"
-            fill="var(--keel-ink-5)"
-            style={{ fontSize: 10 }}
-          >
-            {endLabel}
-          </text>
         </svg>
       </div>
 

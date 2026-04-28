@@ -11,6 +11,8 @@ import {
   computeMaxAmountInViewport,
   detectFocalCrossings,
   diffDaysUtc,
+  dragPixelsToWholeDayShift,
+  dragRemainderPixelsAfterWholeDayShift,
   filterEventsInViewport,
   fromIsoDate,
   groupSameDayEvents,
@@ -364,5 +366,32 @@ describe("xForIsoDate", () => {
     });
     expect(before).toBeCloseTo(10, 5);
     expect(after).toBeCloseTo(350, 5);
+  });
+});
+
+describe("chart drag ↔ whole-day shift", () => {
+  const ppd = 20;
+
+  it("maps positive drag (finger right) to negative whole-day shifts", () => {
+    expect(dragPixelsToWholeDayShift(10, ppd)).toBe(0);
+    expect(dragPixelsToWholeDayShift(25, ppd)).toBe(-1);
+    expect(dragPixelsToWholeDayShift(39, ppd)).toBe(-1);
+    expect(dragPixelsToWholeDayShift(40, ppd)).toBe(-2);
+  });
+
+  it("maps negative drag (finger left) to positive whole-day shifts", () => {
+    expect(dragPixelsToWholeDayShift(-25, ppd)).toBe(1);
+    expect(dragPixelsToWholeDayShift(-40, ppd)).toBe(2);
+  });
+
+  it("returns 0 shift for invalid pixels-per-day", () => {
+    expect(dragPixelsToWholeDayShift(100, 0)).toBe(0);
+    expect(dragRemainderPixelsAfterWholeDayShift(100, 0)).toBe(100);
+  });
+
+  it("keeps sub-day remainder pixels stable", () => {
+    const dragPx = 35; // -1 whole day at ppd=20 with 15px remainder
+    expect(dragPixelsToWholeDayShift(dragPx, ppd)).toBe(-1);
+    expect(dragRemainderPixelsAfterWholeDayShift(dragPx, ppd)).toBeCloseTo(15, 5);
   });
 });
